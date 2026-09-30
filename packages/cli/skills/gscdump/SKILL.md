@@ -67,7 +67,8 @@ gscdump query --site example.com -d page -f json
 ```
 
 Hosted mode can run only these commands: `sites`, `query`, `sitemaps current`, `sitemaps history`, `sitemaps membership`,
-`sitemaps lastmod`, `sitemaps export`, `indexing urls`, and the `bing` commands `login --site`, `sites`, `status`, `dump`, `inspect`, and `verify`.
+`sitemaps lastmod`, `sitemaps export`, `indexing urls`, `indexing summary`, `indexing watch list|add|remove`,
+and the `bing` commands `login --site`, `sites`, `status`, `dump`, `inspect`, and `verify`.
 Every other command calls Google, so it needs Local mode: `sync`, `inspect`, `query --live`, `analyze --live`, `report --live`,
 `sites add|get|delete|verify*`, `sitemaps list|get|submit|delete`, `indexing submit|remove|status|batch`, `entities`, and `mcp`.
 In Hosted mode these commands stop with this error: `This command calls Google, so it needs Local mode.`
@@ -93,7 +94,7 @@ gscdump bing dump --site https://example.com/ --out ./bing-export
 
 Hosted Bing commands use the API's access rules.
 Hosted connection verification uses `bing verify --site s_SITE_ID`.
-Hosted sitemap reads and `indexing urls` need Hosted mode. Their `--site` takes a Site URL, such as `example.com`.
+Hosted sitemap reads and the hosted `indexing` commands need Hosted mode. Their `--site` takes a Site URL, such as `example.com`.
 
 ## Data boundaries
 
@@ -236,6 +237,8 @@ Do not rewrite rows, estimate metrics, or add manually calculated totals.
 | `gscdump inspect <url...>` | URL Inspection with Indexing Evidence, saved to the Store |
 | `gscdump sitemaps` | List, submit, delete, and probe sitemaps |
 | `gscdump indexing` | Indexing API notifications and quota; hosted URL Inspection results |
+| `gscdump indexing summary` | Hosted: the coverage ladder per day, with the time gscdump counted the verdicts |
+| `gscdump indexing watch` | Hosted: list, add, and remove Watched URLs and read their Checkpoints |
 | `gscdump dump` | Export Store tables, inspections, sitemaps, and Bing data as Parquet, CSV, JSON, NDJSON, SQLite, or DuckDB |
 | `gscdump store` | Store stats, compaction, garbage collection, resets |
 | `gscdump entities` | Read saved inspections; snapshot Indexing API metadata |
@@ -421,6 +424,58 @@ gscdump indexing urls --site example.com --status not_indexed --all --format csv
 - Pages hold 100 rows by default and 500 at most. Use `--offset` for the next page, or `--all` for every page.
 - With local authentication, the command fails. Pipe `gscdump sitemaps urls <sitemap-url>` into `gscdump inspect --site <site>` instead.
 
+## Read the coverage ladder (hosted)
+
+```sh
+gscdump indexing summary --site example.com --json
+gscdump indexing summary --site example.com --days 90 --json
+```
+
+The command reads saved URL Inspection verdicts. It spends no inspection quota.
+Each day in `trend` has `coverageStates`:
+
+- `counted` has `counts`, one URL count per coverage state, and `capturedAt`, the time gscdump counted them.
+- `not_counted` means gscdump stored the day before it counted coverage states. That day has no ladder. Say so.
+
+Read the 4 ladder states in `counts`, lowest rung first. Name each state with these words:
+
+| Key | Name | Meaning |
+| --- | --- | --- |
+| `unknown_to_google` | unknown | Google has no record of the URL |
+| `discovered_not_indexed` | discovered | Google queued the URL and has not crawled it |
+| `crawled_not_indexed` | crawled | Google crawled the URL and left it out of the index |
+| `indexed` | indexed | Google indexed the URL |
+
+The other keys in `counts` are exclusions, such as `noindex`, `not_found`, and `redirect`.
+`unrecognized` counts coverage text gscdump cannot map yet. `not_reported` counts results with no coverage text.
+
+Rules for every answer:
+
+- Quote `capturedAt` with every count. Also quote `capture.oldestVerdictAt` and the `capture.freshness` percents: `olderThan7dPercent` and `olderThan30dPercent`.
+- If `capture._tag` is `empty`, gscdump holds no verdicts for the Site. Report no ladder.
+- The counts are stored URL Inspection verdicts. They are not Google's live index.
+  They are also not the Search Console Page indexing report. The two can differ a lot, and the Page indexing report can list many more URLs.
+- A verdict can be months older than its capture. Unchanged URLs are rechecked less often over time. Say when most verdicts are old.
+- A move between rungs shows in the trend. Compare two `counted` days and name the dates.
+- If `unknown_to_google` URLs are already in a sitemap, Google read the sitemap or can read it, and did not take the URLs.
+  Do not tell the owner to add them to the sitemap. Check membership with `gscdump sitemaps membership`.
+- Name no cause beyond what the evidence shows.
+- Cite the command behind each number.
+
+## Watch URLs (hosted)
+
+```sh
+gscdump indexing watch add --site example.com https://example.com/guide https://example.com/pricing
+gscdump indexing watch list --site example.com --json
+gscdump indexing watch remove --site example.com https://example.com/pricing
+```
+
+- A Site can hold 50 Watched URLs. gscdump inspects each one every 7 days, before other scheduled URLs. It never backs off.
+- Each scheduled inspection spends the Site's daily URL Inspection budget and the URL Inspections meter. Get consent before `add`.
+- Each scheduled inspection stores one Checkpoint. `watch list --json` returns Checkpoints newest first, with `checkedAt`, the `coverageState` key, and Google's text.
+- Compare Checkpoints by date to see when a URL moves up the ladder. A new Watched URL has no Checkpoint until its first inspection.
+- `remove` deletes the URL's Checkpoints. The saved URL Inspection results stay.
+
 ## Report a papercut
 
 If CLI behavior blocks or slows your work, report it once per distinct
@@ -453,7 +508,9 @@ the failure and continue. Never retry an uncertain submission.
 - **Get consent before a mutation.** `sites add`, `sites delete`,
   `sites verify`, `sitemaps submit`, `sitemaps delete`, `indexing submit`,
   `indexing remove`, `store reset`, and `store rm-site` change Google or
-  delete local data. `--yes` is consent you borrow from the user.
+  delete local data. `indexing watch add` spends URL Inspections every week,
+  and `indexing watch remove` deletes Checkpoints. `--yes` is consent you
+  borrow from the user.
 - **Never loop unattended.** One `sync` per Site per task. Inspection batches
   spend a daily pool. Use `--dry-run` and `--explain` to plan first.
 - **Report the result as the CLI gave it.** Zero clicks with impressions means rows exist with no clicks.
