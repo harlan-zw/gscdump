@@ -105,9 +105,6 @@ export function coverageStateTagSql(column: string): string {
 
 const DAY_MS = 86_400_000
 
-/** Verdict ages that {@link measureVerdictFreshness} buckets, in days. */
-export const VERDICT_FRESHNESS_DAYS = [7, 30] as const
-
 /**
  * The inspection-time cutoffs for verdicts older than 7 and 30 days, as ISO
  * strings. RFC 3339 UTC strings sort in time order, so a stored `inspectedAt`

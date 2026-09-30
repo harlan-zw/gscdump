@@ -22,6 +22,11 @@
   canonicalWebhookEventTypeSchema: object
   countriesResponseSchema: object
   countryRowSchema: object
+  COVERAGE_LADDER: object
+  COVERAGE_STATE_TAGS: object
+  coverageStateCountsSchema: object
+  coverageStatesPointSchema: object
+  coverageStateTagSchema: object
   createPartnerTeamSchema: object
   dataDetailOptionsSchema: object
   dataQueryOptionsSchema: object
@@ -98,6 +103,7 @@
   gscVerificationTokenResponseSchema: object
   hasOptionalIndexingScope: function
   hasRequiredAnalyticsScope: function
+  indexingCaptureSchema: object
   indexingDiagnosticsParamsSchema: object
   indexingDiagnosticsSchema: object
   indexingInspectAnyResponseSchema: object
@@ -169,6 +175,16 @@
   twoDimensionDetail: function
   updatePartnerUserTokensSchema: object
   VALID_WEBHOOK_EVENTS: object
+  verdictFreshnessSchema: object
+  WATCHED_URL_CADENCE_DAYS: number
+  WATCHED_URL_CHECKPOINT_LIMIT: number
+  WATCHED_URL_LIMIT: number
+  watchedUrlCheckpointSchema: object
+  watchedUrlsChangeRequestSchema: object
+  watchedUrlsChangeResponseSchema: object
+  watchedUrlSchema: object
+  watchedUrlSkipReasonSchema: object
+  watchedUrlsResponseSchema: object
   WEBHOOK_CONTRACT_VERSION: string
   WEBHOOK_CONTRACT_VERSION_HEADER: string
   WEBHOOK_DELIVERY_HEADER: string

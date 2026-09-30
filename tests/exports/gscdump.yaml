@@ -11,7 +11,9 @@
   canUseUrlInspection: function
   classifyCanonicalDifference: function
   classifyError: function
+  countCoverageStates: function
   countDays: function
+  coverageStateTagSql: function
   createAuth: function
   createFetch: function
   DAYS_PER_RANGE: number
@@ -20,6 +22,7 @@
   deleteSite: function
   deleteSitemap: function
   describeInspectionError: function
+  emptyCoverageStateCounts: function
   encodeSiteId: function
   err: function
   exchangeAuthCodeResult: function
@@ -46,6 +49,7 @@
   getPstDate: function
   getVerificationToken: function
   getVerifiedSite: function
+  GOOGLE_COVERAGE_STATES: object
   googleSearchConsole: function
   groupIntoRanges: function
   GSC_FINALIZED_LAG_DAYS: number
@@ -91,12 +95,14 @@
   listVerifiedSites: function
   matchGscSite: function
   MAX_FLAT_INSPECTION_BATCH_CONCURRENCY: number
+  measureVerdictFreshness: function
   MS_PER_DAY: number
   normalizeGscSiteUrl: function
   normalizeRegistrationTarget: function
   normalizeSiteUrl: function
   normalizeUrl: function
   ok: function
+  parseCoverageState: function
   parseGoogleError: function
   parseGrantedScopes: function
   parseGscSiteUrl: function
@@ -123,6 +129,7 @@
   URL_INSPECTION_EFFECTIVE_LIMIT: number
   URL_INSPECTION_QUOTA: object
   urlMatchKey: function
+  verdictAgeCutoffs: function
   verificationMethodsFor: function
   verifySite: function
 ./bing:
