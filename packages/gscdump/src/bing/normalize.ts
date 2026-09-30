@@ -3,6 +3,7 @@ import type {
   BingCrawlIssue,
   BingCrawlStats,
   BingEvidenceError,
+  BingFeed,
   BingIndexingEvidence,
   BingPageStats,
   BingQueryStats,
@@ -234,6 +235,38 @@ export function normalizeBingCrawlStats(value: unknown): Result<BingCrawlStats, 
     ...(value.DnsFailures === undefined ? {} : { dnsFailures: value.DnsFailures }),
     inIndex: value.InIndex,
     inLinks: value.InLinks,
+  })
+}
+
+function isNullableNonNegativeInteger(value: unknown): value is number | null {
+  return value === null || isNonNegativeInteger(value)
+}
+
+export function normalizeBingFeed(value: unknown): Result<BingFeed, 'invalid-payload'> {
+  if (!isRecord(value)
+    || typeof value.Compressed !== 'boolean'
+    || !isNullableNonNegativeInteger(value.FileSize)
+    || typeof value.Status !== 'string'
+    || typeof value.Type !== 'string'
+    || typeof value.Url !== 'string'
+    || !isNullableNonNegativeInteger(value.UrlCount)) {
+    return err('invalid-payload')
+  }
+
+  const lastCrawledAt = parseBingDate(value.LastCrawled)
+  const submittedAt = parseBingDate(value.Submitted)
+  if (!lastCrawledAt.ok || !submittedAt.ok)
+    return err('invalid-payload')
+
+  return ok({
+    compressed: value.Compressed,
+    fileSize: value.FileSize,
+    lastCrawledAt: lastCrawledAt.value ?? null,
+    status: value.Status,
+    submittedAt: submittedAt.value ?? null,
+    type: value.Type,
+    url: value.Url,
+    urlCount: value.UrlCount,
   })
 }
 

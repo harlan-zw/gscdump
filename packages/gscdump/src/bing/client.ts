@@ -18,6 +18,7 @@ import { err, ok } from '../core/result'
 import {
   normalizeBingCrawlIssue,
   normalizeBingCrawlStats,
+  normalizeBingFeed,
   normalizeBingIndexingEvidence,
   normalizeBingPageStats,
   normalizeBingQueryStats,
@@ -345,6 +346,18 @@ export function bingWebmaster(options: BingWebmasterOptions): BingWebmasterClien
       'GetCrawlIssues',
       parseList(normalizeBingCrawlIssue),
       { query: { siteUrl }, signal: callOptions?.signal },
+    ),
+
+    getFeeds: (siteUrl, callOptions) => request(
+      'GetFeeds',
+      parseList(normalizeBingFeed),
+      { query: { siteUrl }, signal: callOptions?.signal },
+    ),
+
+    submitFeed: (siteUrl, feedUrl, callOptions) => request(
+      'SubmitFeed',
+      parseEmpty,
+      { body: { siteUrl, feedUrl }, method: 'POST', signal: callOptions?.signal },
     ),
 
     verifySite: (siteUrl, callOptions) => request(
