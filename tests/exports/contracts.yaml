@@ -311,6 +311,7 @@
   REALTIME_V1_RESOURCE_TYPES: object
   resolveHttpOperation: function
   serializeContractDocument: function
+  sitemapGrantHolderV1Schemas: object
   sitemapSubmissionStateV1Schemas: object
   sitemapSubmissionV1Schemas: object
   sitemapSubmitResultV1Schemas: object
@@ -359,6 +360,7 @@
   isUnknownHttpV1OperationError: function
   listHttpOperations: function
   resolveHttpOperation: function
+  sitemapGrantHolderV1Schemas: object
   sitemapSubmissionStateV1Schemas: object
   sitemapSubmissionV1Schemas: object
   sitemapSubmitResultV1Schemas: object

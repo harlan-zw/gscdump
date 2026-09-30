@@ -22622,6 +22622,36 @@
                               "additionalProperties": false,
                               "properties": {
                                 "_tag": {
+                                  "const": "awaiting-google",
+                                  "type": "string"
+                                },
+                                "checkedOn": {
+                                  "format": "date",
+                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                  "type": "string"
+                                },
+                                "sitemapCount": {
+                                  "exclusiveMinimum": 0,
+                                  "maximum": 9007199254740991,
+                                  "type": "integer"
+                                },
+                                "sitemapUrl": {
+                                  "format": "uri",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "_tag",
+                                "checkedOn",
+                                "sitemapUrl",
+                                "sitemapCount"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "_tag": {
                                   "const": "ready",
                                   "type": "string"
                                 },
@@ -22652,11 +22682,52 @@
                                   "type": "string"
                                 },
                                 "grantHolder": {
-                                  "enum": [
-                                    "caller",
-                                    "site-owner"
-                                  ],
-                                  "type": "string"
+                                  "oneOf": [
+                                    {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "_tag": {
+                                          "const": "caller",
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "_tag"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "_tag": {
+                                          "const": "site-owner",
+                                          "type": "string"
+                                        },
+                                        "email": {
+                                          "format": "email",
+                                          "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
+                                          "type": "string"
+                                        },
+                                        "name": {
+                                          "anyOf": [
+                                            {
+                                              "minLength": 1,
+                                              "type": "string"
+                                            },
+                                            {
+                                              "type": "null"
+                                            }
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "_tag",
+                                        "email",
+                                        "name"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  ]
                                 },
                                 "requiredScope": {
                                   "const": "https://www.googleapis.com/auth/webmasters",
@@ -22682,6 +22753,54 @@
                                   "const": "insufficient-permission",
                                   "type": "string"
                                 },
+                                "grantHolder": {
+                                  "oneOf": [
+                                    {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "_tag": {
+                                          "const": "caller",
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "_tag"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "_tag": {
+                                          "const": "site-owner",
+                                          "type": "string"
+                                        },
+                                        "email": {
+                                          "format": "email",
+                                          "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
+                                          "type": "string"
+                                        },
+                                        "name": {
+                                          "anyOf": [
+                                            {
+                                              "minLength": 1,
+                                              "type": "string"
+                                            },
+                                            {
+                                              "type": "null"
+                                            }
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "_tag",
+                                        "email",
+                                        "name"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  ]
+                                },
                                 "permissionLevel": {
                                   "minLength": 1,
                                   "type": "string"
@@ -22706,7 +22825,8 @@
                                 "_tag",
                                 "sitemapUrl",
                                 "permissionLevel",
-                                "requiredPermissionLevels"
+                                "requiredPermissionLevels",
+                                "grantHolder"
                               ],
                               "type": "object"
                             },

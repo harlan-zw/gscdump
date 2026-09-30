@@ -247,10 +247,12 @@ caller gets `403 forbidden` with `details.reason` `site-owner-required`. A
 
 `partner.sites.sitemaps.submission.get` (`GET /sites/{siteId}/sitemaps/submission`,
 `sitemaps:read`) names the Sitemap gscdump would submit to Google and what
-blocks it: `listed`, `ready`, `needs-write-access`, `insufficient-permission`,
-`no-sitemap-found`, `not-checked`, or `unavailable`. It reads gscdump's own
-record of the granted scopes and the property permission, and makes no Google
-call. `partner.sites.sitemaps.submission.create` (`POST`, `sitemaps:write`, no
+blocks it: `listed`, `awaiting-google`, `ready`, `needs-write-access`,
+`insufficient-permission`, `no-sitemap-found`, `not-checked`, or `unavailable`.
+The two blocked states name the Google account whose grant submits: the caller,
+or the Site owner with the email and name gscdump stores for them. It reads
+gscdump's own record of the granted scopes and the property permission, and
+makes no Google call. `partner.sites.sitemaps.submission.create` (`POST`, `sitemaps:write`, no
 body) submits that Sitemap and returns `submitted` or `failed` with a reason.
 
 ## Rate limits and lifecycle signaling

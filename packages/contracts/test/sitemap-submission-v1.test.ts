@@ -13,9 +13,10 @@ describe('google Sitemap submission v1', () => {
     const response = operations.getSiteSitemapSubmission.responses[200].producer
     const states = [
       { _tag: 'ready', sitemapUrl: 'https://example.com/sitemap.xml', writeAccess: 'unknown' },
-      { _tag: 'needs-write-access', sitemapUrl: 'https://example.com/sitemap.xml', requiredScope: GSC_SITEMAP_SUBMIT_SCOPE, grantHolder: 'site-owner' },
-      { _tag: 'insufficient-permission', sitemapUrl: 'https://example.com/sitemap.xml', permissionLevel: 'siteRestrictedUser', requiredPermissionLevels: ['siteOwner', 'siteFullUser'] },
+      { _tag: 'needs-write-access', sitemapUrl: 'https://example.com/sitemap.xml', requiredScope: GSC_SITEMAP_SUBMIT_SCOPE, grantHolder: { _tag: 'site-owner', email: 'owner@example.com', name: 'Owner' } },
+      { _tag: 'insufficient-permission', sitemapUrl: 'https://example.com/sitemap.xml', permissionLevel: 'siteRestrictedUser', requiredPermissionLevels: ['siteOwner', 'siteFullUser'], grantHolder: { _tag: 'caller' } },
       { _tag: 'listed', checkedOn: '2026-09-30', sitemapCount: 2 },
+      { _tag: 'awaiting-google', checkedOn: '2026-09-30', sitemapUrl: 'https://example.com/sitemap.xml', sitemapCount: 1 },
       { _tag: 'no-sitemap-found', checkedOn: '2026-09-30' },
       { _tag: 'not-checked' },
       { _tag: 'unavailable', reason: 'permission-lost' },
@@ -27,7 +28,15 @@ describe('google Sitemap submission v1', () => {
     const response = operations.getSiteSitemapSubmission.responses[200].producer
     expect(response.safeParse(submission({ _tag: 'ready', writeAccess: 'granted' })).success).toBe(false)
     expect(response.safeParse(submission({ _tag: 'ready', sitemapUrl: 'ftp://example.com/sitemap.xml', writeAccess: 'granted' })).success).toBe(false)
-    expect(response.safeParse(submission({ _tag: 'needs-write-access', sitemapUrl: 'https://example.com/sitemap.xml', requiredScope: 'https://www.googleapis.com/auth/webmasters.readonly', grantHolder: 'caller' })).success).toBe(false)
+    expect(response.safeParse(submission({ _tag: 'needs-write-access', sitemapUrl: 'https://example.com/sitemap.xml', requiredScope: 'https://www.googleapis.com/auth/webmasters.readonly', grantHolder: { _tag: 'caller' } })).success).toBe(false)
+  })
+
+  it('names the account whose grant submits, so a teammate is asked instead of sent through OAuth', () => {
+    const response = operations.getSiteSitemapSubmission.responses[200].producer
+    const blocked = (grantHolder: unknown) => submission({ _tag: 'needs-write-access', sitemapUrl: 'https://example.com/sitemap.xml', requiredScope: GSC_SITEMAP_SUBMIT_SCOPE, grantHolder })
+    expect(response.safeParse(blocked({ _tag: 'site-owner', email: 'owner@example.com', name: null })).success).toBe(true)
+    expect(response.safeParse(blocked({ _tag: 'site-owner', name: 'Owner' })).success).toBe(false)
+    expect(response.safeParse(blocked('site-owner')).success).toBe(false)
   })
 
   it('submits with no body and reports the outcome as a value', () => {
