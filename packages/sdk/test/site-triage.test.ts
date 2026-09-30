@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { classifyReachStage } from '../src/site-triage'
+import { classifyHealthStage, classifyReachStage } from '../src/site-triage'
 
 describe('classifyReachStage', () => {
   it('classifies observed low-volume search data as emerging', () => {
@@ -48,5 +48,43 @@ describe('classifyReachStage', () => {
     expect(verdict.evidence.find(evidence => evidence.label === 'Impressions 90d')?.value).toBe('+30%')
     expect(verdict.progression.metric).toBe('90d impressions growth')
     expect(verdict.progression.gapLabel).toContain('+30% 90d impressions')
+  })
+})
+
+describe('classifyHealthStage', () => {
+  const issue = (type: string, count: number) => ({ type, label: type, count })
+
+  it('names a Site whose known URLs are mostly Discovered as not indexed', () => {
+    const health = classifyHealthStage({
+      totalUrls: 1000,
+      issues: [issue('crawled_not_indexed', 100), issue('discovered_not_indexed', 600)],
+    })
+    expect(health.stage).toBe('not_indexed')
+    expect(health.evidence).toEqual([
+      { label: 'Discovered, currently not indexed', value: '600' },
+      { label: 'Crawled, currently not indexed', value: '100' },
+      { label: 'Share of known URLs', value: '70%' },
+    ])
+  })
+
+  it('keeps quality_rejection when Crawled alone dominates', () => {
+    const health = classifyHealthStage({
+      totalUrls: 1000,
+      issues: [issue('crawled_not_indexed', 500), issue('discovered_not_indexed', 300)],
+    })
+    expect(health.stage).toBe('quality_rejection')
+  })
+
+  it('stays healthy when the not-indexed share is small', () => {
+    const health = classifyHealthStage({
+      totalUrls: 1000,
+      issues: [issue('crawled_not_indexed', 100), issue('discovered_not_indexed', 100)],
+    })
+    expect(health.stage).toBe('healthy')
+  })
+
+  it('ignores a Discovered count on a Site too small to judge', () => {
+    const health = classifyHealthStage({ totalUrls: 60, issues: [issue('discovered_not_indexed', 50)] })
+    expect(health.stage).toBe('healthy')
   })
 })
