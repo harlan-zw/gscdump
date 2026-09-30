@@ -22919,7 +22919,7 @@
         "x-gscdump-visibility": "public"
       },
       "post": {
-        "description": "Submits the Sitemap `partner.sites.sitemaps.submission.get` names, with the Site owner's stored grant. When gscdump has found none yet, it looks on the Site first. It makes no Google call when its own record shows the grant or permission cannot submit. Every expected outcome is a value.",
+        "description": "Submits the Sitemap `partner.sites.sitemaps.submission.get` names, with the Site owner's stored grant. It reads Google's Sitemap list first, so a Sitemap submitted elsewhere reads `already-listed`. When gscdump has found none yet, it looks on the Site. It does not ask Google to submit when its own record shows the grant or permission cannot. Every expected outcome is a value.",
         "operationId": "partner.sites.sitemaps.submission.create",
         "parameters": [
           {
