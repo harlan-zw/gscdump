@@ -217,6 +217,44 @@ allowance it sends the `user.allowance.notice` webhook to the partner. Its
 `sites`, `preserved_rows`, or `url_inspections`, `threshold` is `80` or `100`,
 and `period` is the UTC month as `YYYY-MM`.
 
+## Bing and Sitemap submission states
+
+gscdump applies the Bing linking rules and the Sitemap submission rules itself.
+A client renders the tag it receives and calls the Operation that tag names. It
+never predicts write access, filters Sitemap candidates, or joins grant state.
+
+`partner.users.indexing.bing.sites.list` (`GET /api/partner/v1/users/{userId}/indexing/bing/sites`)
+returns the user's Bing grant and one state for each Site the user can see:
+
+- `user_key` may call it for itself. `partner_key` may call it for a linked user and sees only its own Sites. Both need `indexing:read`.
+- `?teamId=t_…` limits the list to one Team.
+- `state._tag` is `collecting`, `verification-required`, `linkable`, `grant-required`, `reauthorization-required`, or `unavailable`.
+- `collecting` carries a Sitemap view: `submitted`, `missing`, `awaiting-bing`, or `unknown`. `awaiting-bing` covers a submit in the last 72 hours that Bing does not list yet.
+- `callerCanAct` says whether the caller may run the Operation the state names.
+
+The Bing actions need `indexing:write`:
+
+| Operation | Request | Result |
+| --- | --- | --- |
+| `partner.sites.indexing.bing.link.create` | `POST /sites/{siteId}/indexing/bing/link` | `linked` with the new Site state, `grant-required`, or `failed` |
+| `partner.sites.indexing.bing.authorization.create` | `POST /sites/{siteId}/indexing/bing/authorization` with optional `returnUrl` | `{ authorizeUrl, expiresAt }` |
+| `partner.sites.indexing.bing.sitemaps.submit` | `POST /sites/{siteId}/indexing/bing/sitemaps` with optional `url` | `submitted` with the Sitemap view, or `failed` |
+
+Only the Site owner's user credential may link or authorize Bing. Any other
+caller gets `403 forbidden` with `details.reason` `site-owner-required`. A
+`returnUrl` outside the allowed origins gets `400 invalid_request` with
+`details.reason` `return-url-not-allowed`.
+
+`partner.sites.sitemaps.submission.get` (`GET /sites/{siteId}/sitemaps/submission`,
+`sitemaps:read`) names the Sitemap gscdump would submit to Google and what
+blocks it: `listed`, `awaiting-google`, `ready`, `needs-write-access`,
+`insufficient-permission`, `no-sitemap-found`, `not-checked`, or `unavailable`.
+The two blocked states name the Google account whose grant submits: the caller,
+or the Site owner with the email and name gscdump stores for them. It reads
+gscdump's own record of the granted scopes and the property permission, and
+makes no Google call. `partner.sites.sitemaps.submission.create` (`POST`, `sitemaps:write`, no
+body) submits that Sitemap and returns `submitted` or `failed` with a reason.
+
 ## Rate limits and lifecycle signaling
 
 The hosted policy is one atomic 60-second fixed-window counter per authenticated
@@ -237,9 +275,12 @@ principal and operation:
 | `partner.sites.delete` | 20 |
 | `partner.sites.device.gap.get` | 60 |
 | `partner.sites.index.percent.get` | 30 |
+| `partner.sites.indexing.bing.authorization.create` | 10 |
 | `partner.sites.indexing.bing.connection.get` | 60 |
 | `partner.sites.indexing.bing.connection.verify` | 10 |
 | `partner.sites.indexing.bing.evidence.list` | 60 |
+| `partner.sites.indexing.bing.link.create` | 10 |
+| `partner.sites.indexing.bing.sitemaps.submit` | 10 |
 | `partner.sites.indexing.diagnostics.get` | 60 |
 | `partner.sites.indexing.get` | 60 |
 | `partner.sites.indexing.inspect.create` | 20 |
@@ -259,6 +300,8 @@ principal and operation:
 | `partner.sites.sitemaps.export.get` | 20 |
 | `partner.sites.sitemaps.get` | 60 |
 | `partner.sites.sitemaps.membership.query` | 60 |
+| `partner.sites.sitemaps.submission.create` | 10 |
+| `partner.sites.sitemaps.submission.get` | 60 |
 | `partner.sites.sitemaps.urls.get` | 60 |
 | `partner.sites.team.update` | 30 |
 | `partner.sites.top.association.get` | 120 |
@@ -277,6 +320,7 @@ principal and operation:
 | `partner.users.create` | 20 |
 | `partner.users.delete` | 10 |
 | `partner.users.entitlements.get` | 60 |
+| `partner.users.indexing.bing.sites.list` | 60 |
 | `partner.users.lifecycle.get` | 120 |
 | `partner.users.sites.available.list` | 30 |
 | `partner.users.sites.create` | 20 |

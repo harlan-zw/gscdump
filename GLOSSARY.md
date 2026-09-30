@@ -358,6 +358,18 @@ The `details` of a v1 error envelope when gscdump refuses work because of an ent
 **Hold**:
 Why gscdump holds a Site and does not start its Backfill: `size_limit`, `sitemap_limit`, `size_unknown`, or `size_pending` (`SiteHoldReason`). Each lifecycle Site carries it as `hold`, or `null` when gscdump does not hold the Site.
 
+**Bing grant** (proposed, awaiting confirmation):
+The one stored Microsoft authorization of a user. It serves every Site the user owns. `partner.users.indexing.bing.sites.list` reports it as `authorized`, `reauthorization-required`, or `missing`. `partner.sites.indexing.bing.authorization.create` starts the Microsoft consent that creates or renews it.
+_Avoid_: Bing connection for the grant; `BingConnectionV1` names one Site's binding. Avoid "connect" as its verb, because Connect adds a Site.
+
+**Link** (proposed, awaiting confirmation):
+Bind one Site to the Site owner's Bing grant with no Microsoft redirect (`partner.sites.indexing.bing.link.create`). Only the Site owner may link.
+_Avoid_: connect, attach, or bind in public names.
+
+**Sitemap submission** (proposed, awaiting confirmation):
+The Sitemap gscdump would submit to Google for a Site, and what blocks it (`partner.sites.sitemaps.submission.get`). gscdump picks a Sitemap it found on the Site's own host, under the linked property, and checks its own record of the granted scopes and the property permission.
+_Avoid_: Submission Receipt for this; a Submission Receipt proves an IndexNow change notification.
+
 **Search Console API surface**:
 The package root is the sole direct Google Search Console / Indexing / Site Verification client surface. Query, date, result, normalization, and tenant concepts use their named subpaths; v1 removes the duplicate `gscdump/api` barrel.
 _Avoid_: recreating an app-local direct Google client or importing the removed `gscdump/api` barrel.

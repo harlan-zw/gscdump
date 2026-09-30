@@ -851,6 +851,91 @@
           }
         ]
       },
+      "partner.sites.indexing.bing.authorization.create.error": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "enum": [
+                  "invalid_request",
+                  "unauthorized",
+                  "forbidden",
+                  "site_not_found",
+                  "rate_limited",
+                  "internal_error",
+                  "contract_violation"
+                ],
+                "type": "string"
+              },
+              "details": {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/partner.sites.indexing.bing.authorization.create.error.__schema0"
+                },
+                "propertyNames": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              "message": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "requestId": {
+                "pattern": "^req_[\\w-]+$",
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "requestId",
+              "retryable",
+              "details"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "partner.sites.indexing.bing.authorization.create.error.__schema0": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          },
+          {
+            "items": {
+              "$ref": "#/components/schemas/partner.sites.indexing.bing.authorization.create.error.__schema0"
+            },
+            "type": "array"
+          },
+          {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/partner.sites.indexing.bing.authorization.create.error.__schema0"
+            },
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": "object"
+          }
+        ]
+      },
       "partner.sites.indexing.bing.connection.get.error": {
         "additionalProperties": false,
         "properties": {
@@ -1098,6 +1183,176 @@
           {
             "additionalProperties": {
               "$ref": "#/components/schemas/partner.sites.indexing.bing.evidence.list.error.__schema0"
+            },
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": "object"
+          }
+        ]
+      },
+      "partner.sites.indexing.bing.link.create.error": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "enum": [
+                  "invalid_request",
+                  "unauthorized",
+                  "forbidden",
+                  "site_not_found",
+                  "rate_limited",
+                  "internal_error",
+                  "contract_violation"
+                ],
+                "type": "string"
+              },
+              "details": {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/partner.sites.indexing.bing.link.create.error.__schema0"
+                },
+                "propertyNames": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              "message": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "requestId": {
+                "pattern": "^req_[\\w-]+$",
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "requestId",
+              "retryable",
+              "details"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "partner.sites.indexing.bing.link.create.error.__schema0": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          },
+          {
+            "items": {
+              "$ref": "#/components/schemas/partner.sites.indexing.bing.link.create.error.__schema0"
+            },
+            "type": "array"
+          },
+          {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/partner.sites.indexing.bing.link.create.error.__schema0"
+            },
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": "object"
+          }
+        ]
+      },
+      "partner.sites.indexing.bing.sitemaps.submit.error": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "enum": [
+                  "invalid_request",
+                  "unauthorized",
+                  "forbidden",
+                  "site_not_found",
+                  "rate_limited",
+                  "internal_error",
+                  "contract_violation"
+                ],
+                "type": "string"
+              },
+              "details": {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/partner.sites.indexing.bing.sitemaps.submit.error.__schema0"
+                },
+                "propertyNames": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              "message": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "requestId": {
+                "pattern": "^req_[\\w-]+$",
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "requestId",
+              "retryable",
+              "details"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "partner.sites.indexing.bing.sitemaps.submit.error.__schema0": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          },
+          {
+            "items": {
+              "$ref": "#/components/schemas/partner.sites.indexing.bing.sitemaps.submit.error.__schema0"
+            },
+            "type": "array"
+          },
+          {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/partner.sites.indexing.bing.sitemaps.submit.error.__schema0"
             },
             "propertyNames": {
               "type": "string"
@@ -3146,6 +3401,176 @@
           }
         ]
       },
+      "partner.sites.sitemaps.submission.create.error": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "enum": [
+                  "invalid_request",
+                  "unauthorized",
+                  "forbidden",
+                  "site_not_found",
+                  "rate_limited",
+                  "internal_error",
+                  "contract_violation"
+                ],
+                "type": "string"
+              },
+              "details": {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/partner.sites.sitemaps.submission.create.error.__schema0"
+                },
+                "propertyNames": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              "message": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "requestId": {
+                "pattern": "^req_[\\w-]+$",
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "requestId",
+              "retryable",
+              "details"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "partner.sites.sitemaps.submission.create.error.__schema0": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          },
+          {
+            "items": {
+              "$ref": "#/components/schemas/partner.sites.sitemaps.submission.create.error.__schema0"
+            },
+            "type": "array"
+          },
+          {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/partner.sites.sitemaps.submission.create.error.__schema0"
+            },
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": "object"
+          }
+        ]
+      },
+      "partner.sites.sitemaps.submission.get.error": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "enum": [
+                  "invalid_request",
+                  "unauthorized",
+                  "forbidden",
+                  "site_not_found",
+                  "rate_limited",
+                  "internal_error",
+                  "contract_violation"
+                ],
+                "type": "string"
+              },
+              "details": {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/partner.sites.sitemaps.submission.get.error.__schema0"
+                },
+                "propertyNames": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              "message": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "requestId": {
+                "pattern": "^req_[\\w-]+$",
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "requestId",
+              "retryable",
+              "details"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "partner.sites.sitemaps.submission.get.error.__schema0": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          },
+          {
+            "items": {
+              "$ref": "#/components/schemas/partner.sites.sitemaps.submission.get.error.__schema0"
+            },
+            "type": "array"
+          },
+          {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/partner.sites.sitemaps.submission.get.error.__schema0"
+            },
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": "object"
+          }
+        ]
+      },
       "partner.sites.sitemaps.urls.get.error": {
         "additionalProperties": false,
         "properties": {
@@ -4670,6 +5095,91 @@
           {
             "additionalProperties": {
               "$ref": "#/components/schemas/partner.users.entitlements.get.error.__schema0"
+            },
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": "object"
+          }
+        ]
+      },
+      "partner.users.indexing.bing.sites.list.error": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "enum": [
+                  "invalid_request",
+                  "unauthorized",
+                  "forbidden",
+                  "user_not_found",
+                  "rate_limited",
+                  "internal_error",
+                  "contract_violation"
+                ],
+                "type": "string"
+              },
+              "details": {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/partner.users.indexing.bing.sites.list.error.__schema0"
+                },
+                "propertyNames": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              "message": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "requestId": {
+                "pattern": "^req_[\\w-]+$",
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "requestId",
+              "retryable",
+              "details"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "partner.users.indexing.bing.sites.list.error.__schema0": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          },
+          {
+            "items": {
+              "$ref": "#/components/schemas/partner.users.indexing.bing.sites.list.error.__schema0"
+            },
+            "type": "array"
+          },
+          {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/partner.users.indexing.bing.sites.list.error.__schema0"
             },
             "propertyNames": {
               "type": "string"
@@ -10617,6 +11127,216 @@
         "x-gscdump-visibility": "public"
       }
     },
+    "/api/partner/v1/sites/{siteId}/indexing/bing/authorization": {
+      "post": {
+        "description": "Returns a Microsoft authorize URL that expires at `expiresAt`. After consent, gscdump stores the grant, links the Site, and returns the browser to `returnUrl` with `bing=connected`, `bing=verification-required`, or `bing=error&reason=<reason>`. `returnUrl` must be a gscdump.com path or an allowed origin, otherwise the request fails with `400 invalid_request` and `details.reason` `return-url-not-allowed`. Only the Site owner's user credential may authorize.",
+        "operationId": "partner.sites.indexing.bing.authorization.create",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "siteId",
+            "required": true,
+            "schema": {
+              "pattern": "^s_[\\w-]+$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "pattern": "^req_[\\w-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "returnUrl": {
+                    "maxLength": 2048,
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "authorizeUrl": {
+                          "format": "uri",
+                          "type": "string"
+                        },
+                        "expiresAt": {
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "authorizeUrl",
+                        "expiresAt"
+                      ],
+                      "type": "object"
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "requestId": {
+                          "pattern": "^req_[\\w-]+$",
+                          "type": "string"
+                        },
+                        "surface": {
+                          "const": "partner",
+                          "type": "string"
+                        },
+                        "version": {
+                          "const": "1.0",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "requestId",
+                        "surface",
+                        "version"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.sites.indexing.bing.authorization.create.error"
+                }
+              }
+            },
+            "description": "Declared client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.sites.indexing.bing.authorization.create.error"
+                }
+              }
+            },
+            "description": "Safe internal or contract error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.sites.indexing.bing.authorization.create.error"
+                }
+              }
+            },
+            "description": "Stable error envelope"
+          }
+        },
+        "security": [
+          {
+            "user_key": []
+          },
+          {
+            "partner_key": []
+          }
+        ],
+        "summary": "Authorize Bing for a Site",
+        "tags": [
+          "Indexing"
+        ],
+        "x-gscdump-errors": [
+          "invalid_request",
+          "unauthorized",
+          "forbidden",
+          "site_not_found",
+          "rate_limited",
+          "internal_error",
+          "contract_violation"
+        ],
+        "x-gscdump-examples": {
+          "request": {
+            "body": {
+              "returnUrl": "https://nuxtseo.com/pro/dashboard/integrations"
+            },
+            "params": {
+              "siteId": "s_01"
+            }
+          },
+          "response": {
+            "data": {
+              "authorizeUrl": "https://www.bing.com/webmasters/oauth/authorize?client_id=gscdump&state=intent_01",
+              "expiresAt": "2026-09-30T00:10:00.000Z"
+            },
+            "meta": {
+              "requestId": "req_01",
+              "surface": "partner",
+              "version": "1.0"
+            }
+          }
+        },
+        "x-gscdump-lifecycle": {
+          "introduced": "4.8.0"
+        },
+        "x-gscdump-ownership": [
+          {
+            "credential": "user_key",
+            "rule": "authorized_site"
+          },
+          {
+            "credential": "partner_key",
+            "rule": "authorized_site"
+          }
+        ],
+        "x-gscdump-resources": {
+          "changes": [],
+          "reads": [
+            {
+              "idFrom": "params.siteId",
+              "type": "site.indexing"
+            }
+          ]
+        },
+        "x-gscdump-scopes": [
+          "indexing:write"
+        ],
+        "x-gscdump-semantics": {
+          "idempotent": true,
+          "kind": "mutation",
+          "readConsistency": null,
+          "retry": "idempotent",
+          "sideEffects": "state"
+        },
+        "x-gscdump-visibility": "public"
+      }
+    },
     "/api/partner/v1/sites/{siteId}/indexing/bing/connection": {
       "get": {
         "description": "Returns the Bing connection state and any CNAME record required to verify the Site.",
@@ -11975,6 +12695,1079 @@
           "readConsistency": "primary",
           "retry": "idempotent",
           "sideEffects": "none"
+        },
+        "x-gscdump-visibility": "public"
+      }
+    },
+    "/api/partner/v1/sites/{siteId}/indexing/bing/link": {
+      "post": {
+        "description": "Binds the Site with the Site owner's stored Bing grant, with no Microsoft redirect. Only the Site owner's user credential may link: any other caller gets `403 forbidden` with `details.reason` `site-owner-required`. Every expected outcome is a value: `linked` carries the new Site state, `grant-required` asks the owner to authorize Bing, and `failed` says whether a retry can help.",
+        "operationId": "partner.sites.indexing.bing.link.create",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "siteId",
+            "required": true,
+            "schema": {
+              "pattern": "^s_[\\w-]+$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "pattern": "^req_[\\w-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "oneOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "_tag": {
+                              "const": "linked",
+                              "type": "string"
+                            },
+                            "site": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "callerCanAct": {
+                                  "type": "boolean"
+                                },
+                                "siteId": {
+                                  "pattern": "^s_[\\w-]+$",
+                                  "type": "string"
+                                },
+                                "siteUrl": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "state": {
+                                  "oneOf": [
+                                    {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "_tag": {
+                                          "const": "collecting",
+                                          "type": "string"
+                                        },
+                                        "lastEvidenceAt": {
+                                          "anyOf": [
+                                            {
+                                              "format": "date-time",
+                                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                              "type": "string"
+                                            },
+                                            {
+                                              "type": "null"
+                                            }
+                                          ]
+                                        },
+                                        "remoteSiteUrl": {
+                                          "format": "uri",
+                                          "type": "string"
+                                        },
+                                        "sitemap": {
+                                          "oneOf": [
+                                            {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "_tag": {
+                                                  "const": "submitted",
+                                                  "type": "string"
+                                                },
+                                                "checkedAt": {
+                                                  "format": "date-time",
+                                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                                  "type": "string"
+                                                },
+                                                "lastCrawledAt": {
+                                                  "anyOf": [
+                                                    {
+                                                      "format": "date-time",
+                                                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                                      "type": "string"
+                                                    },
+                                                    {
+                                                      "type": "null"
+                                                    }
+                                                  ]
+                                                },
+                                                "sitemapCount": {
+                                                  "exclusiveMinimum": 0,
+                                                  "maximum": 9007199254740991,
+                                                  "type": "integer"
+                                                },
+                                                "sitemaps": {
+                                                  "items": {
+                                                    "additionalProperties": false,
+                                                    "properties": {
+                                                      "lastCrawledAt": {
+                                                        "anyOf": [
+                                                          {
+                                                            "format": "date-time",
+                                                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                                            "type": "string"
+                                                          },
+                                                          {
+                                                            "type": "null"
+                                                          }
+                                                        ]
+                                                      },
+                                                      "status": {
+                                                        "type": "string"
+                                                      },
+                                                      "submittedAt": {
+                                                        "anyOf": [
+                                                          {
+                                                            "format": "date-time",
+                                                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                                            "type": "string"
+                                                          },
+                                                          {
+                                                            "type": "null"
+                                                          }
+                                                        ]
+                                                      },
+                                                      "url": {
+                                                        "minLength": 1,
+                                                        "type": "string"
+                                                      },
+                                                      "urlCount": {
+                                                        "anyOf": [
+                                                          {
+                                                            "maximum": 9007199254740991,
+                                                            "minimum": 0,
+                                                            "type": "integer"
+                                                          },
+                                                          {
+                                                            "type": "null"
+                                                          }
+                                                        ]
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "url",
+                                                      "status",
+                                                      "submittedAt",
+                                                      "lastCrawledAt",
+                                                      "urlCount"
+                                                    ],
+                                                    "type": "object"
+                                                  },
+                                                  "minItems": 1,
+                                                  "type": "array"
+                                                },
+                                                "urlCount": {
+                                                  "anyOf": [
+                                                    {
+                                                      "maximum": 9007199254740991,
+                                                      "minimum": 0,
+                                                      "type": "integer"
+                                                    },
+                                                    {
+                                                      "type": "null"
+                                                    }
+                                                  ]
+                                                }
+                                              },
+                                              "required": [
+                                                "_tag",
+                                                "checkedAt",
+                                                "sitemapCount",
+                                                "urlCount",
+                                                "lastCrawledAt",
+                                                "sitemaps"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "_tag": {
+                                                  "const": "missing",
+                                                  "type": "string"
+                                                },
+                                                "checkedAt": {
+                                                  "format": "date-time",
+                                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                                  "type": "string"
+                                                },
+                                                "lastSubmittedAt": {
+                                                  "anyOf": [
+                                                    {
+                                                      "format": "date-time",
+                                                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                                      "type": "string"
+                                                    },
+                                                    {
+                                                      "type": "null"
+                                                    }
+                                                  ]
+                                                }
+                                              },
+                                              "required": [
+                                                "_tag",
+                                                "checkedAt",
+                                                "lastSubmittedAt"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "_tag": {
+                                                  "const": "awaiting-bing",
+                                                  "type": "string"
+                                                },
+                                                "checkedAt": {
+                                                  "anyOf": [
+                                                    {
+                                                      "format": "date-time",
+                                                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                                      "type": "string"
+                                                    },
+                                                    {
+                                                      "type": "null"
+                                                    }
+                                                  ]
+                                                },
+                                                "lastSubmittedAt": {
+                                                  "format": "date-time",
+                                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "_tag",
+                                                "checkedAt",
+                                                "lastSubmittedAt"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "_tag": {
+                                                  "const": "unknown",
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "_tag"
+                                              ],
+                                              "type": "object"
+                                            }
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "_tag",
+                                        "remoteSiteUrl",
+                                        "lastEvidenceAt",
+                                        "sitemap"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "_tag": {
+                                          "const": "verification-required",
+                                          "type": "string"
+                                        },
+                                        "remoteSiteUrl": {
+                                          "format": "uri",
+                                          "type": "string"
+                                        },
+                                        "verification": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "_tag": {
+                                              "const": "cname",
+                                              "type": "string"
+                                            },
+                                            "name": {
+                                              "maxLength": 63,
+                                              "minLength": 1,
+                                              "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+                                              "type": "string"
+                                            },
+                                            "value": {
+                                              "const": "verify.bing.com",
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "_tag",
+                                            "name",
+                                            "value"
+                                          ],
+                                          "type": "object"
+                                        }
+                                      },
+                                      "required": [
+                                        "_tag",
+                                        "remoteSiteUrl",
+                                        "verification"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "_tag": {
+                                          "const": "linkable",
+                                          "type": "string"
+                                        },
+                                        "reason": {
+                                          "enum": [
+                                            "not-linked",
+                                            "binding-stalled",
+                                            "permission-lost"
+                                          ],
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "_tag",
+                                        "reason"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "_tag": {
+                                          "const": "grant-required",
+                                          "type": "string"
+                                        },
+                                        "reason": {
+                                          "enum": [
+                                            "grant-missing",
+                                            "reauthorization-required"
+                                          ],
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "_tag",
+                                        "reason"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "_tag": {
+                                          "const": "reauthorization-required",
+                                          "type": "string"
+                                        },
+                                        "remoteSiteUrl": {
+                                          "format": "uri",
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "_tag",
+                                        "remoteSiteUrl"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "_tag": {
+                                          "const": "unavailable",
+                                          "type": "string"
+                                        },
+                                        "reason": {
+                                          "enum": [
+                                            "not-enabled"
+                                          ],
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "_tag",
+                                        "reason"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  ]
+                                },
+                                "teamId": {
+                                  "anyOf": [
+                                    {
+                                      "pattern": "^t_[\\w-]+$",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "siteId",
+                                "siteUrl",
+                                "teamId",
+                                "callerCanAct",
+                                "state"
+                              ],
+                              "type": "object"
+                            }
+                          },
+                          "required": [
+                            "_tag",
+                            "site"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "_tag": {
+                              "const": "grant-required",
+                              "type": "string"
+                            },
+                            "reason": {
+                              "enum": [
+                                "grant-missing",
+                                "reauthorization-required"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "_tag",
+                            "reason"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "_tag": {
+                              "const": "failed",
+                              "type": "string"
+                            },
+                            "reason": {
+                              "enum": [
+                                "sites-forbidden",
+                                "sites-throttled",
+                                "sites-unavailable",
+                                "oauth-contract"
+                              ],
+                              "type": "string"
+                            },
+                            "retryable": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "_tag",
+                            "reason",
+                            "retryable"
+                          ],
+                          "type": "object"
+                        }
+                      ]
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "requestId": {
+                          "pattern": "^req_[\\w-]+$",
+                          "type": "string"
+                        },
+                        "surface": {
+                          "const": "partner",
+                          "type": "string"
+                        },
+                        "version": {
+                          "const": "1.0",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "requestId",
+                        "surface",
+                        "version"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.sites.indexing.bing.link.create.error"
+                }
+              }
+            },
+            "description": "Declared client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.sites.indexing.bing.link.create.error"
+                }
+              }
+            },
+            "description": "Safe internal or contract error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.sites.indexing.bing.link.create.error"
+                }
+              }
+            },
+            "description": "Stable error envelope"
+          }
+        },
+        "security": [
+          {
+            "user_key": []
+          },
+          {
+            "partner_key": []
+          }
+        ],
+        "summary": "Link a Site to Bing",
+        "tags": [
+          "Indexing"
+        ],
+        "x-gscdump-errors": [
+          "invalid_request",
+          "unauthorized",
+          "forbidden",
+          "site_not_found",
+          "rate_limited",
+          "internal_error",
+          "contract_violation"
+        ],
+        "x-gscdump-examples": {
+          "request": {
+            "params": {
+              "siteId": "s_01"
+            }
+          },
+          "response": {
+            "data": {
+              "_tag": "grant-required",
+              "reason": "grant-missing"
+            },
+            "meta": {
+              "requestId": "req_01",
+              "surface": "partner",
+              "version": "1.0"
+            }
+          }
+        },
+        "x-gscdump-lifecycle": {
+          "introduced": "4.8.0"
+        },
+        "x-gscdump-ownership": [
+          {
+            "credential": "user_key",
+            "rule": "authorized_site"
+          },
+          {
+            "credential": "partner_key",
+            "rule": "authorized_site"
+          }
+        ],
+        "x-gscdump-resources": {
+          "changes": [
+            {
+              "idFrom": "params.siteId",
+              "type": "site.indexing"
+            }
+          ],
+          "reads": [
+            {
+              "idFrom": "params.siteId",
+              "type": "site.indexing"
+            }
+          ]
+        },
+        "x-gscdump-scopes": [
+          "indexing:write"
+        ],
+        "x-gscdump-semantics": {
+          "idempotent": true,
+          "kind": "mutation",
+          "readConsistency": null,
+          "retry": "idempotent",
+          "sideEffects": "state"
+        },
+        "x-gscdump-visibility": "public"
+      }
+    },
+    "/api/partner/v1/sites/{siteId}/indexing/bing/sitemaps": {
+      "post": {
+        "description": "Submits one Sitemap for a verified Site, then reads what Bing lists. Without `url`, gscdump submits the Sitemap it finds on the Site. Bing lags after a submit, so `sitemap` usually reads `awaiting-bing`. Every expected outcome is a value.",
+        "operationId": "partner.sites.indexing.bing.sitemaps.submit",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "siteId",
+            "required": true,
+            "schema": {
+              "pattern": "^s_[\\w-]+$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "pattern": "^req_[\\w-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "url": {
+                    "format": "uri",
+                    "maxLength": 2048,
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "oneOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "_tag": {
+                              "const": "submitted",
+                              "type": "string"
+                            },
+                            "sitemap": {
+                              "oneOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "_tag": {
+                                      "const": "submitted",
+                                      "type": "string"
+                                    },
+                                    "checkedAt": {
+                                      "format": "date-time",
+                                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                      "type": "string"
+                                    },
+                                    "lastCrawledAt": {
+                                      "anyOf": [
+                                        {
+                                          "format": "date-time",
+                                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "sitemapCount": {
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 9007199254740991,
+                                      "type": "integer"
+                                    },
+                                    "sitemaps": {
+                                      "items": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "lastCrawledAt": {
+                                            "anyOf": [
+                                              {
+                                                "format": "date-time",
+                                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
+                                          },
+                                          "status": {
+                                            "type": "string"
+                                          },
+                                          "submittedAt": {
+                                            "anyOf": [
+                                              {
+                                                "format": "date-time",
+                                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
+                                          },
+                                          "url": {
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "urlCount": {
+                                            "anyOf": [
+                                              {
+                                                "maximum": 9007199254740991,
+                                                "minimum": 0,
+                                                "type": "integer"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "url",
+                                          "status",
+                                          "submittedAt",
+                                          "lastCrawledAt",
+                                          "urlCount"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "minItems": 1,
+                                      "type": "array"
+                                    },
+                                    "urlCount": {
+                                      "anyOf": [
+                                        {
+                                          "maximum": 9007199254740991,
+                                          "minimum": 0,
+                                          "type": "integer"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "_tag",
+                                    "checkedAt",
+                                    "sitemapCount",
+                                    "urlCount",
+                                    "lastCrawledAt",
+                                    "sitemaps"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "_tag": {
+                                      "const": "missing",
+                                      "type": "string"
+                                    },
+                                    "checkedAt": {
+                                      "format": "date-time",
+                                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                      "type": "string"
+                                    },
+                                    "lastSubmittedAt": {
+                                      "anyOf": [
+                                        {
+                                          "format": "date-time",
+                                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "_tag",
+                                    "checkedAt",
+                                    "lastSubmittedAt"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "_tag": {
+                                      "const": "awaiting-bing",
+                                      "type": "string"
+                                    },
+                                    "checkedAt": {
+                                      "anyOf": [
+                                        {
+                                          "format": "date-time",
+                                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "lastSubmittedAt": {
+                                      "format": "date-time",
+                                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "_tag",
+                                    "checkedAt",
+                                    "lastSubmittedAt"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "_tag": {
+                                      "const": "unknown",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "_tag"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
+                            },
+                            "sitemapUrl": {
+                              "format": "uri",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "_tag",
+                            "sitemapUrl",
+                            "sitemap"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "_tag": {
+                              "const": "failed",
+                              "type": "string"
+                            },
+                            "reason": {
+                              "enum": [
+                                "site-unverified",
+                                "grant-required",
+                                "no-sitemap-found",
+                                "throttled",
+                                "provider-unavailable"
+                              ],
+                              "type": "string"
+                            },
+                            "retryable": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "_tag",
+                            "reason",
+                            "retryable"
+                          ],
+                          "type": "object"
+                        }
+                      ]
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "requestId": {
+                          "pattern": "^req_[\\w-]+$",
+                          "type": "string"
+                        },
+                        "surface": {
+                          "const": "partner",
+                          "type": "string"
+                        },
+                        "version": {
+                          "const": "1.0",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "requestId",
+                        "surface",
+                        "version"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.sites.indexing.bing.sitemaps.submit.error"
+                }
+              }
+            },
+            "description": "Declared client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.sites.indexing.bing.sitemaps.submit.error"
+                }
+              }
+            },
+            "description": "Safe internal or contract error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.sites.indexing.bing.sitemaps.submit.error"
+                }
+              }
+            },
+            "description": "Stable error envelope"
+          }
+        },
+        "security": [
+          {
+            "user_key": []
+          },
+          {
+            "partner_key": []
+          }
+        ],
+        "summary": "Submit a Sitemap to Bing",
+        "tags": [
+          "Indexing"
+        ],
+        "x-gscdump-errors": [
+          "invalid_request",
+          "unauthorized",
+          "forbidden",
+          "site_not_found",
+          "rate_limited",
+          "internal_error",
+          "contract_violation"
+        ],
+        "x-gscdump-examples": {
+          "request": {
+            "body": {},
+            "params": {
+              "siteId": "s_01"
+            }
+          },
+          "response": {
+            "data": {
+              "_tag": "submitted",
+              "sitemap": {
+                "_tag": "awaiting-bing",
+                "checkedAt": "2026-09-30T00:00:00.000Z",
+                "lastSubmittedAt": "2026-09-30T00:00:00.000Z"
+              },
+              "sitemapUrl": "https://example.com/sitemap.xml"
+            },
+            "meta": {
+              "requestId": "req_01",
+              "surface": "partner",
+              "version": "1.0"
+            }
+          }
+        },
+        "x-gscdump-lifecycle": {
+          "introduced": "4.8.0"
+        },
+        "x-gscdump-ownership": [
+          {
+            "credential": "user_key",
+            "rule": "authorized_site"
+          },
+          {
+            "credential": "partner_key",
+            "rule": "authorized_site"
+          }
+        ],
+        "x-gscdump-resources": {
+          "changes": [
+            {
+              "idFrom": "params.siteId",
+              "type": "site.indexing"
+            }
+          ],
+          "reads": [
+            {
+              "idFrom": "params.siteId",
+              "type": "site.indexing"
+            }
+          ]
+        },
+        "x-gscdump-scopes": [
+          "indexing:write"
+        ],
+        "x-gscdump-semantics": {
+          "idempotent": true,
+          "kind": "mutation",
+          "readConsistency": null,
+          "retry": "idempotent",
+          "sideEffects": "state"
         },
         "x-gscdump-visibility": "public"
       }
@@ -20753,6 +22546,744 @@
         "x-gscdump-visibility": "public"
       }
     },
+    "/api/partner/v1/sites/{siteId}/sitemaps/submission": {
+      "get": {
+        "description": "Returns the Sitemap gscdump would submit to Google for the Site and whether the stored grant can submit it. gscdump picks a Sitemap it found on the Site's own host, under the linked property, and reads its own record of the granted scopes and the property permission. It makes no Google call.",
+        "operationId": "partner.sites.sitemaps.submission.get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "siteId",
+            "required": true,
+            "schema": {
+              "pattern": "^s_[\\w-]+$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "pattern": "^req_[\\w-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "callerCanAct": {
+                          "type": "boolean"
+                        },
+                        "gscPropertyUrl": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "searchEngine": {
+                          "const": "google",
+                          "type": "string"
+                        },
+                        "state": {
+                          "oneOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "_tag": {
+                                  "const": "listed",
+                                  "type": "string"
+                                },
+                                "checkedOn": {
+                                  "format": "date",
+                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                  "type": "string"
+                                },
+                                "sitemapCount": {
+                                  "exclusiveMinimum": 0,
+                                  "maximum": 9007199254740991,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "_tag",
+                                "checkedOn",
+                                "sitemapCount"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "_tag": {
+                                  "const": "awaiting-google",
+                                  "type": "string"
+                                },
+                                "checkedOn": {
+                                  "format": "date",
+                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                  "type": "string"
+                                },
+                                "sitemapCount": {
+                                  "exclusiveMinimum": 0,
+                                  "maximum": 9007199254740991,
+                                  "type": "integer"
+                                },
+                                "sitemapUrl": {
+                                  "format": "uri",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "_tag",
+                                "checkedOn",
+                                "sitemapUrl",
+                                "sitemapCount"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "_tag": {
+                                  "const": "ready",
+                                  "type": "string"
+                                },
+                                "sitemapUrl": {
+                                  "format": "uri",
+                                  "type": "string"
+                                },
+                                "writeAccess": {
+                                  "enum": [
+                                    "granted",
+                                    "unknown"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "_tag",
+                                "sitemapUrl",
+                                "writeAccess"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "_tag": {
+                                  "const": "needs-write-access",
+                                  "type": "string"
+                                },
+                                "grantHolder": {
+                                  "oneOf": [
+                                    {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "_tag": {
+                                          "const": "caller",
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "_tag"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "_tag": {
+                                          "const": "site-owner",
+                                          "type": "string"
+                                        },
+                                        "email": {
+                                          "format": "email",
+                                          "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
+                                          "type": "string"
+                                        },
+                                        "name": {
+                                          "anyOf": [
+                                            {
+                                              "minLength": 1,
+                                              "type": "string"
+                                            },
+                                            {
+                                              "type": "null"
+                                            }
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "_tag",
+                                        "email",
+                                        "name"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  ]
+                                },
+                                "requiredScope": {
+                                  "const": "https://www.googleapis.com/auth/webmasters",
+                                  "type": "string"
+                                },
+                                "sitemapUrl": {
+                                  "format": "uri",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "_tag",
+                                "sitemapUrl",
+                                "requiredScope",
+                                "grantHolder"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "_tag": {
+                                  "const": "insufficient-permission",
+                                  "type": "string"
+                                },
+                                "grantHolder": {
+                                  "oneOf": [
+                                    {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "_tag": {
+                                          "const": "caller",
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "_tag"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "_tag": {
+                                          "const": "site-owner",
+                                          "type": "string"
+                                        },
+                                        "email": {
+                                          "format": "email",
+                                          "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
+                                          "type": "string"
+                                        },
+                                        "name": {
+                                          "anyOf": [
+                                            {
+                                              "minLength": 1,
+                                              "type": "string"
+                                            },
+                                            {
+                                              "type": "null"
+                                            }
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "_tag",
+                                        "email",
+                                        "name"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  ]
+                                },
+                                "permissionLevel": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "requiredPermissionLevels": {
+                                  "items": {
+                                    "enum": [
+                                      "siteOwner",
+                                      "siteFullUser"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "minItems": 1,
+                                  "type": "array"
+                                },
+                                "sitemapUrl": {
+                                  "format": "uri",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "_tag",
+                                "sitemapUrl",
+                                "permissionLevel",
+                                "requiredPermissionLevels",
+                                "grantHolder"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "_tag": {
+                                  "const": "no-sitemap-found",
+                                  "type": "string"
+                                },
+                                "checkedOn": {
+                                  "format": "date",
+                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "_tag",
+                                "checkedOn"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "_tag": {
+                                  "const": "not-checked",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "_tag"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "_tag": {
+                                  "const": "unavailable",
+                                  "type": "string"
+                                },
+                                "reason": {
+                                  "enum": [
+                                    "permission-lost",
+                                    "grant-missing"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "_tag",
+                                "reason"
+                              ],
+                              "type": "object"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "searchEngine",
+                        "gscPropertyUrl",
+                        "callerCanAct",
+                        "state"
+                      ],
+                      "type": "object"
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "requestId": {
+                          "pattern": "^req_[\\w-]+$",
+                          "type": "string"
+                        },
+                        "surface": {
+                          "const": "partner",
+                          "type": "string"
+                        },
+                        "version": {
+                          "const": "1.0",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "requestId",
+                        "surface",
+                        "version"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.sites.sitemaps.submission.get.error"
+                }
+              }
+            },
+            "description": "Declared client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.sites.sitemaps.submission.get.error"
+                }
+              }
+            },
+            "description": "Safe internal or contract error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.sites.sitemaps.submission.get.error"
+                }
+              }
+            },
+            "description": "Stable error envelope"
+          }
+        },
+        "security": [
+          {
+            "user_key": []
+          },
+          {
+            "partner_key": []
+          }
+        ],
+        "summary": "Get Sitemap submission",
+        "tags": [
+          "Sitemaps"
+        ],
+        "x-gscdump-errors": [
+          "invalid_request",
+          "unauthorized",
+          "forbidden",
+          "site_not_found",
+          "rate_limited",
+          "internal_error",
+          "contract_violation"
+        ],
+        "x-gscdump-examples": {
+          "request": {
+            "params": {
+              "siteId": "s_01"
+            }
+          },
+          "response": {
+            "data": {
+              "callerCanAct": true,
+              "gscPropertyUrl": "sc-domain:example.com",
+              "searchEngine": "google",
+              "state": {
+                "_tag": "ready",
+                "sitemapUrl": "https://example.com/sitemap.xml",
+                "writeAccess": "granted"
+              }
+            },
+            "meta": {
+              "requestId": "req_01",
+              "surface": "partner",
+              "version": "1.0"
+            }
+          }
+        },
+        "x-gscdump-lifecycle": {
+          "introduced": "4.8.0"
+        },
+        "x-gscdump-ownership": [
+          {
+            "credential": "user_key",
+            "rule": "authorized_site"
+          },
+          {
+            "credential": "partner_key",
+            "rule": "authorized_site"
+          }
+        ],
+        "x-gscdump-resources": {
+          "changes": [],
+          "reads": [
+            {
+              "idFrom": "params.siteId",
+              "type": "site.sitemaps"
+            }
+          ]
+        },
+        "x-gscdump-scopes": [
+          "sitemaps:read"
+        ],
+        "x-gscdump-semantics": {
+          "idempotent": true,
+          "kind": "query",
+          "readConsistency": "primary",
+          "retry": "idempotent",
+          "sideEffects": "none"
+        },
+        "x-gscdump-visibility": "public"
+      },
+      "post": {
+        "description": "Submits the Sitemap `partner.sites.sitemaps.submission.get` names, with the Site owner's stored grant. It reads Google's Sitemap list first, so a Sitemap submitted elsewhere reads `already-listed`. When gscdump has found none yet, it looks on the Site. It does not ask Google to submit when its own record shows the grant or permission cannot. Every expected outcome is a value.",
+        "operationId": "partner.sites.sitemaps.submission.create",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "siteId",
+            "required": true,
+            "schema": {
+              "pattern": "^s_[\\w-]+$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "pattern": "^req_[\\w-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "oneOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "_tag": {
+                              "const": "submitted",
+                              "type": "string"
+                            },
+                            "sitemapCount": {
+                              "maximum": 9007199254740991,
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "sitemapUrl": {
+                              "format": "uri",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "_tag",
+                            "sitemapUrl",
+                            "sitemapCount"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "_tag": {
+                              "const": "failed",
+                              "type": "string"
+                            },
+                            "reason": {
+                              "enum": [
+                                "already-listed",
+                                "no-sitemap-found",
+                                "needs-write-access",
+                                "insufficient-permission",
+                                "permission-lost",
+                                "grant-missing",
+                                "rejected",
+                                "provider-unavailable"
+                              ],
+                              "type": "string"
+                            },
+                            "retryable": {
+                              "type": "boolean"
+                            },
+                            "sitemapUrl": {
+                              "anyOf": [
+                                {
+                                  "format": "uri",
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "_tag",
+                            "reason",
+                            "retryable",
+                            "sitemapUrl"
+                          ],
+                          "type": "object"
+                        }
+                      ]
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "requestId": {
+                          "pattern": "^req_[\\w-]+$",
+                          "type": "string"
+                        },
+                        "surface": {
+                          "const": "partner",
+                          "type": "string"
+                        },
+                        "version": {
+                          "const": "1.0",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "requestId",
+                        "surface",
+                        "version"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.sites.sitemaps.submission.create.error"
+                }
+              }
+            },
+            "description": "Declared client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.sites.sitemaps.submission.create.error"
+                }
+              }
+            },
+            "description": "Safe internal or contract error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.sites.sitemaps.submission.create.error"
+                }
+              }
+            },
+            "description": "Stable error envelope"
+          }
+        },
+        "security": [
+          {
+            "user_key": []
+          },
+          {
+            "partner_key": []
+          }
+        ],
+        "summary": "Submit a Sitemap to Google",
+        "tags": [
+          "Sitemaps"
+        ],
+        "x-gscdump-errors": [
+          "invalid_request",
+          "unauthorized",
+          "forbidden",
+          "site_not_found",
+          "rate_limited",
+          "internal_error",
+          "contract_violation"
+        ],
+        "x-gscdump-examples": {
+          "request": {
+            "params": {
+              "siteId": "s_01"
+            }
+          },
+          "response": {
+            "data": {
+              "_tag": "submitted",
+              "sitemapCount": 1,
+              "sitemapUrl": "https://example.com/sitemap.xml"
+            },
+            "meta": {
+              "requestId": "req_01",
+              "surface": "partner",
+              "version": "1.0"
+            }
+          }
+        },
+        "x-gscdump-lifecycle": {
+          "introduced": "4.8.0"
+        },
+        "x-gscdump-ownership": [
+          {
+            "credential": "user_key",
+            "rule": "authorized_site"
+          },
+          {
+            "credential": "partner_key",
+            "rule": "authorized_site"
+          }
+        ],
+        "x-gscdump-resources": {
+          "changes": [
+            {
+              "idFrom": "params.siteId",
+              "type": "site.sitemaps"
+            }
+          ],
+          "reads": [
+            {
+              "idFrom": "params.siteId",
+              "type": "site.sitemaps"
+            }
+          ]
+        },
+        "x-gscdump-scopes": [
+          "sitemaps:write"
+        ],
+        "x-gscdump-semantics": {
+          "idempotent": true,
+          "kind": "mutation",
+          "readConsistency": null,
+          "retry": "idempotent",
+          "sideEffects": "state"
+        },
+        "x-gscdump-visibility": "public"
+      }
+    },
     "/api/partner/v1/sites/{siteId}/sitemaps/urls": {
       "get": {
         "description": "Returns an exact generation-pinned cursor page of sitemap membership and lastmod evidence.",
@@ -25354,6 +27885,667 @@
         },
         "x-gscdump-scopes": [
           "users:read"
+        ],
+        "x-gscdump-semantics": {
+          "idempotent": true,
+          "kind": "query",
+          "readConsistency": "primary",
+          "retry": "idempotent",
+          "sideEffects": "none"
+        },
+        "x-gscdump-visibility": "public"
+      }
+    },
+    "/api/partner/v1/users/{userId}/indexing/bing/sites": {
+      "get": {
+        "description": "Returns the user's Bing grant and one tagged Bing state for each Site the user can see. A partner credential sees only its own Sites. `callerCanAct` says whether the caller may run the Operation the state names. Filter by `teamId` to read one Team.",
+        "operationId": "partner.users.indexing.bing.sites.list",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": {
+              "pattern": "^u_[\\w-]+$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "teamId",
+            "required": false,
+            "schema": {
+              "pattern": "^t_[\\w-]+$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "pattern": "^req_[\\w-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "grant": {
+                          "oneOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "_tag": {
+                                  "const": "authorized",
+                                  "type": "string"
+                                },
+                                "scopes": {
+                                  "items": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "_tag",
+                                "scopes"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "_tag": {
+                                  "const": "reauthorization-required",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "_tag"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "_tag": {
+                                  "const": "missing",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "_tag"
+                              ],
+                              "type": "object"
+                            }
+                          ]
+                        },
+                        "searchEngine": {
+                          "const": "bing",
+                          "type": "string"
+                        },
+                        "sites": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "callerCanAct": {
+                                "type": "boolean"
+                              },
+                              "siteId": {
+                                "pattern": "^s_[\\w-]+$",
+                                "type": "string"
+                              },
+                              "siteUrl": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "state": {
+                                "oneOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "_tag": {
+                                        "const": "collecting",
+                                        "type": "string"
+                                      },
+                                      "lastEvidenceAt": {
+                                        "anyOf": [
+                                          {
+                                            "format": "date-time",
+                                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "remoteSiteUrl": {
+                                        "format": "uri",
+                                        "type": "string"
+                                      },
+                                      "sitemap": {
+                                        "oneOf": [
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "_tag": {
+                                                "const": "submitted",
+                                                "type": "string"
+                                              },
+                                              "checkedAt": {
+                                                "format": "date-time",
+                                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                                "type": "string"
+                                              },
+                                              "lastCrawledAt": {
+                                                "anyOf": [
+                                                  {
+                                                    "format": "date-time",
+                                                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                                    "type": "string"
+                                                  },
+                                                  {
+                                                    "type": "null"
+                                                  }
+                                                ]
+                                              },
+                                              "sitemapCount": {
+                                                "exclusiveMinimum": 0,
+                                                "maximum": 9007199254740991,
+                                                "type": "integer"
+                                              },
+                                              "sitemaps": {
+                                                "items": {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "lastCrawledAt": {
+                                                      "anyOf": [
+                                                        {
+                                                          "format": "date-time",
+                                                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                                          "type": "string"
+                                                        },
+                                                        {
+                                                          "type": "null"
+                                                        }
+                                                      ]
+                                                    },
+                                                    "status": {
+                                                      "type": "string"
+                                                    },
+                                                    "submittedAt": {
+                                                      "anyOf": [
+                                                        {
+                                                          "format": "date-time",
+                                                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                                          "type": "string"
+                                                        },
+                                                        {
+                                                          "type": "null"
+                                                        }
+                                                      ]
+                                                    },
+                                                    "url": {
+                                                      "minLength": 1,
+                                                      "type": "string"
+                                                    },
+                                                    "urlCount": {
+                                                      "anyOf": [
+                                                        {
+                                                          "maximum": 9007199254740991,
+                                                          "minimum": 0,
+                                                          "type": "integer"
+                                                        },
+                                                        {
+                                                          "type": "null"
+                                                        }
+                                                      ]
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "url",
+                                                    "status",
+                                                    "submittedAt",
+                                                    "lastCrawledAt",
+                                                    "urlCount"
+                                                  ],
+                                                  "type": "object"
+                                                },
+                                                "minItems": 1,
+                                                "type": "array"
+                                              },
+                                              "urlCount": {
+                                                "anyOf": [
+                                                  {
+                                                    "maximum": 9007199254740991,
+                                                    "minimum": 0,
+                                                    "type": "integer"
+                                                  },
+                                                  {
+                                                    "type": "null"
+                                                  }
+                                                ]
+                                              }
+                                            },
+                                            "required": [
+                                              "_tag",
+                                              "checkedAt",
+                                              "sitemapCount",
+                                              "urlCount",
+                                              "lastCrawledAt",
+                                              "sitemaps"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "_tag": {
+                                                "const": "missing",
+                                                "type": "string"
+                                              },
+                                              "checkedAt": {
+                                                "format": "date-time",
+                                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                                "type": "string"
+                                              },
+                                              "lastSubmittedAt": {
+                                                "anyOf": [
+                                                  {
+                                                    "format": "date-time",
+                                                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                                    "type": "string"
+                                                  },
+                                                  {
+                                                    "type": "null"
+                                                  }
+                                                ]
+                                              }
+                                            },
+                                            "required": [
+                                              "_tag",
+                                              "checkedAt",
+                                              "lastSubmittedAt"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "_tag": {
+                                                "const": "awaiting-bing",
+                                                "type": "string"
+                                              },
+                                              "checkedAt": {
+                                                "anyOf": [
+                                                  {
+                                                    "format": "date-time",
+                                                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                                    "type": "string"
+                                                  },
+                                                  {
+                                                    "type": "null"
+                                                  }
+                                                ]
+                                              },
+                                              "lastSubmittedAt": {
+                                                "format": "date-time",
+                                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "_tag",
+                                              "checkedAt",
+                                              "lastSubmittedAt"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "_tag": {
+                                                "const": "unknown",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "_tag"
+                                            ],
+                                            "type": "object"
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "_tag",
+                                      "remoteSiteUrl",
+                                      "lastEvidenceAt",
+                                      "sitemap"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "_tag": {
+                                        "const": "verification-required",
+                                        "type": "string"
+                                      },
+                                      "remoteSiteUrl": {
+                                        "format": "uri",
+                                        "type": "string"
+                                      },
+                                      "verification": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "_tag": {
+                                            "const": "cname",
+                                            "type": "string"
+                                          },
+                                          "name": {
+                                            "maxLength": 63,
+                                            "minLength": 1,
+                                            "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+                                            "type": "string"
+                                          },
+                                          "value": {
+                                            "const": "verify.bing.com",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "_tag",
+                                          "name",
+                                          "value"
+                                        ],
+                                        "type": "object"
+                                      }
+                                    },
+                                    "required": [
+                                      "_tag",
+                                      "remoteSiteUrl",
+                                      "verification"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "_tag": {
+                                        "const": "linkable",
+                                        "type": "string"
+                                      },
+                                      "reason": {
+                                        "enum": [
+                                          "not-linked",
+                                          "binding-stalled",
+                                          "permission-lost"
+                                        ],
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "_tag",
+                                      "reason"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "_tag": {
+                                        "const": "grant-required",
+                                        "type": "string"
+                                      },
+                                      "reason": {
+                                        "enum": [
+                                          "grant-missing",
+                                          "reauthorization-required"
+                                        ],
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "_tag",
+                                      "reason"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "_tag": {
+                                        "const": "reauthorization-required",
+                                        "type": "string"
+                                      },
+                                      "remoteSiteUrl": {
+                                        "format": "uri",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "_tag",
+                                      "remoteSiteUrl"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "_tag": {
+                                        "const": "unavailable",
+                                        "type": "string"
+                                      },
+                                      "reason": {
+                                        "enum": [
+                                          "not-enabled"
+                                        ],
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "_tag",
+                                      "reason"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              },
+                              "teamId": {
+                                "anyOf": [
+                                  {
+                                    "pattern": "^t_[\\w-]+$",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": [
+                              "siteId",
+                              "siteUrl",
+                              "teamId",
+                              "callerCanAct",
+                              "state"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "searchEngine",
+                        "grant",
+                        "sites"
+                      ],
+                      "type": "object"
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "requestId": {
+                          "pattern": "^req_[\\w-]+$",
+                          "type": "string"
+                        },
+                        "surface": {
+                          "const": "partner",
+                          "type": "string"
+                        },
+                        "version": {
+                          "const": "1.0",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "requestId",
+                        "surface",
+                        "version"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.users.indexing.bing.sites.list.error"
+                }
+              }
+            },
+            "description": "Declared client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.users.indexing.bing.sites.list.error"
+                }
+              }
+            },
+            "description": "Safe internal or contract error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.users.indexing.bing.sites.list.error"
+                }
+              }
+            },
+            "description": "Stable error envelope"
+          }
+        },
+        "security": [
+          {
+            "user_key": []
+          },
+          {
+            "partner_key": []
+          }
+        ],
+        "summary": "List Bing state for every Site",
+        "tags": [
+          "Indexing"
+        ],
+        "x-gscdump-errors": [
+          "invalid_request",
+          "unauthorized",
+          "forbidden",
+          "user_not_found",
+          "rate_limited",
+          "internal_error",
+          "contract_violation"
+        ],
+        "x-gscdump-examples": {
+          "request": {
+            "params": {
+              "userId": "u_01"
+            },
+            "query": {
+              "teamId": "t_01"
+            }
+          },
+          "response": {
+            "data": {
+              "grant": {
+                "_tag": "authorized",
+                "scopes": [
+                  "webmaster.manage"
+                ]
+              },
+              "searchEngine": "bing",
+              "sites": [
+                {
+                  "callerCanAct": true,
+                  "siteId": "s_01",
+                  "siteUrl": "https://example.com/",
+                  "state": {
+                    "_tag": "linkable",
+                    "reason": "not-linked"
+                  },
+                  "teamId": "t_01"
+                }
+              ]
+            },
+            "meta": {
+              "requestId": "req_01",
+              "surface": "partner",
+              "version": "1.0"
+            }
+          }
+        },
+        "x-gscdump-lifecycle": {
+          "introduced": "4.8.0"
+        },
+        "x-gscdump-ownership": [
+          {
+            "credential": "user_key",
+            "rule": "self"
+          },
+          {
+            "credential": "partner_key",
+            "rule": "linked_user"
+          }
+        ],
+        "x-gscdump-resources": {
+          "changes": [],
+          "reads": [
+            {
+              "idFrom": "params.userId",
+              "type": "partner.user"
+            },
+            {
+              "idFrom": "params.userId",
+              "type": "user.sites"
+            }
+          ]
+        },
+        "x-gscdump-scopes": [
+          "indexing:read"
         ],
         "x-gscdump-semantics": {
           "idempotent": true,
