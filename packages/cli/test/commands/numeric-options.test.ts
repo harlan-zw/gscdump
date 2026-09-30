@@ -66,6 +66,8 @@ const cases = [
   ['indexing urls', child(indexingCommand, 'urls'), { site: 'example.com', format: 'table' }, 'limit', '0'],
   ['indexing urls', child(indexingCommand, 'urls'), { site: 'example.com', format: 'table' }, 'limit', '501'],
   ['indexing urls', child(indexingCommand, 'urls'), { site: 'example.com', format: 'table' }, 'offset', '-1'],
+  ['indexing summary', child(indexingCommand, 'summary'), { site: 'example.com' }, 'days', '0'],
+  ['indexing summary', child(indexingCommand, 'summary'), { site: 'example.com' }, 'days', '91'],
   ['sync', syncCommand, {}, 'days', '3days'],
   ['sync', syncCommand, {}, 'concurrency', '2.7'],
   ['sitemaps urls', child(sitemapsCommand, 'urls'), sitemapArgs, 'limit', '0'],
