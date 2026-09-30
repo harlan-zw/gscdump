@@ -15,6 +15,7 @@ export const GSCDUMP_V1_ROUTE_CATALOG = {
   surfaces: GSCDUMP_V1_ROUTE_SURFACES,
   operations: {
     'partner.users.lifecycle.get': { surface: 'partner', method: 'GET', template: '/users/{userId}/lifecycle' },
+    'partner.users.entitlements.get': { surface: 'partner', method: 'GET', template: '/users/{userId}/entitlements' },
     'partner.users.sites.available.list': { surface: 'partner', method: 'GET', template: '/users/{userId}/available-sites' },
     'partner.users.sites.create': { surface: 'partner', method: 'POST', template: '/users/{userId}/sites' },
     'partner.users.create': { surface: 'partner', method: 'POST', template: '/users' },

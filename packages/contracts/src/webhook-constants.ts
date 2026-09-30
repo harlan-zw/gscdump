@@ -15,6 +15,7 @@ export const CANONICAL_WEBHOOK_EVENTS = [
   'site.indexing.ready',
   'site.auth.failed',
   'job.failed',
+  'user.allowance.notice',
 ] as const satisfies readonly CanonicalWebhookEventType[]
 
 export const VALID_WEBHOOK_EVENTS = CANONICAL_WEBHOOK_EVENTS

@@ -1,6 +1,7 @@
 import type { HttpV1ErrorCode, HttpV1ProtocolOperation } from './http-core'
 import type { RealtimeV1Schemas } from './realtime'
 import { z } from 'zod'
+import { siteHoldReasonSchema } from '../entitlements'
 import {
   watchedUrlsChangeRequestSchema,
   watchedUrlsChangeResponseSchema,
@@ -521,6 +522,45 @@ export function createGscdumpV1Protocol() {
     ok: z.literal(true),
     keyId: partnerUserApiKeyId,
   }), partnerResponseMeta)
+  // The Meters that apply to a user's Sites in one partner's usage pool. An
+  // exempt partner's Sites count against no Meter, so `exempt` carries none.
+  const entitlementCount = z.number().int().nonnegative()
+  const entitlementUsage = defineResponseObject({ used: entitlementCount, allowance: entitlementCount })
+  const preservedRowsUsage = defineResponseObject({ used: entitlementCount.nullable(), allowance: entitlementCount })
+  const urlInspectionsUsage = defineResponseObject({
+    used: entitlementCount,
+    allowance: entitlementCount.nullable(),
+    resetsAt: z.iso.date(),
+  })
+  const entitlementMeters = defineResponseObject({
+    sites: entitlementUsage.producer,
+    preservedRows: preservedRowsUsage.producer,
+    urlInspections: urlInspectionsUsage.producer,
+  }, {
+    sites: entitlementUsage.client,
+    preservedRows: preservedRowsUsage.client,
+    urlInspections: urlInspectionsUsage.client,
+  })
+  const heldSite = defineResponseObject({ siteId: realtimeSchemas.publicSiteId, hold: siteHoldReasonSchema })
+  const exemptEntitlements = defineResponseObject({ mode: z.literal('exempt') })
+  const meteredEntitlementsShape = {
+    mode: z.literal('metered'),
+    phase: z.enum(['beta', 'billing']),
+    sizeLimitRowsPerDay: z.number().int().positive(),
+  }
+  const meteredEntitlements = defineResponseObject({
+    ...meteredEntitlementsShape,
+    meters: entitlementMeters.producer,
+    heldSites: z.array(heldSite.producer),
+  }, {
+    ...meteredEntitlementsShape,
+    meters: entitlementMeters.client,
+    heldSites: z.array(heldSite.client),
+  })
+  const userEntitlementsResponse = defineSuccessResponse({
+    producer: z.discriminatedUnion('mode', [exemptEntitlements.producer, meteredEntitlements.producer]),
+    client: z.discriminatedUnion('mode', [exemptEntitlements.client, meteredEntitlements.client]),
+  }, partnerResponseMeta)
 
   // ── 1.1.0 promotions (2026-07-22 full train, tranche A) ────────────────────
   // Response shapes wrap the SAME shared schemas the private handlers already
@@ -933,6 +973,58 @@ export function createGscdumpV1Protocol() {
                   nextAction: 'none',
                 },
                 sites: [],
+              },
+              meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
+            },
+          },
+        },
+      }),
+      getUserEntitlements: defineHttpOperation({
+        ...gscdumpV1OperationRoute('partner.users.entitlements.get'),
+        visibility: 'public',
+        semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
+        auth: {
+          credentials: ['user_key', 'partner_key'],
+          scopes: ['users:read'],
+          ownership: [
+            { credential: 'user_key', rule: 'self' },
+            { credential: 'partner_key', rule: 'linked_user' },
+          ],
+        },
+        request: {
+          params: z.strictObject({ userId: realtimeSchemas.publicUserId }),
+          query: null,
+          headers: requestHeaders,
+          body: null,
+        },
+        responses: { 200: userEntitlementsResponse },
+        errors: partnerUserErrors,
+        errorResponse: errorEnvelopeSchemas(partnerUserErrors, realtimeSchemas.publicRequestId),
+        resources: {
+          reads: [
+            { type: 'partner.user', idFrom: 'params.userId' },
+            { type: 'user.sites', idFrom: 'params.userId' },
+          ],
+          changes: [],
+        },
+        lifecycle: { introduced: '4.7.0' },
+        docs: {
+          summary: 'Get user entitlements',
+          description: 'Returns the Meters that apply to the user\'s partner Sites. If the partner is exempt, the response is `{ mode: "exempt" }` and no free allowance applies. If the partner is metered, the response gives the usage of the user\'s Billing owner against each free allowance, the size limit in query×page rows per day, and the held Sites the user can read. `urlInspections.allowance` is `null` when URL Inspections have no cap. `urlInspections.resetsAt` is the first UTC day of the next usage month.',
+          tags: ['Users'],
+          examples: {
+            request: { params: { userId: 'u_01' } },
+            response: {
+              data: {
+                mode: 'metered',
+                phase: 'beta',
+                meters: {
+                  sites: { used: 2, allowance: 3 },
+                  preservedRows: { used: 120_000, allowance: 250_000 },
+                  urlInspections: { used: 310, allowance: 5_000, resetsAt: '2026-11-01' },
+                },
+                sizeLimitRowsPerDay: 2_500,
+                heldSites: [{ siteId: 's_02', hold: 'size_limit' }],
               },
               meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
             },
@@ -3475,6 +3567,7 @@ export function createGscdumpV1Protocol() {
       indexNowSubmissionResponse,
       indexNowSubmissionReceiptsResponse,
       lifecycleResponse,
+      userEntitlementsResponse,
       registerSiteRequest,
       sitemapChangesQuery,
       sitemapChangesResponse,
@@ -3518,3 +3611,5 @@ export type PartnerSitemapChangesV1Response = z.infer<GscdumpV1Protocol['schemas
 export type PartnerSiteRegistrationV1Response = z.infer<GscdumpV1Protocol['schemas']['siteRegistrationResponse']['client']>
 export type PartnerSiteDeletionV1Response = z.infer<GscdumpV1Protocol['schemas']['siteDeletionResponse']['client']>
 export type PartnerUserLifecycleV1Response = z.infer<GscdumpV1Protocol['schemas']['lifecycleResponse']['client']>
+export type PartnerUserEntitlementsV1Response = z.infer<GscdumpV1Protocol['schemas']['userEntitlementsResponse']['client']>
+export type PartnerUserEntitlementsV1 = PartnerUserEntitlementsV1Response['data']

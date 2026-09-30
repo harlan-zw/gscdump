@@ -1,5 +1,6 @@
 import type { GscSearchType } from './search-types'
 import { z } from 'zod'
+import { siteHoldReasonSchema, userAllowanceNoticeDataSchema } from './entitlements'
 import { coverageStatesPointSchema, indexingCaptureSchema } from './indexing-coverage'
 import {
   accountNextActions,
@@ -536,6 +537,8 @@ export const partnerLifecycleSiteSchema = z.object({
     progress: lifecycleProgressSchema,
     nextAction: z.enum(indexingNextActions),
   }).loose(),
+  // A host older than contracts 4.7.0 sends no `hold`; read it as not held.
+  hold: siteHoldReasonSchema.nullable().default(null),
   latestError: lifecycleErrorSchema.nullable(),
   lifecycleRevision: z.number(),
   updatedAt: z.string(),
@@ -1422,7 +1425,15 @@ export const partnerWebhookEnvelopeSchema = z.object({
   lifecycleRevision: z.number().int(),
   occurredAt: z.iso.datetime(),
   data: partnerWebhookDataSchema,
-}).loose()
+}).loose().superRefine((envelope, context) => {
+  // An event with a typed payload must carry it, so `CanonicalWebhookEnvelope`
+  // holds for every envelope this schema accepts.
+  if (envelope.event !== 'user.allowance.notice')
+    return
+  const data = userAllowanceNoticeDataSchema.safeParse(envelope.data)
+  for (const issue of data.error?.issues ?? [])
+    context.addIssue({ code: 'custom', message: issue.message, path: ['data', ...issue.path] })
+})
 
 export const analyticsEndpointSchemas = {
   analyticsWhoami: { response: whoamiResponseSchema },

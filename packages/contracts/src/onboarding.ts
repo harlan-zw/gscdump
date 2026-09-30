@@ -1,3 +1,5 @@
+import type { SiteHoldReason } from './entitlements'
+
 export const GSCDUMP_ONBOARDING_CONTRACT_VERSION = '2026-05-11' as const
 
 export const GSCDUMP_REQUIRED_ANALYTICS_SCOPE = 'https://www.googleapis.com/auth/webmasters.readonly' as const
@@ -195,6 +197,8 @@ export interface PartnerLifecycleSite {
     progress: LifecycleProgress
     nextAction: IndexingNextAction
   }
+  /** Why gscdump holds the Site before its Backfill, or `null` when it does not hold it. */
+  hold: SiteHoldReason | null
   latestError: LifecycleError | null
   lifecycleRevision: number
   updatedAt: string

@@ -301,6 +301,15 @@ _Avoid_: duplicating request helpers in each hosted SDK client.
 A revocable `gsd_user_` credential that authenticates as `user_key` for the CLI, the MCP server, and v1 clients. A partner issues one for a linked user through `partner.users.api_keys.*`; its public id has the `ak_` prefix. The raw key appears once, in the create response.
 _Avoid_: token, secret, or personal access token for this credential; "token" already names Google OAuth grants and realtime tickets.
 
+**Usage pool**:
+The Sites of one Billing owner that share one free allowance: the gscdump.com Sites, or the Sites of one metered partner. An exempt partner's Sites belong to no usage pool. `partner.users.entitlements.get` reads the pool of the partner that linked the user. Billing owner, Meter, and free allowance are gscdump.com terms.
+
+**Entitlement refusal**:
+The `details` of a v1 error envelope when gscdump refuses work because of an entitlement. `details.reason` is one of `ENTITLEMENT_REFUSAL_REASONS`. Read it with `parseEntitlementRefusal`.
+
+**Hold**:
+Why gscdump holds a Site and does not start its Backfill: `size_limit`, `sitemap_limit`, `size_unknown`, or `size_pending` (`SiteHoldReason`). Each lifecycle Site carries it as `hold`, or `null` when gscdump does not hold the Site.
+
 **Search Console API surface**:
 The package root is the sole direct Google Search Console / Indexing / Site Verification client surface. Query, date, result, normalization, and tenant concepts use their named subpaths; v1 removes the duplicate `gscdump/api` barrel.
 _Avoid_: recreating an app-local direct Google client or importing the removed `gscdump/api` barrel.
