@@ -41,6 +41,7 @@ export type {
   TrajectoryCaveat,
   TrajectoryClassification,
   TrajectoryDay,
+  TrajectoryRecord,
   TrajectoryResult,
   TrajectoryWindow,
 } from './analyzers/trajectory'
