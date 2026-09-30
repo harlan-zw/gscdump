@@ -2,7 +2,7 @@
   "name": "@gscdump/analysis",
   "type": "module",
   "version": "4.5.0",
-  "description": "GSC analyzers \u2014 striking-distance, opportunity, movers, decay, brand, clustering, concentration, seasonality. Pure row-based + DuckDB-native.",
+  "description": "GSC analyzers — striking-distance, opportunity, movers, decay, brand, clustering, concentration, seasonality. Pure row-based + DuckDB-native.",
   "author": {
     "name": "Harlan Wilton",
     "email": "harlan@harlanzw.com",
