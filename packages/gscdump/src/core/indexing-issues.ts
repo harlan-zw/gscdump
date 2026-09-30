@@ -8,6 +8,8 @@
 // contract — call it at the ingest boundary so a new Google reason surfaces as a
 // log line rather than silently collapsing into the generic `not_indexed` bucket.
 
+import { GOOGLE_COVERAGE_STATES } from './coverage-state'
+
 /**
  * JS twin of the `fragment_url` SQL predicate below.
  *
@@ -169,35 +171,13 @@ export const KNOWN_PAGE_FETCH_STATES: ReadonlySet<string> = new Set([
 ])
 
 /**
- * Every `coverageState` string we have a bucket for, plus the indexed-state strings
- * that are not faults. Google is free to invent new prose here at any time — that's
- * exactly what {@link unmappedInspectionReasons} exists to catch.
+ * Every `coverageState` string gscdump maps to a tag, plus the indexed-state
+ * strings that are not faults. Derived from the one prose table behind
+ * `parseCoverageState`, so this canary and the coverage tags cannot drift. Google
+ * is free to invent new prose here at any time; that is what
+ * {@link unmappedInspectionReasons} exists to catch.
  */
-export const KNOWN_COVERAGE_STATES: ReadonlySet<string> = new Set([
-  // indexed / non-fault
-  'Submitted and indexed',
-  'Indexed, not submitted in sitemap',
-  'Indexed, though blocked by robots.txt',
-  'Indexed; consider marking as canonical',
-  // bucketed faults
-  'URL is unknown to Google',
-  'Crawled - currently not indexed',
-  'Discovered - currently not indexed',
-  'Not found (404)',
-  'Soft 404',
-  'Server error (5xx)',
-  'Blocked due to access forbidden (403)',
-  'Blocked due to unauthorized request (401)',
-  'Blocked due to other 4xx issue',
-  'Redirect error',
-  'Blocked by robots.txt',
-  'Excluded by ‘noindex’ tag',
-  'Page with redirect',
-  'Alternate page with proper canonical tag',
-  'Duplicate without user-selected canonical',
-  'Duplicate, Google chose different canonical than user',
-  'Blocked by page removal tool',
-])
+export const KNOWN_COVERAGE_STATES: ReadonlySet<string> = new Set(Object.values(GOOGLE_COVERAGE_STATES).flat())
 
 export interface UnmappedInspectionReasons {
   coverageStates: string[]

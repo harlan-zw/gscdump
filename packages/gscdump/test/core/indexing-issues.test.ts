@@ -92,6 +92,14 @@ describe('iNDEXING_ISSUE_FILTERS', () => {
 })
 
 describe('unmappedInspectionReasons', () => {
+  it('accepts every prose string parseCoverageState maps to a tag', () => {
+    const result = unmappedInspectionReasons([
+      { coverageState: 'Page indexed without content' },
+      { coverageState: 'Excluded by \'noindex\' tag' },
+    ])
+    expect(result.coverageStates).toEqual([])
+  })
+
   it('returns nothing when every reason is known', () => {
     const result = unmappedInspectionReasons([
       { coverageState: 'Submitted and indexed', pageFetchState: 'SUCCESSFUL' },
@@ -124,12 +132,14 @@ describe('unmappedInspectionReasons', () => {
       'Indexed, not submitted in sitemap',
       'Indexed, though blocked by robots.txt',
       'Indexed; consider marking as canonical',
+      'Page indexed without content',
     ])
     // Matched by predicate shape rather than by literal string. Everything else
     // MUST appear verbatim in a filter. `Duplicate without user-selected
     // canonical` cannot satisfy a stored difference kind because a missing
     // declaration classifies as `none`.
     const structural = new Set([
+      'Excluded by \'noindex\' tag', // noindex: the Page indexing report spelling
       'Excluded by ‘noindex’ tag', // noindex: coverage_state LIKE '%noindex%'
       'Duplicate, Google chose different canonical than user', // canonical kind is stored at ingest
       'Blocked by robots.txt', // blocked_robots: robots_txt_state = 'DISALLOWED'
