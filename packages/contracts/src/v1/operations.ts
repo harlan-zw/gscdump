@@ -65,6 +65,15 @@ import {
 import { bingConnectionV1Schemas } from './bing'
 import { bingDataQueryV1Schema, bingDataV1Schemas } from './bing-data'
 import {
+  bingAuthorizationRequestV1Schema,
+  bingAuthorizationV1Schemas,
+  bingLinkResultV1Schemas,
+  bingSitemapSubmitRequestV1Schema,
+  bingSitemapSubmitResultV1Schemas,
+  bingSitesQueryV1Schema,
+  bingSitesV1Schemas,
+} from './bing-sites'
+import {
   createGscdumpV1BrowserSchemas,
   GSCDUMP_V1_ANALYTICS_DIMENSIONS,
 } from './browser'
@@ -96,6 +105,7 @@ import {
   REALTIME_V1_EVENT_SEMANTICS,
 } from './realtime'
 import { gscdumpV1OperationRoute, gscdumpV1Surface } from './route-catalog'
+import { sitemapSubmissionV1Schemas, sitemapSubmitResultV1Schemas } from './sitemap-submission'
 import { GSCDUMP_HTTP_V1_VERSION } from './version'
 
 // The inferred enum tuple keeps each operation's error DTO closed to its own codes.
@@ -386,6 +396,12 @@ export function createGscdumpV1Protocol() {
   const indexNowConnectionResponse = defineSuccessResponse(indexNowConnectionV1Schemas, partnerResponseMeta)
   const indexNowSubmissionResponse = defineSuccessResponse(defineResponseObject({ submissionReceipt: indexNowSubmissionReceiptV1Schemas.producer }, { submissionReceipt: indexNowSubmissionReceiptV1Schemas.client }), partnerResponseMeta)
   const indexNowSubmissionReceiptsResponse = defineSuccessResponse(defineResponseObject({ submissionReceipts: z.array(indexNowSubmissionReceiptV1Schemas.producer), pagination: bingIndexingEvidencePagination.producer }, { submissionReceipts: z.array(indexNowSubmissionReceiptV1Schemas.client), pagination: bingIndexingEvidencePagination.client }), partnerResponseMeta)
+  const bingSitesResponse = defineSuccessResponse(bingSitesV1Schemas, partnerResponseMeta)
+  const bingLinkResponse = defineSuccessResponse(bingLinkResultV1Schemas, partnerResponseMeta)
+  const bingAuthorizationResponse = defineSuccessResponse(bingAuthorizationV1Schemas, partnerResponseMeta)
+  const bingSitemapSubmitResponse = defineSuccessResponse(bingSitemapSubmitResultV1Schemas, partnerResponseMeta)
+  const sitemapSubmissionResponse = defineSuccessResponse(sitemapSubmissionV1Schemas, partnerResponseMeta)
+  const sitemapSubmitResponse = defineSuccessResponse(sitemapSubmitResultV1Schemas, partnerResponseMeta)
   const indexingTransition = defineResponseObject({
     url: z.string(),
     field: gscdumpIndexingTransitionFieldSchema,
@@ -1404,6 +1420,155 @@ export function createGscdumpV1Protocol() {
         lifecycle: { introduced: '1.7.0' },
         docs: { summary: 'List IndexNow Submission Receipts', description: 'Returns Submission Receipts for this Site.', tags: ['Indexing'], examples: { request: { params: { siteId: 's_01' }, query: { limit: 25, offset: 0 } }, response: { data: { submissionReceipts: [], pagination: { total: 0, limit: 25, offset: 0, hasMore: false } }, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } } } },
       }),
+      listUserBingSites: defineHttpOperation({
+        ...gscdumpV1OperationRoute('partner.users.indexing.bing.sites.list'),
+        visibility: 'public',
+        semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
+        auth: {
+          credentials: ['user_key', 'partner_key'],
+          scopes: ['indexing:read'],
+          ownership: [
+            { credential: 'user_key', rule: 'self' },
+            { credential: 'partner_key', rule: 'linked_user' },
+          ],
+        },
+        request: {
+          params: z.strictObject({ userId: realtimeSchemas.publicUserId }),
+          query: bingSitesQueryV1Schema,
+          headers: requestHeaders,
+          body: null,
+        },
+        responses: { 200: bingSitesResponse },
+        errors: partnerUserErrors,
+        errorResponse: errorEnvelopeSchemas(partnerUserErrors, realtimeSchemas.publicRequestId),
+        resources: {
+          reads: [
+            { type: 'partner.user', idFrom: 'params.userId' },
+            { type: 'user.sites', idFrom: 'params.userId' },
+          ],
+          changes: [],
+        },
+        lifecycle: { introduced: '4.8.0' },
+        docs: {
+          summary: 'List Bing state for every Site',
+          description: 'Returns the user\'s Bing grant and one tagged Bing state for each Site the user can see. A partner credential sees only its own Sites. `callerCanAct` says whether the caller may run the Operation the state names. Filter by `teamId` to read one Team.',
+          tags: ['Indexing'],
+          examples: {
+            request: { params: { userId: 'u_01' }, query: { teamId: 't_01' } },
+            response: {
+              data: {
+                searchEngine: 'bing',
+                grant: { _tag: 'authorized', scopes: ['webmaster.manage'] },
+                sites: [{
+                  siteId: 's_01',
+                  siteUrl: 'https://example.com/',
+                  teamId: 't_01',
+                  callerCanAct: true,
+                  state: { _tag: 'linkable', reason: 'not-linked' },
+                }],
+              },
+              meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
+            },
+          },
+        },
+      }),
+      linkSiteBing: defineHttpOperation({
+        ...gscdumpV1OperationRoute('partner.sites.indexing.bing.link.create'),
+        visibility: 'public',
+        semantics: { kind: 'mutation', sideEffects: 'state', idempotent: true, retry: 'idempotent', readConsistency: null },
+        auth: {
+          credentials: ['user_key', 'partner_key'],
+          scopes: ['indexing:write'],
+          ownership: [
+            { credential: 'user_key', rule: 'authorized_site' },
+            { credential: 'partner_key', rule: 'authorized_site' },
+          ],
+        },
+        request: { params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }), query: null, headers: requestHeaders, body: null },
+        responses: { 200: bingLinkResponse },
+        errors: partnerSiteErrors,
+        errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [{ type: 'site.indexing', idFrom: 'params.siteId' }], changes: [{ type: 'site.indexing', idFrom: 'params.siteId' }] },
+        lifecycle: { introduced: '4.8.0' },
+        docs: {
+          summary: 'Link a Site to Bing',
+          description: 'Binds the Site with the Site owner\'s stored Bing grant, with no Microsoft redirect. Only the Site owner\'s user credential may link: any other caller gets `403 forbidden` with `details.reason` `site-owner-required`. Every expected outcome is a value: `linked` carries the new Site state, `grant-required` asks the owner to authorize Bing, and `failed` says whether a retry can help.',
+          tags: ['Indexing'],
+          examples: {
+            request: { params: { siteId: 's_01' } },
+            response: {
+              data: { _tag: 'grant-required', reason: 'grant-missing' },
+              meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
+            },
+          },
+        },
+      }),
+      createSiteBingAuthorization: defineHttpOperation({
+        ...gscdumpV1OperationRoute('partner.sites.indexing.bing.authorization.create'),
+        visibility: 'public',
+        semantics: { kind: 'mutation', sideEffects: 'state', idempotent: true, retry: 'idempotent', readConsistency: null },
+        auth: {
+          credentials: ['user_key', 'partner_key'],
+          scopes: ['indexing:write'],
+          ownership: [
+            { credential: 'user_key', rule: 'authorized_site' },
+            { credential: 'partner_key', rule: 'authorized_site' },
+          ],
+        },
+        request: { params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }), query: null, headers: requestHeaders, body: bingAuthorizationRequestV1Schema },
+        responses: { 200: bingAuthorizationResponse },
+        errors: partnerSiteErrors,
+        errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [{ type: 'site.indexing', idFrom: 'params.siteId' }], changes: [] },
+        lifecycle: { introduced: '4.8.0' },
+        docs: {
+          summary: 'Authorize Bing for a Site',
+          description: 'Returns a Microsoft authorize URL that expires at `expiresAt`. After consent, gscdump stores the grant, links the Site, and returns the browser to `returnUrl` with `bing=connected`, `bing=verification-required`, or `bing=error&reason=<reason>`. `returnUrl` must be a gscdump.com path or an allowed origin, otherwise the request fails with `400 invalid_request` and `details.reason` `return-url-not-allowed`. Only the Site owner\'s user credential may authorize.',
+          tags: ['Indexing'],
+          examples: {
+            request: { params: { siteId: 's_01' }, body: { returnUrl: 'https://nuxtseo.com/pro/dashboard/integrations' } },
+            response: {
+              data: { authorizeUrl: 'https://www.bing.com/webmasters/oauth/authorize?client_id=gscdump&state=intent_01', expiresAt: '2026-09-30T00:10:00.000Z' },
+              meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
+            },
+          },
+        },
+      }),
+      submitSiteBingSitemap: defineHttpOperation({
+        ...gscdumpV1OperationRoute('partner.sites.indexing.bing.sitemaps.submit'),
+        visibility: 'public',
+        semantics: { kind: 'mutation', sideEffects: 'state', idempotent: true, retry: 'idempotent', readConsistency: null },
+        auth: {
+          credentials: ['user_key', 'partner_key'],
+          scopes: ['indexing:write'],
+          ownership: [
+            { credential: 'user_key', rule: 'authorized_site' },
+            { credential: 'partner_key', rule: 'authorized_site' },
+          ],
+        },
+        request: { params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }), query: null, headers: requestHeaders, body: bingSitemapSubmitRequestV1Schema },
+        responses: { 200: bingSitemapSubmitResponse },
+        errors: partnerSiteErrors,
+        errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [{ type: 'site.indexing', idFrom: 'params.siteId' }], changes: [{ type: 'site.indexing', idFrom: 'params.siteId' }] },
+        lifecycle: { introduced: '4.8.0' },
+        docs: {
+          summary: 'Submit a Sitemap to Bing',
+          description: 'Submits one Sitemap for a verified Site, then reads what Bing lists. Without `url`, gscdump submits the Sitemap it finds on the Site. Bing lags after a submit, so `sitemap` usually reads `awaiting-bing`. Every expected outcome is a value.',
+          tags: ['Indexing'],
+          examples: {
+            request: { params: { siteId: 's_01' }, body: {} },
+            response: {
+              data: {
+                _tag: 'submitted',
+                sitemapUrl: 'https://example.com/sitemap.xml',
+                sitemap: { _tag: 'awaiting-bing', checkedAt: '2026-09-30T00:00:00.000Z', lastSubmittedAt: '2026-09-30T00:00:00.000Z' },
+              },
+              meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
+            },
+          },
+        },
+      }),
       getSiteBingConnection: defineHttpOperation({
         ...gscdumpV1OperationRoute('partner.sites.indexing.bing.connection.get'),
         visibility: 'public',
@@ -1631,6 +1796,73 @@ export function createGscdumpV1Protocol() {
                   sitemapScope: { excludedCount: 0, duplicateCount: 0 },
                 },
               },
+              meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
+            },
+          },
+        },
+      }),
+      getSiteSitemapSubmission: defineHttpOperation({
+        ...gscdumpV1OperationRoute('partner.sites.sitemaps.submission.get'),
+        visibility: 'public',
+        semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
+        auth: {
+          credentials: ['user_key', 'partner_key'],
+          scopes: ['sitemaps:read'],
+          ownership: [
+            { credential: 'user_key', rule: 'authorized_site' },
+            { credential: 'partner_key', rule: 'authorized_site' },
+          ],
+        },
+        request: { params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }), query: null, headers: requestHeaders, body: null },
+        responses: { 200: sitemapSubmissionResponse },
+        errors: partnerSiteErrors,
+        errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [{ type: 'site.sitemaps', idFrom: 'params.siteId' }], changes: [] },
+        lifecycle: { introduced: '4.8.0' },
+        docs: {
+          summary: 'Get Sitemap submission',
+          description: 'Returns the Sitemap gscdump would submit to Google for the Site and whether the stored grant can submit it. gscdump picks a Sitemap it found on the Site\'s own host, under the linked property, and reads its own record of the granted scopes and the property permission. It makes no Google call.',
+          tags: ['Sitemaps'],
+          examples: {
+            request: { params: { siteId: 's_01' } },
+            response: {
+              data: {
+                searchEngine: 'google',
+                gscPropertyUrl: 'sc-domain:example.com',
+                callerCanAct: true,
+                state: { _tag: 'ready', sitemapUrl: 'https://example.com/sitemap.xml', writeAccess: 'granted' },
+              },
+              meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
+            },
+          },
+        },
+      }),
+      submitSiteSitemap: defineHttpOperation({
+        ...gscdumpV1OperationRoute('partner.sites.sitemaps.submission.create'),
+        visibility: 'public',
+        semantics: { kind: 'mutation', sideEffects: 'state', idempotent: true, retry: 'idempotent', readConsistency: null },
+        auth: {
+          credentials: ['user_key', 'partner_key'],
+          scopes: ['sitemaps:write'],
+          ownership: [
+            { credential: 'user_key', rule: 'authorized_site' },
+            { credential: 'partner_key', rule: 'authorized_site' },
+          ],
+        },
+        request: { params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }), query: null, headers: requestHeaders, body: null },
+        responses: { 200: sitemapSubmitResponse },
+        errors: partnerSiteErrors,
+        errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [{ type: 'site.sitemaps', idFrom: 'params.siteId' }], changes: [{ type: 'site.sitemaps', idFrom: 'params.siteId' }] },
+        lifecycle: { introduced: '4.8.0' },
+        docs: {
+          summary: 'Submit a Sitemap to Google',
+          description: 'Submits the Sitemap `partner.sites.sitemaps.submission.get` names, with the Site owner\'s stored grant. It reads Google\'s Sitemap list first, so a Sitemap submitted elsewhere reads `already-listed`. When gscdump has found none yet, it looks on the Site. It does not ask Google to submit when its own record shows the grant or permission cannot. Every expected outcome is a value.',
+          tags: ['Sitemaps'],
+          examples: {
+            request: { params: { siteId: 's_01' } },
+            response: {
+              data: { _tag: 'submitted', sitemapUrl: 'https://example.com/sitemap.xml', sitemapCount: 1 },
               meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
             },
           },
@@ -3566,6 +3798,12 @@ export function createGscdumpV1Protocol() {
       indexNowConnectionResponse,
       indexNowSubmissionResponse,
       indexNowSubmissionReceiptsResponse,
+      bingSitesResponse,
+      bingLinkResponse,
+      bingAuthorizationResponse,
+      bingSitemapSubmitResponse,
+      sitemapSubmissionResponse,
+      sitemapSubmitResponse,
       lifecycleResponse,
       userEntitlementsResponse,
       registerSiteRequest,

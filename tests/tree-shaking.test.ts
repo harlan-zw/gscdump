@@ -92,18 +92,18 @@ const cases: readonly TreeShakeCase[] = [
   {
     entry: 'packages/contracts/dist/v1/http.mjs',
     exportName: 'createGscdumpV1Protocol',
-    maxBytes: 166_000,
+    maxBytes: 180_000,
     allowedImports: ['zod'],
   },
   {
     entry: 'packages/contracts/dist/v1/paths.mjs',
     exportName: 'createGscdumpV1Paths',
-    maxBytes: 9_500,
+    maxBytes: 10_000,
   },
   {
     entry: 'packages/sdk/dist/v1/http.mjs',
     exportName: 'createGscdumpV1Client',
-    maxBytes: 12_000,
+    maxBytes: 12_500,
     allowedDynamicImports: ['@gscdump/contracts/v1/http'],
   },
   {
