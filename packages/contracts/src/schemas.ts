@@ -1,5 +1,6 @@
 import type { GscSearchType } from './search-types'
 import { z } from 'zod'
+import { coverageStatesPointSchema, indexingCaptureSchema } from './indexing-coverage'
 import {
   accountNextActions,
   accountStatuses,
@@ -251,6 +252,8 @@ export const indexingDiagnosticsSchema = z.object({
   }).loose(),
   issues: z.array(indexingIssueSchema),
   samples: z.record(z.string(), z.array(indexingUrlRowSchema)).optional(),
+  // Optional only so a client can still read a host older than 4.4.0.
+  capture: indexingCaptureSchema.optional(),
   meta: z.object({ siteUrl: z.string() }).loose(),
 }).loose()
 
@@ -891,6 +894,9 @@ export const gscdumpIndexingResponseSchema = z.object({
       crawledNotIndexed: z.number().nullable(),
       discoveredNotCrawled: z.number().nullable(),
     }).loose(),
+    // One URL count per coverage state for this day. Optional only so a client
+    // can still read a host older than 4.4.0.
+    coverageStates: coverageStatesPointSchema.optional(),
     signals: z.object({
       mobilePass: z.number(),
       mobileFail: z.number(),
@@ -930,6 +936,9 @@ export const gscdumpIndexingResponseSchema = z.object({
     sitemapsPending: z.boolean(),
     rollupBuiltAt: z.number().optional(),
   }).loose(),
+  // When gscdump counted the verdicts in `summary`, and how old they are.
+  // Optional only so a client can still read a host older than 4.4.0.
+  capture: indexingCaptureSchema.optional(),
 }).loose()
 
 export const gscdumpIndexingUrlsResponseSchema = z.object({
@@ -955,6 +964,8 @@ export const gscdumpIndexingDiagnosticsResponseSchema = z.object({
   }).loose(),
   issues: z.array(indexingIssueSchema),
   samples: z.record(z.string(), z.array(indexingUrlRowSchema)).optional(),
+  // Optional only so a client can still read a host older than 4.4.0.
+  capture: indexingCaptureSchema.optional(),
   meta: z.object({ siteUrl: z.string() }).loose(),
 }).loose()
 

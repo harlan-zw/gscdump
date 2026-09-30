@@ -1,5 +1,6 @@
 export * from './archetypes'
 export type * from './file-resolution'
+export * from './indexing-coverage'
 export * from './onboarding'
 export * from './routes'
 export * from './schemas'
