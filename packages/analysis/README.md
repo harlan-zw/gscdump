@@ -20,7 +20,7 @@ Node.js 22 or newer is required for Node consumers.
 | Subpath | Purpose |
 | --- | --- |
 | `@gscdump/analysis` | Pure Analyzers, browser dispatch, and shared Analyzer contracts |
-| `@gscdump/analysis/registry` | All 29 registered Analyzers, including SQL implementations |
+| `@gscdump/analysis/registry` | All 30 registered Analyzers, including SQL implementations |
 | `@gscdump/analysis/report` | Report registry, `runReport`, and formatting |
 | `@gscdump/analysis/source` | Composite and in-memory Source factories |
 | `@gscdump/analysis/errors` | Typed analysis errors and rendering helpers |
@@ -84,13 +84,13 @@ console.log(result.results)
 
 Install `@gscdump/engine`, `@gscdump/engine-gsc-api`, and `gscdump` for this example.
 
-Twelve Analyzers have row plans:
+Thirteen Analyzers have row plans:
 
 - `brand`, `cannibalization`, `clustering`, `concentration`
 - `data-detail`, `data-query`, `decay`, `movers`
-- `opportunity`, `seasonality`, `striking-distance`, `zero-click`
+- `opportunity`, `seasonality`, `striking-distance`, `trajectory`, `zero-click`
 
-All 29 Analyzers have SQL plans.
+All 30 Analyzers have SQL plans.
 SQL-only Analyzers need a Source that supports their required capabilities.
 
 | Factory | Import path | Input |

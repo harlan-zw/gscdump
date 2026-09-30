@@ -16,6 +16,7 @@ export type AnalysisTool
     | 'position-distribution' | 'ctr-curve' | 'dark-traffic'
     | 'content-velocity' | 'keyword-breadth' | 'device-gap'
     | 'data-query' | 'data-detail'
+    | 'trajectory'
 
 export interface AnalysisParams {
   type: AnalysisTool

@@ -12,6 +12,7 @@
   AnalyzerCapabilityError: function
   analyzeSeasonality: function
   analyzeStrikingDistance: function
+  analyzeTrajectory: function
   analyzeZeroClick: function
   classifyQueryIntent: function
   classifySitemapCollapse: function
@@ -39,6 +40,7 @@
   SITEMAP_SYNC_COLLAPSE_POLICY: object
   SITEMAP_TRUST_COLLAPSE_POLICY: object
   sitemapHistoryHasCollapse: function
+  TRAJECTORY_DEFAULT_DAYS: number
 ./errors:
   analysisErrors: object
   analysisErrorToException: function

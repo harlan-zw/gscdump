@@ -55,6 +55,30 @@ export function coverageWarning(coverage: AnalyzerCoverage | undefined): string 
   return `! Partial data: a fetch stopped at ${coverage.fetched.toLocaleString('en-US')} rows. To read more rows, pass --fetch-budget (max ${MAX_FETCH_BUDGET}).`
 }
 
+function renderTrajectory(result: Record<string, unknown>, options: OutputOptions): string[] {
+  const window = (value: unknown): string => {
+    const w = asRecord(value)
+    return w.startDate === undefined ? 'n/a' : `${w.startDate} to ${w.endDate}: ${formatMetric('clicks', finite(w.clicks) ?? 0)} clicks, ${formatMetric('impressions', finite(w.impressions) ?? 0)} impressions`
+  }
+  const classification = asRecord(result.classification)
+  const basis = asRecord(result.basis)
+  const ratio = finite(result.latestToPeakRatio)
+  const lines = [
+    `Shape: ${String(classification._tag)}`,
+    `First data: ${String(result.firstDataDate ?? 'n/a')}`,
+    `Peak 7 days: ${window(result.peak)}`,
+    `Latest 7 days: ${window(result.latest)}`,
+    `Latest to peak (${String(basis._tag)}): ${ratio === null ? 'n/a' : `${(ratio * 100).toFixed(1)}%`}`,
+    ...(typeof basis.note === 'string' ? [basis.note] : []),
+  ]
+  for (const caveat of Array.isArray(result.caveats) ? result.caveats : []) {
+    const note = asRecord(caveat).note
+    if (typeof note === 'string')
+      lines.push(`! ${note}`)
+  }
+  return lines.flatMap(line => textLines(line, options))
+}
+
 export function renderAnalysis(result: AnalysisResult, context: AnalysisDisplayContext, options: OutputOptions): string {
   const rows = result.results
   const meta = result.meta
@@ -115,6 +139,9 @@ export function renderAnalysis(result: AnalysisResult, context: AnalysisDisplayC
       lines.push(...textLines(`! ${values.size} of 12 months`, options, 'warning'))
     if (months.some(month => partial.has(month)))
       lines.push(...textLines('* partial month', options, 'muted'))
+  }
+  else if (context.id === 'trajectory') {
+    lines.push(...renderTrajectory(asRecord(rows[0]), options))
   }
   else {
     lines.push(...renderTable(rows, columnsFor(rows), options))

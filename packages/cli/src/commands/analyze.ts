@@ -1,6 +1,6 @@
 import type { AnalysisParams } from '@gscdump/engine/analysis-types'
 import type { CommandDef } from 'citty'
-import { MOVERS_SORT_METRICS } from '@gscdump/analysis'
+import { MOVERS_SORT_METRICS, TRAJECTORY_DEFAULT_DAYS } from '@gscdump/analysis'
 import { defaultAnalyzerRegistry } from '@gscdump/analysis/registry'
 import { DEFAULT_FETCH_BUDGET, MAX_FETCH_BUDGET } from '@gscdump/engine/analysis-types'
 import { defineCommand } from 'citty'
@@ -87,6 +87,14 @@ function buildParams(tool: AnalysisTool, args: Record<string, unknown>): Analysi
 /** Apply the window flags, anchored on `anchor`, to the analyzer params. */
 function withWindow(tool: AnalysisTool, params: AnalysisParams, args: Record<string, unknown>, anchor: string): AnalysisParams {
   const optional = (key: string): string | undefined => args[key] ? String(args[key]) : undefined
+  // The trajectory reads the whole record by default, not the 28 day window.
+  if (tool === 'trajectory' && !optional('period') && !optional('start')) {
+    const endDate = optional('end') ?? anchor
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(endDate) || Number.isNaN(Date.parse(`${endDate}T00:00:00Z`)))
+      throw new Error(`Invalid --end "${endDate}". Use YYYY-MM-DD.`)
+    const start = new Date(Date.parse(`${endDate}T00:00:00Z`) - (TRAJECTORY_DEFAULT_DAYS - 1) * 86_400_000)
+    return { ...params, startDate: start.toISOString().slice(0, 10), endDate }
+  }
   const window = unwrapResult(parseWindowFlags({
     period: optional('period'),
     start: optional('start'),
