@@ -1,6 +1,6 @@
 # Hosted API v1 integration guide
 
-The hosted v1 API has 58 HTTP operations: 53 partner, three analytics, and two
+The hosted v1 API has 67 HTTP operations: 62 partner, three analytics, and two
 realtime HTTP operations. The HTTP wire version is `1.0`.
 
 Use these generated files to inspect exact paths, inputs, responses, scopes,
@@ -118,6 +118,19 @@ Each OpenAPI operation lists its closed API error set in
 `x-gscdump-errors`. The SDK also reports local credential, request,
 transport, and response validation failures with the same tagged error class.
 
+If an operation refuses work because of an entitlement, `details.reason` names
+the refusal. Read it with `parseEntitlementRefusal`:
+
+```ts
+import { parseEntitlementRefusal } from '@gscdump/contracts'
+
+const refusal = isGscdumpV1Error(error) ? parseEntitlementRefusal(error.details) : null
+if (refusal?.reason === 'site_allowance')
+  console.log(`The Billing owner uses all ${refusal.limit} Sites.`)
+```
+
+The [v1 contract](../hosted-api-v1.md#entitlements) lists each refusal.
+
 Successful responses use `{ "data": ..., "meta": ... }`. `meta` includes the
 request ID, surface, and wire version. Every HTTP response also carries
 `x-request-id`, `GSCdump-API-Version: 1.0`, `Cache-Control: private, no-store`,
@@ -128,7 +141,7 @@ and `Vary: Authorization`.
 The host keeps one atomic 60-second fixed-window counter per authenticated
 principal and operation. Limits range from 10 to 120 requests per window. The
 [rate-limit table](../hosted-api-v1.md#rate-limits-and-lifecycle-signaling)
-lists all 61 operation policies.
+lists all 62 operation policies.
 
 Quota-evaluated responses include `RateLimit-Policy` and `RateLimit`. On
 `429 rate_limited`, wait for the `Retry-After` duration. Treat it as
@@ -140,17 +153,18 @@ The SDK honors `Retry-After` when the operation descriptor allows a retry.
 ## Idempotency and retries
 
 The OpenAPI `x-gscdump-semantics` object records whether an operation is
-idempotent and whether the SDK may retry it. The current registry contains 56
-idempotent operations: 38 queries and 18 mutations.
+idempotent and whether the SDK may retry it. The current registry contains 62
+idempotent operations: 41 queries and 21 mutations.
 
-Four mutations are non-idempotent and use `retry: "never"`:
+Five mutations are non-idempotent and use `retry: "never"`:
 
 - `partner.sites.indexing.inspect.create`
 - `partner.sites.sitemaps.action.create`
 - `partner.teams.create`
+- `partner.users.api_keys.create`
 - `realtime.tickets.create`
 
-The SDK does not automatically retry those four operations. After an ambiguous
+The SDK does not automatically retry those five operations. After an ambiguous
 network failure, read authoritative state before deciding whether to issue
 another mutation. A realtime reconnect always requests a new ticket because
 tickets are single-use.

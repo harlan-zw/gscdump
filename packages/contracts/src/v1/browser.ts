@@ -1,5 +1,6 @@
 import type { RealtimeV1Schemas } from './realtime'
 import { z } from 'zod'
+import { siteHoldReasonSchema } from '../entitlements'
 import {
   accountNextActions,
   accountStatuses,
@@ -121,6 +122,7 @@ function lifecycleResponseSchemas(ids: RealtimeV1Schemas) {
       analytics: analytics.producer,
       sitemaps: sitemaps.producer,
       indexing: indexing.producer,
+      hold: siteHoldReasonSchema.nullable(),
       latestError: latestError.producer.nullable(),
       updatedAt: z.iso.datetime(),
     },
@@ -134,6 +136,8 @@ function lifecycleResponseSchemas(ids: RealtimeV1Schemas) {
       analytics: analytics.client,
       sitemaps: sitemaps.client,
       indexing: indexing.client,
+      // A host older than contracts 4.7.0 sends no `hold`; read it as not held.
+      hold: siteHoldReasonSchema.nullable().default(null),
       latestError: latestError.client.nullable(),
       updatedAt: z.iso.datetime(),
     },

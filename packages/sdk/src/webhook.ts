@@ -1,4 +1,5 @@
 import type {
+  CanonicalWebhookEnvelope,
   PartnerWebhookHeaders,
   WebhookEnvelope,
 } from '@gscdump/contracts'
@@ -90,12 +91,7 @@ export async function verifyWebhookSignature(payload: string | object, signature
  */
 async function parseWebhookPayloadResult<TData extends Record<string, unknown> = Record<string, unknown>>(
   payload: string | object,
-  options: {
-    secret?: string
-    signature?: string | null
-    headers?: PartnerWebhookHeaders | Headers
-    validateSignature?: boolean
-  } = {},
+  options: ParseWebhookPayloadOptions = {},
 ): Promise<Result<WebhookEnvelope<TData>, PartnerApiError>> {
   const payloadString = toPayloadString(payload)
   const signature = options.signature ?? readWebhookHeaders(options.headers).signature
@@ -115,14 +111,24 @@ async function parseWebhookPayloadResult<TData extends Record<string, unknown> =
   return ok(partnerWebhookEnvelopeSchema.parse(parsed) as WebhookEnvelope<TData>)
 }
 
-export async function parseWebhookPayload<TData extends Record<string, unknown> = Record<string, unknown>>(
+export interface ParseWebhookPayloadOptions {
+  secret?: string
+  signature?: string | null
+  headers?: PartnerWebhookHeaders | Headers
+  validateSignature?: boolean
+}
+
+/**
+ * Verify and parse a webhook delivery. Without a type argument the result is
+ * discriminated on `event`, so narrowing on `'user.allowance.notice'` gives a
+ * typed, validated `data`. With a type argument the result is
+ * `WebhookEnvelope<TData>`, and only the typed events have validated `data`.
+ */
+export async function parseWebhookPayload(payload: string | object, options?: ParseWebhookPayloadOptions): Promise<CanonicalWebhookEnvelope>
+export async function parseWebhookPayload<TData extends Record<string, unknown>>(payload: string | object, options?: ParseWebhookPayloadOptions): Promise<WebhookEnvelope<TData>>
+export async function parseWebhookPayload<TData extends Record<string, unknown>>(
   payload: string | object,
-  options: {
-    secret?: string
-    signature?: string | null
-    headers?: PartnerWebhookHeaders | Headers
-    validateSignature?: boolean
-  } = {},
+  options: ParseWebhookPayloadOptions = {},
 ): Promise<WebhookEnvelope<TData>> {
   return unwrapResult(await parseWebhookPayloadResult<TData>(payload, options), partnerErrorToException)
 }

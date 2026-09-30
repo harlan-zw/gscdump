@@ -713,6 +713,7 @@ export function createGscdumpV1Client(options: CreateGscdumpV1ClientOptions): Gs
   const client: GscdumpV1Client = {
     execute,
     getUserLifecycle: (input, executeOptions) => execute('partner.users.lifecycle.get' satisfies MethodId<'getUserLifecycle'>, input, executeOptions),
+    getUserEntitlements: (input, executeOptions) => execute('partner.users.entitlements.get' satisfies MethodId<'getUserEntitlements'>, input, executeOptions),
     listAvailableSites: (input, executeOptions) => execute('partner.users.sites.available.list' satisfies MethodId<'listAvailableSites'>, input, executeOptions),
     createSite: (input, executeOptions) => execute('partner.users.sites.create' satisfies MethodId<'createSite'>, input, executeOptions),
     createUser: (input, executeOptions) => execute('partner.users.create' satisfies MethodId<'createUser'>, input, executeOptions),

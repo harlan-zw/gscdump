@@ -2,6 +2,8 @@
   accountNextActions: object
   accountStatuses: object
   addPartnerTeamMemberSchema: object
+  ALLOWANCE_NOTICE_METERS: object
+  ALLOWANCE_NOTICE_THRESHOLDS: object
   analyticsEndpointSchemas: object
   analyticsNextActions: object
   analyticsRoutes: object
@@ -30,6 +32,8 @@
   createPartnerTeamSchema: object
   dataDetailOptionsSchema: object
   dataQueryOptionsSchema: object
+  ENTITLEMENT_REFUSAL_REASONS: object
+  entitlementRefusalSchema: object
   entityDailySparkline: function
   entityDailyTimeseries: function
   GSC_SEARCH_TYPES: object
@@ -125,6 +129,7 @@
   lifecycleErrorSchema: object
   lifecycleProgressSchema: object
   multiSeriesStackedDaily: function
+  parseEntitlementRefusal: function
   parseGrantedScopes: function
   partnerControlEndpointSchemas: object
   partnerEndpointSchemas: object
@@ -161,7 +166,9 @@
   searchTypeSupportsDimensions: function
   searchTypeSupportsQueries: function
   singleRowLookup: function
+  SITE_HOLD_REASONS: object
   siteDailyTimeseries: function
+  siteHoldReasonSchema: object
   siteIntIdCrosswalkResponseSchema: object
   siteListItemSchema: object
   sitemapChangesCompletenessSchema: object
@@ -174,6 +181,7 @@
   topNBreakdown: function
   twoDimensionDetail: function
   updatePartnerUserTokensSchema: object
+  userAllowanceNoticeDataSchema: object
   VALID_WEBHOOK_EVENTS: object
   verdictFreshnessSchema: object
   WATCHED_URL_CADENCE_DAYS: number

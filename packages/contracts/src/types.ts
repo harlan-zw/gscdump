@@ -1,3 +1,4 @@
+import type { UserAllowanceNoticeData } from './entitlements'
 import type { FileResolutionResponse } from './file-resolution'
 import type { CoverageStatesPoint, IndexingCapture } from './indexing-coverage'
 import type { AccountNextAction, AccountStatus, PartnerLifecycleSite } from './onboarding'
@@ -1431,6 +1432,7 @@ export type CanonicalWebhookEventType
     | 'site.indexing.ready'
     | 'site.auth.failed'
     | 'job.failed'
+    | 'user.allowance.notice'
 
 export type WebhookEventType = CanonicalWebhookEventType
 
@@ -1449,6 +1451,21 @@ export interface WebhookEnvelope<TData extends Record<string, unknown> = Record<
 }
 
 export type PartnerWebhookData = Record<string, unknown>
+
+/**
+ * The `data` type of each canonical webhook event. An event with a typed
+ * payload has its own entry; every other event carries `PartnerWebhookData`.
+ */
+export type CanonicalWebhookEventData<TEvent extends CanonicalWebhookEventType>
+  = TEvent extends 'user.allowance.notice' ? UserAllowanceNoticeData : PartnerWebhookData
+
+/**
+ * A parsed webhook envelope, discriminated on `event`. Narrow on `event` to
+ * read a typed `data`, for example `UserAllowanceNoticeData`.
+ */
+export type CanonicalWebhookEnvelope = {
+  [TEvent in CanonicalWebhookEventType]: WebhookEnvelope<CanonicalWebhookEventData<TEvent>> & { event: TEvent }
+}[CanonicalWebhookEventType]
 
 export interface CreateWebhookEnvelopeOptions<TData extends Record<string, unknown> = Record<string, unknown>> {
   event: CanonicalWebhookEventType

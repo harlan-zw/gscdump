@@ -1,4 +1,5 @@
 export * from './archetypes'
+export * from './entitlements'
 export type * from './file-resolution'
 export * from './indexing-coverage'
 export * from './onboarding'

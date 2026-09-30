@@ -178,6 +178,45 @@ Revoking an API key does not affect the partner, and repairing the partner crede
 - If the key is unknown or another issuer created it, revoke returns `404 api_key_not_found`.
 - `createdAt` and `lastUsedAt` are Unix seconds. `lastUsedAt` is `null` until first use.
 
+## Entitlements
+
+gscdump bills each partner in one of two modes. An exempt partner's Sites count
+against no Meter. A metered partner's Sites count against the free allowance of
+their Billing owner, in a usage pool for that partner. The pool uses the same
+free allowance and size limit as gscdump.com. gscdump.com ADR-0014, "Partner
+billing modes", records this decision.
+
+`partner.users.entitlements.get` (`GET /api/partner/v1/users/{userId}/entitlements`)
+returns the Meters that apply to the user's partner Sites:
+
+- `user_key` may call it for itself. `partner_key` may call it for a linked user. Both need `users:read`.
+- `{ "mode": "exempt" }` means no free allowance applies.
+- `mode: "metered"` gives `used` and `allowance` for `sites`, `preservedRows`, and `urlInspections`, the size limit, and the held Sites the user can read.
+- `preservedRows.used` is `null` before the first daily usage snapshot.
+- `urlInspections.allowance` is `null` when URL Inspections have no cap. `resetsAt` is the first UTC day of the next usage month.
+
+If an operation refuses work because of an entitlement, `details.reason` names
+the refusal. Parse `details` with `parseEntitlementRefusal` from `@gscdump/contracts`:
+
+| `details` | HTTP | `code` |
+| --- | --- | --- |
+| `{ reason: "site_allowance", limit }` | 409 | `invalid_request` |
+| `{ reason: "duplicate_property", siteUrl }` | 409 | `invalid_request` |
+| `{ reason: "site_held", hold }` | 409 | `invalid_request` |
+| `{ reason: "inspection_off" }` | 409 | `invalid_request` |
+| `{ reason: "inspection_allowance", limit, resetsAt }` | 429 | `rate_limited` |
+
+`hold` is one of `size_limit`, `sitemap_limit`, `size_unknown`, and
+`size_pending`. Each lifecycle Site carries the same `hold`, or `null` when
+gscdump does not hold it. A client reads a lifecycle Site without `hold` as
+`null`.
+
+gscdump does not email the users of a metered partner. At 80% and 100% of a free
+allowance it sends the `user.allowance.notice` webhook to the partner. Its
+`data` is `{ userId, meter, threshold, used, allowance, period }`: `meter` is
+`sites`, `preserved_rows`, or `url_inspections`, `threshold` is `80` or `100`,
+and `period` is the UTC month as `YYYY-MM`.
+
 ## Rate limits and lifecycle signaling
 
 The hosted policy is one atomic 60-second fixed-window counter per authenticated
@@ -237,6 +276,7 @@ principal and operation:
 | `partner.users.api_keys.revoke` | 20 |
 | `partner.users.create` | 20 |
 | `partner.users.delete` | 10 |
+| `partner.users.entitlements.get` | 60 |
 | `partner.users.lifecycle.get` | 120 |
 | `partner.users.sites.available.list` | 30 |
 | `partner.users.sites.create` | 20 |
