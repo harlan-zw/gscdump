@@ -276,6 +276,13 @@
   HTTP_V1_METHODS: object
   HTTP_V1_SCOPES: object
   HTTP_V1_SURFACES: object
+  indexNowConfigureV1Schema: object
+  indexNowConnectionV1Schema: object
+  indexNowConnectionV1Schemas: object
+  indexNowKeyV1Schema: object
+  indexNowSubmissionReceiptV1Schema: object
+  indexNowSubmissionReceiptV1Schemas: object
+  indexNowSubmitV1Schema: object
   isUnknownHttpV1OperationError: function
   listHttpOperations: function
   REALTIME_V1_EVENT_NAMES: object
@@ -305,6 +312,13 @@
   HTTP_V1_METHODS: object
   HTTP_V1_SCOPES: object
   HTTP_V1_SURFACES: object
+  indexNowConfigureV1Schema: object
+  indexNowConnectionV1Schema: object
+  indexNowConnectionV1Schemas: object
+  indexNowKeyV1Schema: object
+  indexNowSubmissionReceiptV1Schema: object
+  indexNowSubmissionReceiptV1Schemas: object
+  indexNowSubmitV1Schema: object
   isUnknownHttpV1OperationError: function
   listHttpOperations: function
   resolveHttpOperation: function

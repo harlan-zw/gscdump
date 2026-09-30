@@ -261,6 +261,7 @@ describe('bingWebmaster', () => {
   it.each([
     ['AddSite', { d: true }, (client: ReturnType<typeof bingWebmaster>) => client.addSite('https://nuxtseo.com/')],
     ['VerifySite', { d: null }, (client: ReturnType<typeof bingWebmaster>) => client.verifySite('https://nuxtseo.com/')],
+    ['SubmitFeed', { d: true }, (client: ReturnType<typeof bingWebmaster>) => client.submitFeed('https://nuxtseo.com/', 'https://nuxtseo.com/sitemap.xml')],
   ] as const)('rejects a payload from %s', async (operation, payload, call) => {
     const client = bingWebmaster({
       accessToken: 'access-token',
@@ -697,6 +698,154 @@ describe('bingWebmaster', () => {
       inIndex: 1000,
       inLinks: 2048,
     }] })
+  })
+
+  it('lists sitemap feeds with normalized dates and missing values', async () => {
+    const fetch = queuedFetch(json({ d: [
+      {
+        __type: 'Feed:#Microsoft.Bing.Webmaster.Api',
+        Compressed: false,
+        FileSize: 1024,
+        LastCrawled: '/Date(1786440051000-0700)/',
+        Status: 'Success',
+        Submitted: '/Date(1786406400000)/',
+        Type: 'Sitemap',
+        Url: 'https://nuxtseo.com/sitemap.xml',
+        UrlCount: 1023,
+      },
+      {
+        __type: 'Feed:#Microsoft.Bing.Webmaster.Api',
+        Compressed: true,
+        FileSize: null,
+        LastCrawled: '/Date(-62135568000000-0800)/',
+        Status: 'Pending',
+        Submitted: null,
+        Type: 'Unknown',
+        Url: 'https://nuxtseo.com/sitemap.xml.gz',
+        UrlCount: null,
+      },
+    ] }))
+    const client = bingWebmaster({ accessToken: 'access-token', clock, fetch })
+
+    const result = await client.getFeeds('https://nuxtseo.com/')
+
+    expect(result).toEqual({ ok: true, value: [
+      {
+        compressed: false,
+        fileSize: 1024,
+        lastCrawledAt: '2026-08-11T09:20:51.000Z',
+        status: 'Success',
+        submittedAt: '2026-08-11T00:00:00.000Z',
+        type: 'Sitemap',
+        url: 'https://nuxtseo.com/sitemap.xml',
+        urlCount: 1023,
+      },
+      {
+        compressed: true,
+        fileSize: null,
+        lastCrawledAt: null,
+        status: 'Pending',
+        submittedAt: null,
+        type: 'Unknown',
+        url: 'https://nuxtseo.com/sitemap.xml.gz',
+        urlCount: null,
+      },
+    ] })
+    const [input, init] = vi.mocked(fetch).mock.calls[0]
+    const url = new URL(String(input))
+    expect(`${url.origin}${url.pathname}`).toBe('https://www.bing.com/webmaster/api.svc/json/GetFeeds')
+    expect(url.searchParams.get('siteUrl')).toBe('https://nuxtseo.com/')
+    expect(init?.method).toBe('GET')
+    expect(init?.body).toBeUndefined()
+  })
+
+  it('returns an empty feed list when Bing has no sitemaps', async () => {
+    const client = bingWebmaster({
+      accessToken: 'access-token',
+      clock,
+      fetch: queuedFetch(json({ d: [] })),
+    })
+
+    const result = await client.getFeeds('https://nuxtseo.com/')
+
+    expect(result).toEqual({ ok: true, value: [] })
+  })
+
+  const feedWire = {
+    Compressed: false,
+    FileSize: 1024,
+    LastCrawled: '/Date(1786440051000)/',
+    Status: 'Success',
+    Submitted: '/Date(1786406400000)/',
+    Type: 'Sitemap',
+    Url: 'https://nuxtseo.com/sitemap.xml',
+    UrlCount: 1023,
+  }
+
+  it.each([
+    ['a null list', null],
+    ['a numeric URL', [{ ...feedWire, Url: 4 }]],
+    ['a string compression flag', [{ ...feedWire, Compressed: 'false' }]],
+    ['an ISO submission date', [{ ...feedWire, Submitted: '2026-08-11T00:00:00Z' }]],
+    ['a negative URL count', [{ ...feedWire, UrlCount: -1 }]],
+    ['a fractional file size', [{ ...feedWire, FileSize: 10.5 }]],
+    ['a missing status', [{ ...feedWire, Status: undefined }]],
+  ])('rejects a feed list with %s', async (_label, d) => {
+    const client = bingWebmaster({
+      accessToken: 'access-token',
+      clock,
+      fetch: queuedFetch(json({ d })),
+    })
+
+    const result = await client.getFeeds('https://nuxtseo.com/')
+
+    expect(result).toEqual({ ok: false, error: {
+      _tag: 'MalformedResponse',
+      operation: 'GetFeeds',
+      reason: 'invalid-payload',
+    } })
+  })
+
+  it('submits a sitemap feed for a Site', async () => {
+    const fetch = queuedFetch(json({ d: null }))
+    const client = bingWebmaster({ accessToken: 'access-token', clock, fetch })
+
+    const result = await client.submitFeed('https://nuxtseo.com/', 'https://nuxtseo.com/sitemap.xml')
+
+    expect(result).toEqual({ ok: true, value: undefined })
+    const [input, init] = vi.mocked(fetch).mock.calls[0]
+    expect(String(input)).toBe('https://www.bing.com/webmaster/api.svc/json/SubmitFeed')
+    expect(init?.method).toBe('POST')
+    expect(new Headers(init?.headers).get('content-type')).toBe('application/json; charset=utf-8')
+    expect(JSON.parse(String(init?.body))).toEqual({
+      feedUrl: 'https://nuxtseo.com/sitemap.xml',
+      siteUrl: 'https://nuxtseo.com/',
+    })
+  })
+
+  it.each([
+    [
+      json({ ErrorCode: 8, Message: 'invalid feed' }, 400),
+      { _tag: 'RequestRejected', errorCode: 8, message: 'invalid feed', status: 400 },
+    ],
+    [
+      json({ ErrorCode: 3, Message: 'invalid token' }, 401),
+      { _tag: 'AuthenticationRequired' },
+    ],
+    [
+      json({ ErrorCode: 4, Message: 'slow down' }, 429, { 'retry-after': '7' }),
+      { _tag: 'Throttled', retryAfterMs: 7000 },
+    ],
+  ])('maps a failed feed submission to a provider error', async (response, error) => {
+    const client = bingWebmaster({
+      accessToken: 'access-token',
+      clock,
+      fetch: queuedFetch(response),
+    })
+
+    const result = await client.submitFeed('https://nuxtseo.com/', 'https://nuxtseo.com/sitemap.xml')
+
+    expect(result).toEqual({ ok: false, error })
   })
 
   it('preserves unknown crawl issue codes', async () => {
