@@ -63,6 +63,11 @@ flowchart LR
 | Search Engine | `GoogleSearchConsoleClient`; `gscdump/bing` | `gscdump`, `@gscdump/contracts` | Site 1—N Search Engine | "Google" or "Bing" |
 | Indexing Evidence | `gscdump/api/indexing`; `gscdump/bing`; `@gscdump/contracts/v1` | `gscdump`, `@gscdump/contracts` | (Site, URL, Search Engine) 1—N observation | "indexing evidence" |
 | Submission Receipt | deferred delivery contract in `@gscdump/contracts/v1` | `@gscdump/contracts` | Submission 1—1 Submission Receipt | "submission receipt" |
+| Coverage state | `COVERAGE_STATE_TAGS` in `@gscdump/contracts`; `parseCoverageState` in `gscdump` | `@gscdump/contracts`, `gscdump` | URL 1—1 Coverage state per inspection | "coverage state" |
+| Coverage ladder | `COVERAGE_LADDER` in `@gscdump/contracts` | `@gscdump/contracts` | Coverage ladder 1—4 Coverage state | "coverage ladder" |
+| Watched URL | `partner.sites.indexing.watched.*`; `WATCHED_URL_LIMIT` | `@gscdump/contracts` | Site 1—N Watched URL, at most 50 | "watched URL" |
+| Checkpoint | `watchedUrlCheckpointSchema` | `@gscdump/contracts` | Watched URL 1—N Checkpoint, newest 12 returned | "checkpoint" |
+| Capture | `indexingCaptureSchema` | `@gscdump/contracts` | Indexing summary 1—1 Capture | "capture" |
 | Team | `gscdumpTeamRowSchema` | `contracts/partner` | Team 1—N Site | "team" |
 | Engine | `packages/engine` + 3 adapters | `@gscdump/engine` | Engine 1—1 Driver | not surfaced |
 | Driver | (runtime handle) | `@gscdump/engine` | — | not surfaced |
@@ -79,6 +84,7 @@ flowchart LR
 | Sitemap generation manifest | hosted entity store | `contracts` (ADR-0022) | Site 1—1 current generation | "sitemap" |
 | Store | configured Parquet directory | `@gscdump/cli` | Site 1—1 Store | "store" (`gscdump store *`) |
 | Mode | CLI authentication state (`--mode`) | `@gscdump/cli` | User 1—N Mode | "Local" or "Hosted" (`--mode local`, `--mode hosted`) |
+| Trajectory | `analyzeTrajectory`; `trajectory` Analyzer in `@gscdump/analysis` | `analysis/analyzers` | Site 1—1 Trajectory per read of its record | "trajectory" (`analyze trajectory`) |
 
 ## Usage
 
@@ -174,6 +180,48 @@ No Local request uses gscdump's OAuth client or Google quota.
 **Never:** database, cache, warehouse, local db.
 **Casing:** `store` in commands, `Store` in prose.
 Store is a separate concept from Engine.
+
+### Trajectory
+**Is:** the classification of the traffic shape across a Site's whole preserved daily record. The classification is `launch-honeymoon-then-cliff`, `sudden-drop`, `growing`, `steady`, `gradual-decline`, or `insufficient-data`.
+**Use for:** `analyzeTrajectory`, `TrajectoryRecord`, the `trajectory` Analyzer, and `gscdump analyze trajectory`.
+**Never:** traffic trend, growth curve, decline pattern (as names for this classification).
+**Casing:** `Trajectory` in prose, `trajectory` in identifiers, kebab-case classification tags.
+A Trajectory reads every day it is given, not a 28 or 90 day window. It says which metric it read and why. Clicks carry the read when impressions were over-counted or disagree about the fall.
+
+### Coverage state
+**Is:** the tagged Google verdict for one URL, parsed from the `coverageState` prose of one URL Inspection.
+**Use for:** `COVERAGE_STATE_TAGS`, `parseCoverageState`, `coverageStates` counts in the indexing trend, and the `coverageState` field of a Checkpoint.
+**Never:** indexing status, coverage answer, index status history (as a name for the daily counts per state).
+**Casing:** `Coverage state` in prose, `coverageState` in identifiers, snake_case tags (`crawled_not_indexed`).
+The first four tags form the Coverage ladder. The rest are exclusions Google reports beside it. `unrecognized` holds prose no tag maps yet, and `not_reported` holds an inspection with no coverage prose.
+A Coverage state is Google's verdict only. Indexing Evidence is a dated observation from any Search Engine.
+
+### Coverage ladder
+**Is:** the first four Coverage states in order: `unknown_to_google`, `discovered_not_indexed`, `crawled_not_indexed`, `indexed`.
+**Use for:** `COVERAGE_LADDER`, `CoverageLadderTag`, and prose that places a URL between "Google does not know it" and "Google indexed it".
+**Never:** funnel, pipeline, rung (as a noun for a state).
+**Casing:** `Coverage ladder` in prose, `coverageLadder` in identifiers.
+
+### Watched URL
+**Is:** a URL that gscdump re-inspects every 7 days, before other scheduled URLs, and never backs off.
+**Use for:** `partner.sites.indexing.watched.list`, `.add` and `.remove`, `gscdump indexing watch`, `WATCHED_URL_LIMIT` (50 per Site), and `WATCHED_URL_CADENCE_DAYS`.
+**Never:** tracked URL, pinned URL, watchlist, panel.
+**Casing:** `Watched URL` in prose, `watchedUrl` in identifiers.
+
+### Checkpoint
+**Is:** one recorded inspection result for a Watched URL: `checkedAt`, the Coverage state, Google's coverage text, the verdict, and the last crawl time.
+**Use for:** `watchedUrlCheckpointSchema` and the `checkpoints` array on a Watched URL, newest first.
+**Never:** snapshot (Entity snapshots keep that word), history entry, inspection record.
+**Casing:** `Checkpoint` in prose, `checkpoint` in identifiers.
+A Checkpoint exists only for a Watched URL. A stored URL Inspection verdict for any other URL is not a Checkpoint.
+
+### Capture
+**Is:** the capture time and freshness of the indexing evidence behind a summary: when gscdump counted the verdicts, the oldest and newest verdict, and the share older than 7 and 30 days.
+**Use for:** `capture` on the indexing summary and diagnostics, and `capturedAt` on a trend day. `capture.source` is `stored` or `live`. `capture.scope` says which URLs the counts cover.
+**Never:** asOf, snapshot, report date (as names for the capture time).
+**Casing:** `Capture` in prose, `capture` in identifiers.
+**Source values:** `stored` means the counts gscdump saved on a daily run. `live` means gscdump counted during this request. Use `stored`, never `snapshot`, for the first value.
+The field name `source` overlaps the Source term. It stays until a wider rename.
 
 ## Internal terms
 
@@ -342,6 +390,11 @@ check are banned; words that did not are recorded in Open questions instead.
 | GSC account | Site or Team | "account" collides with Google account vs partner Team |
 | bare `engine` or `source` as a public search discriminator | Search Engine | Both words already name package concepts |
 | indexing status as a public evidence noun | Indexing Evidence | It collides with pipeline state and hides observation uncertainty |
+| snapshot (as the value of `capture.source`) | stored | Entity snapshots keep the word `snapshot`. The Capture source value is `stored` |
+| funnel, pipeline, rung (as names for the Coverage ladder) | Coverage ladder | The Coverage ladder is the four ordered Coverage states. "pipeline state" keeps its other meaning |
+| tracked URL, pinned URL, watchlist | Watched URL | One name for the URL gscdump re-inspects every 7 days |
+| asOf (for the capture time of indexing counts) | Capture | `capturedAt` names the time. Consumers outside this repository may still print `asOf` |
 | BYOK, Bring Your Own Keys, self-hosted (as a mode) | Local | gscdump.com ADR-0012 names the mode. `resolveBYOK` stays an internal identifier |
 | Cloud, cloud mode, `--mode cloud` | Hosted, `--mode hosted` | gscdump.com ADR-0012 names the mode. The CLI rejects `cloud` |
 | powerful, seamless, robust, blazing | (cut) | Marketing filler |
+| traffic trend (as a name for the whole-record classification) | Trajectory | Trajectory is one classification with named tags. A `trend` field elsewhere keeps its own meaning |
