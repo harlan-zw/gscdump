@@ -28,8 +28,14 @@ function captureLines(capture: Capture | undefined): string[] {
     return ['This host does not report when it counted the verdicts.']
   if (capture._tag === 'empty')
     return ['No URL Inspection verdicts are stored for this Site.']
+  const scope = {
+    sitemap_urls: 'URLs in the Site\'s live sitemaps',
+    inspected_urls: 'every inspected URL, because sitemap membership was not available',
+    unrecorded: 'an unrecorded scope',
+  }[capture.scope]
   const lines = [
     `Counted ${capture.capturedAt} from stored URL Inspection verdicts (${capture.source}).`,
+    `The counts cover ${scope}.`,
     `Verdicts inspected between ${capture.oldestVerdictAt ?? 'unknown'} and ${capture.newestVerdictAt ?? 'unknown'}.`,
   ]
   if (capture.freshness._tag === 'measured') {

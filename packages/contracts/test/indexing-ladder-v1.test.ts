@@ -62,6 +62,7 @@ describe('indexing coverage states v1', () => {
       _tag: 'captured',
       capturedAt: '2026-09-30T02:00:00.000Z',
       source: 'snapshot',
+      scope: 'sitemap_urls',
       oldestVerdictAt: '2026-08-20T03:00:00.000Z',
       newestVerdictAt: '2026-09-29T03:00:00.000Z',
       freshness,

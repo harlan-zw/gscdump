@@ -54,6 +54,7 @@ const summary = {
     _tag: 'captured',
     capturedAt: '2026-09-29T02:00:00.000Z',
     source: 'snapshot',
+    scope: 'sitemap_urls',
     oldestVerdictAt: '2026-08-20T03:00:00.000Z',
     newestVerdictAt: '2026-09-29T01:00:00.000Z',
     freshness,
@@ -156,6 +157,7 @@ describe('hosted indexing summary and watch commands', () => {
     expect(stdout.find(line => line.includes('2026-09-28'))).toContain('not counted')
     expect(output).toContain('Counted 2026-09-29T02:00:00.000Z from stored URL Inspection verdicts (snapshot).')
     expect(output).toContain('99.8% are older than 7 days and 82.8% are older than 30 days.')
+    expect(output).toContain('The counts cover URLs in the Site\'s live sitemaps.')
     expect(stderr).toContain('not Google\'s live index')
   })
 

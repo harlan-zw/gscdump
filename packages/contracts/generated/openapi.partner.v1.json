@@ -9327,6 +9327,14 @@
                                     "null"
                                   ]
                                 },
+                                "scope": {
+                                  "enum": [
+                                    "sitemap_urls",
+                                    "inspected_urls",
+                                    "unrecorded"
+                                  ],
+                                  "type": "string"
+                                },
                                 "source": {
                                   "enum": [
                                     "snapshot",
@@ -9339,6 +9347,7 @@
                                 "_tag",
                                 "capturedAt",
                                 "source",
+                                "scope",
                                 "oldestVerdictAt",
                                 "newestVerdictAt",
                                 "freshness"
@@ -11594,6 +11603,14 @@
                                     "null"
                                   ]
                                 },
+                                "scope": {
+                                  "enum": [
+                                    "sitemap_urls",
+                                    "inspected_urls",
+                                    "unrecorded"
+                                  ],
+                                  "type": "string"
+                                },
                                 "source": {
                                   "enum": [
                                     "snapshot",
@@ -11606,6 +11623,7 @@
                                 "_tag",
                                 "capturedAt",
                                 "source",
+                                "scope",
                                 "oldestVerdictAt",
                                 "newestVerdictAt",
                                 "freshness"
