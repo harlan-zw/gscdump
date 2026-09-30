@@ -1,3 +1,4 @@
+// Wire shapes for partner billing modes. gscdump.com ADR-0014 records the decision.
 import { z } from 'zod'
 
 /**

@@ -302,7 +302,7 @@ A revocable `gsd_user_` credential that authenticates as `user_key` for the CLI,
 _Avoid_: token, secret, or personal access token for this credential; "token" already names Google OAuth grants and realtime tickets.
 
 **Usage pool**:
-The Sites of one Billing owner that share one free allowance: the gscdump.com Sites, or the Sites of one metered partner. An exempt partner's Sites belong to no usage pool. `partner.users.entitlements.get` reads the pool of the partner that linked the user. Billing owner, Meter, and free allowance are gscdump.com terms.
+The Sites of one Billing owner that share one free allowance: the gscdump.com Sites, or the Sites of one metered partner. An exempt partner's Sites belong to no usage pool. `partner.users.entitlements.get` reads the pool of the partner that linked the user. Billing owner, Meter, and free allowance are gscdump.com terms. gscdump.com ADR-0014 records the billing modes.
 
 **Entitlement refusal**:
 The `details` of a v1 error envelope when gscdump refuses work because of an entitlement. `details.reason` is one of `ENTITLEMENT_REFUSAL_REASONS`. Read it with `parseEntitlementRefusal`.

@@ -183,7 +183,8 @@ Revoking an API key does not affect the partner, and repairing the partner crede
 gscdump bills each partner in one of two modes. An exempt partner's Sites count
 against no Meter. A metered partner's Sites count against the free allowance of
 their Billing owner, in a usage pool for that partner. The pool uses the same
-free allowance and size limit as gscdump.com.
+free allowance and size limit as gscdump.com. gscdump.com ADR-0014, "Partner
+billing modes", records this decision.
 
 `partner.users.entitlements.get` (`GET /api/partner/v1/users/{userId}/entitlements`)
 returns the Meters that apply to the user's partner Sites:
