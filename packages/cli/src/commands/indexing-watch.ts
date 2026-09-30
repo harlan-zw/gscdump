@@ -1,4 +1,5 @@
 import type { GscdumpV1OperationResponse } from '@gscdump/sdk/v1'
+import { WATCHED_URL_LIMIT } from '@gscdump/contracts'
 import { defineCommand } from 'citty'
 import { HOSTED_ARGS, resolveHostedSite } from '../hosted-site'
 import { renderTable } from '../render/layout'
@@ -30,6 +31,10 @@ function watchedRow(entry: WatchedUrls['watched'][number]): Record<string, unkno
   }
 }
 
+const SKIP_HINTS: Partial<Record<WatchedUrlsChange['skipped'][number]['reason'], string>> = {
+  inspection_disabled: 'gscdump never inspects this Site, so a Watched URL gets no Checkpoint. To use Watched URLs, turn on URL Inspection in the Site settings on gscdump.com.',
+}
+
 function printChange(verb: 'Added' | 'Removed', result: WatchedUrlsChange, siteUrl: string): void {
   for (const url of result.changed)
     console.log(`${verb}: ${url}`)
@@ -37,6 +42,8 @@ function printChange(verb: 'Added' | 'Removed', result: WatchedUrlsChange, siteU
     console.log(`${verb === 'Added' ? 'Already watched' : 'Not watched'}: ${url}`)
   for (const { url, reason } of result.skipped)
     console.log(`Skipped (${reason}): ${url}`)
+  for (const hint of new Set(result.skipped.map(({ reason }) => SKIP_HINTS[reason]).filter(Boolean)))
+    console.log(hint)
   logger.info(`${siteUrl} has ${result.total} of ${result.limit} Watched URLs.`)
 }
 
@@ -44,7 +51,28 @@ async function readUrls(args: { _?: unknown[], file?: unknown }): Promise<string
   const urls = await readUrlList({ file: args.file, positionals: args._ })
   if (urls.length === 0)
     throw new Error('No URLs provided. Pass URLs as arguments, --file, or stdin.')
-  return urls
+  const relative = urls.find(url => !URL.canParse(url))
+  if (relative)
+    throw new Error(`Not an absolute URL: ${relative}. Pass full URLs such as https://example.com/guide.`)
+  return [...new Set(urls)]
+}
+
+/** Send URLs in requests of at most `WATCHED_URL_LIMIT`, and merge the per-request results into one. */
+async function changeInChunks(
+  urls: string[],
+  send: (chunk: string[]) => Promise<WatchedUrlsChange>,
+): Promise<WatchedUrlsChange> {
+  const merged: WatchedUrlsChange = { changed: [], unchanged: [], skipped: [], total: 0, limit: WATCHED_URL_LIMIT }
+  for (let start = 0; start < urls.length; start += WATCHED_URL_LIMIT) {
+    const result = await send(urls.slice(start, start + WATCHED_URL_LIMIT))
+    merged.changed.push(...result.changed)
+    merged.unchanged.push(...result.unchanged)
+    merged.skipped.push(...result.skipped)
+    // Total and limit describe the Site after the request, so the last request wins.
+    merged.total = result.total
+    merged.limit = result.limit
+  }
+  return merged
 }
 
 const listCommand = defineCommand({
@@ -87,7 +115,7 @@ const addCommand = defineCommand({
     const { json } = applyOutputMode(args)
     const urls = await readUrls(args)
     const { client, site } = await resolveHostedSite({ ...args, _: [] }, { name: 'indexing watch add', localAlternative: LOCAL_ALTERNATIVE })
-    const { data } = await client.addSiteWatchedUrls({ params: { siteId: site.siteId }, body: { urls } })
+    const data = await changeInChunks(urls, async chunk => (await client.addSiteWatchedUrls({ params: { siteId: site.siteId }, body: { urls: chunk } })).data)
     if (json) {
       console.log(JSON.stringify(data, null, 2))
       return
@@ -106,7 +134,7 @@ const removeCommand = defineCommand({
     const { json } = applyOutputMode(args)
     const urls = await readUrls(args)
     const { client, site } = await resolveHostedSite({ ...args, _: [] }, { name: 'indexing watch remove', localAlternative: LOCAL_ALTERNATIVE })
-    const { data } = await client.removeSiteWatchedUrls({ params: { siteId: site.siteId }, body: { urls } })
+    const data = await changeInChunks(urls, async chunk => (await client.removeSiteWatchedUrls({ params: { siteId: site.siteId }, body: { urls: chunk } })).data)
     if (json) {
       console.log(JSON.stringify(data, null, 2))
       return

@@ -53,7 +53,7 @@ const summary = {
   capture: {
     _tag: 'captured',
     capturedAt: '2026-09-29T02:00:00.000Z',
-    source: 'snapshot',
+    source: 'stored',
     scope: 'sitemap_members',
     oldestVerdictAt: '2026-08-20T03:00:00.000Z',
     newestVerdictAt: '2026-09-29T01:00:00.000Z',
@@ -116,6 +116,13 @@ describe('hosted indexing summary and watch commands', () => {
         return envelope(summary)
       if (url.pathname.endsWith('/sites/s_site/indexing/watched') && method === 'GET')
         return envelope(watched)
+      if (url.pathname.endsWith('/sites/s_site/indexing/watched') && method === 'POST' && (requests.at(-1)!.body as { urls: string[] }).urls.includes('https://example.com/off'))
+        return envelope({ changed: [], unchanged: [], skipped: [{ url: 'https://example.com/off', reason: 'inspection_disabled' }], total: 0, limit: 50 })
+      if (url.pathname.endsWith('/sites/s_site/indexing/watched') && method === 'POST' && requests.at(-1)!.body && (requests.at(-1)!.body as { urls: string[] }).urls.some(u => u.includes('/bulk/'))) {
+        const { urls } = requests.at(-1)!.body as { urls: string[] }
+        const skipped = urls.filter(u => u.endsWith('/skip')).map(u => ({ url: u, reason: 'limit_reached' }))
+        return envelope({ changed: urls.filter(u => !u.endsWith('/skip')), unchanged: [], skipped, total: requests.filter(r => r.method === 'POST').length * 10, limit: 50 })
+      }
       if (url.pathname.endsWith('/sites/s_site/indexing/watched') && method === 'POST') {
         return envelope({
           changed: ['https://example.com/guide'],
@@ -155,7 +162,7 @@ describe('hosted indexing summary and watch commands', () => {
     const counted = stdout.find(line => line.includes('2026-09-29'))
     expect(counted?.split(/\s+/)).toEqual(expect.arrayContaining(['1484', '2', '0', '1']))
     expect(stdout.find(line => line.includes('2026-09-28'))).toContain('not counted')
-    expect(output).toContain('Counted 2026-09-29T02:00:00.000Z from stored URL Inspection verdicts (snapshot).')
+    expect(output).toContain('Counted 2026-09-29T02:00:00.000Z from stored URL Inspection verdicts (stored).')
     expect(output).toContain('99.8% are older than 7 days and 82.8% are older than 30 days.')
     expect(output).toContain('The counts cover URLs in the Site\'s live sitemaps.')
     expect(stderr).toContain('not Google\'s live index')
@@ -187,5 +194,30 @@ describe('hosted indexing summary and watch commands', () => {
     const [request] = apiRequests()
     expect(request!.url.pathname).toMatch(/\/indexing\/watched\/remove$/)
     expect(JSON.parse(stdout.join('\n'))).toMatchObject({ changed: ['https://example.com/guide'], total: 1 })
+  })
+
+  it('splits more than 50 URLs into requests of 50 and merges the skipped ones', async () => {
+    const urls = Array.from({ length: 120 }, (_, index) => `https://example.com/bulk/${index}`)
+    urls[110] = 'https://example.com/bulk/skip2/skip'
+    await run(['indexing', 'watch', 'add', '--site', 'example.com', '--json', ...urls])
+
+    const posts = apiRequests()
+    expect(posts.map(request => (request.body as { urls: string[] }).urls.length)).toEqual([50, 50, 20])
+    const merged = JSON.parse(stdout.join('\n'))
+    expect(merged.changed).toHaveLength(119)
+    expect(merged.skipped).toEqual([{ url: 'https://example.com/bulk/skip2/skip', reason: 'limit_reached' }])
+    expect(merged.total).toBe(30)
+  })
+
+  it('rejects a relative URL before any request, and names it', async () => {
+    expect(await run(['indexing', 'watch', 'add', '--site', 'example.com', 'https://example.com/a', '/guide'])).toBe(1)
+    expect(`${stderr}${vi.mocked(console.error).mock.calls.flat().join(' ')}`).toContain('Not an absolute URL: /guide')
+    expect(requests.filter(request => request.method === 'POST')).toEqual([])
+  })
+
+  it('prints why a Site with URL Inspection off skips a URL', async () => {
+    await run(['indexing', 'watch', 'add', '--site', 'example.com', 'https://example.com/off'])
+    expect(stdout.join('\n')).toContain('Skipped (inspection_disabled): https://example.com/off')
+    expect(stdout.join('\n')).toContain('turn on URL Inspection')
   })
 })

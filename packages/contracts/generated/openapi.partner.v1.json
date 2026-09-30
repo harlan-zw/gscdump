@@ -9337,7 +9337,7 @@
                                 },
                                 "source": {
                                   "enum": [
-                                    "snapshot",
+                                    "stored",
                                     "live"
                                   ],
                                   "type": "string"
@@ -9582,101 +9582,121 @@
                                         "additionalProperties": {},
                                         "properties": {
                                           "access_denied": {
+                                            "default": 0,
                                             "maximum": 9007199254740991,
                                             "minimum": 0,
                                             "type": "integer"
                                           },
                                           "access_forbidden": {
+                                            "default": 0,
                                             "maximum": 9007199254740991,
                                             "minimum": 0,
                                             "type": "integer"
                                           },
                                           "alternate_canonical": {
+                                            "default": 0,
                                             "maximum": 9007199254740991,
                                             "minimum": 0,
                                             "type": "integer"
                                           },
                                           "blocked_4xx": {
+                                            "default": 0,
                                             "maximum": 9007199254740991,
                                             "minimum": 0,
                                             "type": "integer"
                                           },
                                           "blocked_robots": {
+                                            "default": 0,
                                             "maximum": 9007199254740991,
                                             "minimum": 0,
                                             "type": "integer"
                                           },
                                           "crawled_not_indexed": {
+                                            "default": 0,
                                             "maximum": 9007199254740991,
                                             "minimum": 0,
                                             "type": "integer"
                                           },
                                           "discovered_not_indexed": {
+                                            "default": 0,
                                             "maximum": 9007199254740991,
                                             "minimum": 0,
                                             "type": "integer"
                                           },
                                           "duplicate_google_canonical": {
+                                            "default": 0,
                                             "maximum": 9007199254740991,
                                             "minimum": 0,
                                             "type": "integer"
                                           },
                                           "duplicate_no_canonical": {
+                                            "default": 0,
                                             "maximum": 9007199254740991,
                                             "minimum": 0,
                                             "type": "integer"
                                           },
                                           "indexed": {
+                                            "default": 0,
                                             "maximum": 9007199254740991,
                                             "minimum": 0,
                                             "type": "integer"
                                           },
                                           "noindex": {
+                                            "default": 0,
                                             "maximum": 9007199254740991,
                                             "minimum": 0,
                                             "type": "integer"
                                           },
                                           "not_found": {
+                                            "default": 0,
                                             "maximum": 9007199254740991,
                                             "minimum": 0,
                                             "type": "integer"
                                           },
                                           "not_reported": {
+                                            "default": 0,
                                             "maximum": 9007199254740991,
                                             "minimum": 0,
                                             "type": "integer"
                                           },
                                           "page_removed": {
+                                            "default": 0,
                                             "maximum": 9007199254740991,
                                             "minimum": 0,
                                             "type": "integer"
                                           },
                                           "redirect": {
+                                            "default": 0,
                                             "maximum": 9007199254740991,
                                             "minimum": 0,
                                             "type": "integer"
                                           },
                                           "redirect_error": {
+                                            "default": 0,
                                             "maximum": 9007199254740991,
                                             "minimum": 0,
                                             "type": "integer"
                                           },
                                           "server_error": {
+                                            "default": 0,
                                             "maximum": 9007199254740991,
                                             "minimum": 0,
                                             "type": "integer"
                                           },
                                           "soft_404": {
+                                            "default": 0,
                                             "maximum": 9007199254740991,
                                             "minimum": 0,
                                             "type": "integer"
                                           },
                                           "unknown_to_google": {
+                                            "default": 0,
                                             "maximum": 9007199254740991,
                                             "minimum": 0,
                                             "type": "integer"
                                           },
                                           "unrecognized": {
+                                            "default": 0,
                                             "maximum": 9007199254740991,
                                             "minimum": 0,
                                             "type": "integer"
@@ -11613,7 +11633,7 @@
                                 },
                                 "source": {
                                   "enum": [
-                                    "snapshot",
+                                    "stored",
                                     "live"
                                   ],
                                   "type": "string"
@@ -13584,6 +13604,7 @@
                                       "type": "string"
                                     },
                                     "coverageState": {
+                                      "default": "unrecognized",
                                       "enum": [
                                         "unknown_to_google",
                                         "discovered_not_indexed",
@@ -13898,7 +13919,8 @@
                                 "enum": [
                                   "domain_mismatch",
                                   "fragment",
-                                  "limit_reached"
+                                  "limit_reached",
+                                  "inspection_disabled"
                                 ],
                                 "type": "string"
                               },
@@ -14167,7 +14189,8 @@
                                 "enum": [
                                   "domain_mismatch",
                                   "fragment",
-                                  "limit_reached"
+                                  "limit_reached",
+                                  "inspection_disabled"
                                 ],
                                 "type": "string"
                               },

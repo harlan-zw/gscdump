@@ -452,13 +452,16 @@ Read the 4 ladder states in `counts`, lowest rung first. Name each state with th
 
 The other keys in `counts` are exclusions, such as `noindex`, `not_found`, and `redirect`.
 `unrecognized` counts coverage text gscdump cannot map yet. `not_reported` counts results with no coverage text.
+A newer host can add keys to `counts`. Treat a key you do not know as its own state. Treat a missing key as 0.
 
 Rules for every answer:
 
+- `capture.source` is `stored` for counts gscdump saved on its daily run, and `live` for counts made during the request.
 - Quote `capturedAt` with every count. Also quote `capture.oldestVerdictAt` and the `capture.freshness` percents: `olderThan7dPercent` and `olderThan30dPercent`.
 - If `capture._tag` is `empty`, gscdump holds no verdicts for the Site. Report no ladder.
 - The counts are stored URL Inspection verdicts. They are not Google's live index.
   They are also not the Search Console Page indexing report. The two can differ a lot, and the Page indexing report can list many more URLs.
+- `olderThan7d` and `olderThan30d` count verdicts inspected more than 7 times 24 hours and 30 times 24 hours before `capturedAt`. They are not calendar days.
 - A verdict can be months older than its capture. Unchanged URLs are rechecked less often over time. Say when most verdicts are old.
 - A move between rungs shows in the trend. Compare two `counted` days and name the dates.
 - `capture.scope` says which URLs the counts cover. `sitemap_members` means every counted URL is in a live sitemap.
@@ -477,7 +480,9 @@ gscdump indexing watch list --site example.com --json
 gscdump indexing watch remove --site example.com https://example.com/pricing
 ```
 
-- A Site can hold 50 Watched URLs. gscdump inspects each one every 7 days, before other scheduled URLs. It never backs off.
+- A Site can hold 50 Watched URLs. `add` and `remove` send 50 URLs per request, so a longer list works. Every URL must be absolute. `add` fails before any request if one is relative.
+- If `add` skips a URL with `inspection_disabled`, the Site has URL Inspection off. gscdump never inspects it, so the URL gets no Checkpoint. Tell the owner to turn on URL Inspection in the Site settings.
+- gscdump inspects each Watched URL every 7 days, before other scheduled URLs. It never backs off.
 - Each scheduled inspection spends the Site's daily URL Inspection budget and the URL Inspections meter. Get consent before `add`.
 - Each scheduled inspection stores one Checkpoint. `watch list --json` returns Checkpoints newest first, with `checkedAt`, the `coverageState` key, and Google's text.
 - Compare Checkpoints by date to see when a URL moves up the ladder. A new Watched URL has no Checkpoint until its first inspection.

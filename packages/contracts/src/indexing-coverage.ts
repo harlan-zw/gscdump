@@ -55,19 +55,26 @@ export const coverageStateTagSchema = z.enum(COVERAGE_STATE_TAGS)
 
 const urlCount = z.number().int().nonnegative()
 
-type CoverageStateCountsShape = { [K in CoverageStateTag]: typeof urlCount }
+type CoverageStateCountsShape = { [K in CoverageStateTag]: z.ZodDefault<typeof urlCount> }
 
-/** One URL count per coverage state. Every tag is present; a state with no URLs counts 0. */
+/**
+ * One URL count per coverage state. A state with no URLs counts 0, and a tag
+ * the payload leaves out parses as 0, so a newer client reads an older host's
+ * counts. A tag this client does not know is kept as sent, so an older client
+ * reads a newer host's counts. Neither case fails the parse.
+ */
 export const coverageStateCountsSchema = z.object(
-  Object.fromEntries(COVERAGE_STATE_TAGS.map(tag => [tag, urlCount])) as CoverageStateCountsShape,
+  Object.fromEntries(COVERAGE_STATE_TAGS.map(tag => [tag, urlCount.default(0)])) as CoverageStateCountsShape,
 ).loose()
 
 export type CoverageStateCounts = Record<CoverageStateTag, number>
 
 /**
- * How old the stored URL Inspection verdicts behind a count are, in whole UTC
- * days before the capture. `unmeasured` marks a count stored before gscdump
- * recorded verdict ages.
+ * How old the stored URL Inspection verdicts behind a count are. The periods
+ * are rolling, not calendar days: `olderThan7d` counts verdicts inspected more
+ * than 7 times 24 hours before the capture, and `olderThan30d` more than 30
+ * times 24 hours. `unmeasured` marks a count stored before gscdump recorded
+ * verdict ages.
  */
 export const verdictFreshnessSchema = z.discriminatedUnion('_tag', [
   z.object({
@@ -89,7 +96,7 @@ export type VerdictFreshness = z.infer<typeof verdictFreshnessSchema>
  * inspection scheduler rechecks unchanged URLs less often over time.
  *
  * - `captured`: `capturedAt` is when gscdump computed the counts. `source` is
- *   `snapshot` for the stored daily summary or `live` for a count made during
+ *   `stored` for the daily counts gscdump saved or `live` for a count made during
  *   this request. `scope` is `sitemap_members` when the counts cover only URLs in
  *   the Site's live sitemaps, `inspected_urls` when sitemap membership was not
  *   available and the counts cover every inspected URL, and `unrecorded` for a
@@ -101,7 +108,7 @@ export const indexingCaptureSchema = z.discriminatedUnion('_tag', [
   z.object({
     _tag: z.literal('captured'),
     capturedAt: z.string(),
-    source: z.enum(['snapshot', 'live']),
+    source: z.enum(['stored', 'live']),
     scope: z.enum(['sitemap_members', 'inspected_urls', 'unrecorded']),
     oldestVerdictAt: z.string().nullable(),
     newestVerdictAt: z.string().nullable(),
@@ -143,11 +150,13 @@ export const WATCHED_URL_CHECKPOINT_LIMIT = 12
 
 /**
  * One scheduled URL Inspection of a Watched URL. `coverageState` is the parsed
- * tag; `googleCoverageState` is Google's prose as returned.
+ * tag, and a tag this client does not know parses as `unrecognized`, so an older
+ * client reads a newer host's Checkpoints. `googleCoverageState` is Google's
+ * prose as returned.
  */
 export const watchedUrlCheckpointSchema = z.object({
   checkedAt: z.string(),
-  coverageState: coverageStateTagSchema,
+  coverageState: coverageStateTagSchema.catch('unrecognized'),
   googleCoverageState: z.string().nullable(),
   verdict: z.string().nullable(),
   lastCrawlTime: z.string().nullable(),
@@ -176,7 +185,7 @@ export const watchedUrlsChangeRequestSchema = z.strictObject({
   urls: z.array(z.string().url()).min(1).max(WATCHED_URL_LIMIT),
 })
 
-export const watchedUrlSkipReasonSchema = z.enum(['domain_mismatch', 'fragment', 'limit_reached'])
+export const watchedUrlSkipReasonSchema = z.enum(['domain_mismatch', 'fragment', 'limit_reached', 'inspection_disabled'])
 
 export const watchedUrlsChangeResponseSchema = z.object({
   /** URLs this request added or removed. */

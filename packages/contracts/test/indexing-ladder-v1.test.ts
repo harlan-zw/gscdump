@@ -46,9 +46,21 @@ describe('indexing coverage states v1', () => {
     expect(parsed.data.trend[0]?.coverageStates).toMatchObject({ _tag: 'counted', counts: { unknown_to_google: 1484 } })
   })
 
-  it('rejects a counted day that leaves a coverage state out', () => {
-    const { unknown_to_google: _dropped, ...partial } = counts
-    const point = trendPoint({ _tag: 'counted', capturedAt: '2026-09-30T02:00:00.000Z', counts: partial, freshness })
+  it('reads an older host\'s counts, which lack a newer tag, as zero', () => {
+    const { unknown_to_google: _dropped, not_reported: _alsoDropped, ...oldShape } = counts
+    const point = trendPoint({ _tag: 'counted', capturedAt: '2026-09-30T02:00:00.000Z', counts: { ...oldShape, indexed: 3 }, freshness })
+    const parsed = getSiteIndexing.responses[200].producer.parse({ data: summaryData({ trend: [point] }), meta })
+    expect(parsed.data.trend[0]?.coverageStates).toMatchObject({ counts: { indexed: 3, unknown_to_google: 0, not_reported: 0 } })
+  })
+
+  it('keeps a count for a tag this client does not know', () => {
+    const point = trendPoint({ _tag: 'counted', capturedAt: '2026-09-30T02:00:00.000Z', counts: { ...counts, future_state: 7 }, freshness })
+    const parsed = getSiteIndexing.responses[200].producer.parse({ data: summaryData({ trend: [point] }), meta })
+    expect(parsed.data.trend[0]?.coverageStates).toMatchObject({ counts: { future_state: 7 } })
+  })
+
+  it('rejects a count that is not a non-negative integer', () => {
+    const point = trendPoint({ _tag: 'counted', capturedAt: '2026-09-30T02:00:00.000Z', counts: { ...counts, indexed: -1 }, freshness })
     expect(() => getSiteIndexing.responses[200].producer.parse({ data: summaryData({ trend: [point] }), meta })).toThrow()
   })
 
@@ -61,7 +73,7 @@ describe('indexing coverage states v1', () => {
     const capture = {
       _tag: 'captured',
       capturedAt: '2026-09-30T02:00:00.000Z',
-      source: 'snapshot',
+      source: 'stored',
       scope: 'sitemap_members',
       oldestVerdictAt: '2026-08-20T03:00:00.000Z',
       newestVerdictAt: '2026-09-29T03:00:00.000Z',
@@ -96,11 +108,12 @@ describe('watched URLs v1', () => {
     expect(() => body.parse({ urls: ['https://example.com/'], label: 'panel' })).toThrow()
   })
 
-  it('returns Checkpoints with the parsed tag and Google prose', () => {
+  it('returns Checkpoints with the parsed tag and Google prose, and reads a newer host\'s tag as unrecognized', () => {
     const checkpoint = { checkedAt: '2026-09-30T01:00:00.000Z', coverageState: 'unknown_to_google', googleCoverageState: 'URL is unknown to Google', verdict: 'NEUTRAL', lastCrawlTime: null }
     const data = { watched: [{ url: 'https://example.com/a', addedAt: '2026-09-30T00:00:00.000Z', dueAt: '2026-10-07T01:00:00.000Z', checkpoints: [checkpoint] }], limit: 50, cadenceDays: 7, meta: { siteUrl: 'sc-domain:example.com' } }
     expect(listSiteWatchedUrls.responses[200].producer.parse({ data, meta }).data.watched[0]?.checkpoints).toEqual([checkpoint])
-    const unknownTag = { ...data, watched: [{ ...data.watched[0], checkpoints: [{ ...checkpoint, coverageState: 'URL is unknown to Google' }] }] }
-    expect(() => listSiteWatchedUrls.responses[200].producer.parse({ data: unknownTag, meta })).toThrow()
+    const newerHost = { ...data, watched: [{ ...data.watched[0], checkpoints: [{ ...checkpoint, coverageState: 'a_state_from_a_newer_host' }] }] }
+    const parsed = listSiteWatchedUrls.responses[200].producer.parse({ data: newerHost, meta })
+    expect(parsed.data.watched[0]?.checkpoints[0]).toMatchObject({ coverageState: 'unrecognized', googleCoverageState: 'URL is unknown to Google' })
   })
 })
