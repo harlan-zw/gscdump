@@ -128,7 +128,7 @@ and `Vary: Authorization`.
 The host keeps one atomic 60-second fixed-window counter per authenticated
 principal and operation. Limits range from 10 to 120 requests per window. The
 [rate-limit table](../hosted-api-v1.md#rate-limits-and-lifecycle-signaling)
-lists all 58 operation policies.
+lists all 61 operation policies.
 
 Quota-evaluated responses include `RateLimit-Policy` and `RateLimit`. On
 `429 rate_limited`, wait for the `Retry-After` duration. Treat it as
@@ -140,8 +140,8 @@ The SDK honors `Retry-After` when the operation descriptor allows a retry.
 ## Idempotency and retries
 
 The OpenAPI `x-gscdump-semantics` object records whether an operation is
-idempotent and whether the SDK may retry it. The current registry contains 51
-idempotent operations: 36 queries and 15 mutations.
+idempotent and whether the SDK may retry it. The current registry contains 56
+idempotent operations: 38 queries and 18 mutations.
 
 Four mutations are non-idempotent and use `retry: "never"`:
 

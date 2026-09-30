@@ -1531,6 +1531,261 @@
           }
         ]
       },
+      "partner.sites.indexing.watched.add.error": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "enum": [
+                  "invalid_request",
+                  "unauthorized",
+                  "forbidden",
+                  "site_not_found",
+                  "rate_limited",
+                  "internal_error",
+                  "contract_violation"
+                ],
+                "type": "string"
+              },
+              "details": {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/partner.sites.indexing.watched.add.error.__schema0"
+                },
+                "propertyNames": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              "message": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "requestId": {
+                "pattern": "^req_[\\w-]+$",
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "requestId",
+              "retryable",
+              "details"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "partner.sites.indexing.watched.add.error.__schema0": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          },
+          {
+            "items": {
+              "$ref": "#/components/schemas/partner.sites.indexing.watched.add.error.__schema0"
+            },
+            "type": "array"
+          },
+          {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/partner.sites.indexing.watched.add.error.__schema0"
+            },
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": "object"
+          }
+        ]
+      },
+      "partner.sites.indexing.watched.list.error": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "enum": [
+                  "invalid_request",
+                  "unauthorized",
+                  "forbidden",
+                  "site_not_found",
+                  "rate_limited",
+                  "internal_error",
+                  "contract_violation"
+                ],
+                "type": "string"
+              },
+              "details": {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/partner.sites.indexing.watched.list.error.__schema0"
+                },
+                "propertyNames": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              "message": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "requestId": {
+                "pattern": "^req_[\\w-]+$",
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "requestId",
+              "retryable",
+              "details"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "partner.sites.indexing.watched.list.error.__schema0": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          },
+          {
+            "items": {
+              "$ref": "#/components/schemas/partner.sites.indexing.watched.list.error.__schema0"
+            },
+            "type": "array"
+          },
+          {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/partner.sites.indexing.watched.list.error.__schema0"
+            },
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": "object"
+          }
+        ]
+      },
+      "partner.sites.indexing.watched.remove.error": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "enum": [
+                  "invalid_request",
+                  "unauthorized",
+                  "forbidden",
+                  "site_not_found",
+                  "rate_limited",
+                  "internal_error",
+                  "contract_violation"
+                ],
+                "type": "string"
+              },
+              "details": {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/partner.sites.indexing.watched.remove.error.__schema0"
+                },
+                "propertyNames": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              "message": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "requestId": {
+                "pattern": "^req_[\\w-]+$",
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "requestId",
+              "retryable",
+              "details"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "partner.sites.indexing.watched.remove.error.__schema0": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          },
+          {
+            "items": {
+              "$ref": "#/components/schemas/partner.sites.indexing.watched.remove.error.__schema0"
+            },
+            "type": "array"
+          },
+          {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/partner.sites.indexing.watched.remove.error.__schema0"
+            },
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": "object"
+          }
+        ]
+      },
       "partner.sites.keyword.breadth.get.error": {
         "additionalProperties": false,
         "properties": {
@@ -8988,6 +9243,123 @@
                     "data": {
                       "additionalProperties": false,
                       "properties": {
+                        "capture": {
+                          "oneOf": [
+                            {
+                              "additionalProperties": {},
+                              "properties": {
+                                "_tag": {
+                                  "const": "captured",
+                                  "type": "string"
+                                },
+                                "capturedAt": {
+                                  "type": "string"
+                                },
+                                "freshness": {
+                                  "oneOf": [
+                                    {
+                                      "additionalProperties": {},
+                                      "properties": {
+                                        "_tag": {
+                                          "const": "measured",
+                                          "type": "string"
+                                        },
+                                        "olderThan30d": {
+                                          "maximum": 9007199254740991,
+                                          "minimum": 0,
+                                          "type": "integer"
+                                        },
+                                        "olderThan30dPercent": {
+                                          "maximum": 100,
+                                          "minimum": 0,
+                                          "type": "number"
+                                        },
+                                        "olderThan7d": {
+                                          "maximum": 9007199254740991,
+                                          "minimum": 0,
+                                          "type": "integer"
+                                        },
+                                        "olderThan7dPercent": {
+                                          "maximum": 100,
+                                          "minimum": 0,
+                                          "type": "number"
+                                        },
+                                        "verdicts": {
+                                          "maximum": 9007199254740991,
+                                          "minimum": 0,
+                                          "type": "integer"
+                                        }
+                                      },
+                                      "required": [
+                                        "_tag",
+                                        "verdicts",
+                                        "olderThan7d",
+                                        "olderThan30d",
+                                        "olderThan7dPercent",
+                                        "olderThan30dPercent"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    {
+                                      "additionalProperties": {},
+                                      "properties": {
+                                        "_tag": {
+                                          "const": "unmeasured",
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "_tag"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  ]
+                                },
+                                "newestVerdictAt": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "oldestVerdictAt": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "source": {
+                                  "enum": [
+                                    "snapshot",
+                                    "live"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "_tag",
+                                "capturedAt",
+                                "source",
+                                "oldestVerdictAt",
+                                "newestVerdictAt",
+                                "freshness"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": {},
+                              "properties": {
+                                "_tag": {
+                                  "const": "empty",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "_tag"
+                              ],
+                              "type": "object"
+                            }
+                          ]
+                        },
                         "meta": {
                           "additionalProperties": {},
                           "properties": {
@@ -9184,6 +9556,230 @@
                                   "discoveredNotCrawled"
                                 ],
                                 "type": "object"
+                              },
+                              "coverageStates": {
+                                "oneOf": [
+                                  {
+                                    "additionalProperties": {},
+                                    "properties": {
+                                      "_tag": {
+                                        "const": "counted",
+                                        "type": "string"
+                                      },
+                                      "capturedAt": {
+                                        "type": "string"
+                                      },
+                                      "counts": {
+                                        "additionalProperties": {},
+                                        "properties": {
+                                          "access_denied": {
+                                            "maximum": 9007199254740991,
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          },
+                                          "access_forbidden": {
+                                            "maximum": 9007199254740991,
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          },
+                                          "alternate_canonical": {
+                                            "maximum": 9007199254740991,
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          },
+                                          "blocked_4xx": {
+                                            "maximum": 9007199254740991,
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          },
+                                          "blocked_robots": {
+                                            "maximum": 9007199254740991,
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          },
+                                          "crawled_not_indexed": {
+                                            "maximum": 9007199254740991,
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          },
+                                          "discovered_not_indexed": {
+                                            "maximum": 9007199254740991,
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          },
+                                          "duplicate_google_canonical": {
+                                            "maximum": 9007199254740991,
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          },
+                                          "duplicate_no_canonical": {
+                                            "maximum": 9007199254740991,
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          },
+                                          "indexed": {
+                                            "maximum": 9007199254740991,
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          },
+                                          "noindex": {
+                                            "maximum": 9007199254740991,
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          },
+                                          "not_found": {
+                                            "maximum": 9007199254740991,
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          },
+                                          "not_reported": {
+                                            "maximum": 9007199254740991,
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          },
+                                          "page_removed": {
+                                            "maximum": 9007199254740991,
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          },
+                                          "redirect": {
+                                            "maximum": 9007199254740991,
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          },
+                                          "redirect_error": {
+                                            "maximum": 9007199254740991,
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          },
+                                          "server_error": {
+                                            "maximum": 9007199254740991,
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          },
+                                          "soft_404": {
+                                            "maximum": 9007199254740991,
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          },
+                                          "unknown_to_google": {
+                                            "maximum": 9007199254740991,
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          },
+                                          "unrecognized": {
+                                            "maximum": 9007199254740991,
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          }
+                                        },
+                                        "required": [
+                                          "unknown_to_google",
+                                          "discovered_not_indexed",
+                                          "crawled_not_indexed",
+                                          "indexed",
+                                          "noindex",
+                                          "blocked_robots",
+                                          "soft_404",
+                                          "not_found",
+                                          "server_error",
+                                          "access_denied",
+                                          "access_forbidden",
+                                          "blocked_4xx",
+                                          "redirect",
+                                          "redirect_error",
+                                          "alternate_canonical",
+                                          "duplicate_no_canonical",
+                                          "duplicate_google_canonical",
+                                          "page_removed",
+                                          "unrecognized",
+                                          "not_reported"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "freshness": {
+                                        "oneOf": [
+                                          {
+                                            "additionalProperties": {},
+                                            "properties": {
+                                              "_tag": {
+                                                "const": "measured",
+                                                "type": "string"
+                                              },
+                                              "olderThan30d": {
+                                                "maximum": 9007199254740991,
+                                                "minimum": 0,
+                                                "type": "integer"
+                                              },
+                                              "olderThan30dPercent": {
+                                                "maximum": 100,
+                                                "minimum": 0,
+                                                "type": "number"
+                                              },
+                                              "olderThan7d": {
+                                                "maximum": 9007199254740991,
+                                                "minimum": 0,
+                                                "type": "integer"
+                                              },
+                                              "olderThan7dPercent": {
+                                                "maximum": 100,
+                                                "minimum": 0,
+                                                "type": "number"
+                                              },
+                                              "verdicts": {
+                                                "maximum": 9007199254740991,
+                                                "minimum": 0,
+                                                "type": "integer"
+                                              }
+                                            },
+                                            "required": [
+                                              "_tag",
+                                              "verdicts",
+                                              "olderThan7d",
+                                              "olderThan30d",
+                                              "olderThan7dPercent",
+                                              "olderThan30dPercent"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          {
+                                            "additionalProperties": {},
+                                            "properties": {
+                                              "_tag": {
+                                                "const": "unmeasured",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "_tag"
+                                            ],
+                                            "type": "object"
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "_tag",
+                                      "capturedAt",
+                                      "counts",
+                                      "freshness"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": {},
+                                    "properties": {
+                                      "_tag": {
+                                        "const": "not_counted",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "_tag"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
                               },
                               "date": {
                                 "type": "string"
@@ -10914,6 +11510,123 @@
                     "data": {
                       "additionalProperties": false,
                       "properties": {
+                        "capture": {
+                          "oneOf": [
+                            {
+                              "additionalProperties": {},
+                              "properties": {
+                                "_tag": {
+                                  "const": "captured",
+                                  "type": "string"
+                                },
+                                "capturedAt": {
+                                  "type": "string"
+                                },
+                                "freshness": {
+                                  "oneOf": [
+                                    {
+                                      "additionalProperties": {},
+                                      "properties": {
+                                        "_tag": {
+                                          "const": "measured",
+                                          "type": "string"
+                                        },
+                                        "olderThan30d": {
+                                          "maximum": 9007199254740991,
+                                          "minimum": 0,
+                                          "type": "integer"
+                                        },
+                                        "olderThan30dPercent": {
+                                          "maximum": 100,
+                                          "minimum": 0,
+                                          "type": "number"
+                                        },
+                                        "olderThan7d": {
+                                          "maximum": 9007199254740991,
+                                          "minimum": 0,
+                                          "type": "integer"
+                                        },
+                                        "olderThan7dPercent": {
+                                          "maximum": 100,
+                                          "minimum": 0,
+                                          "type": "number"
+                                        },
+                                        "verdicts": {
+                                          "maximum": 9007199254740991,
+                                          "minimum": 0,
+                                          "type": "integer"
+                                        }
+                                      },
+                                      "required": [
+                                        "_tag",
+                                        "verdicts",
+                                        "olderThan7d",
+                                        "olderThan30d",
+                                        "olderThan7dPercent",
+                                        "olderThan30dPercent"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    {
+                                      "additionalProperties": {},
+                                      "properties": {
+                                        "_tag": {
+                                          "const": "unmeasured",
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "_tag"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  ]
+                                },
+                                "newestVerdictAt": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "oldestVerdictAt": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "source": {
+                                  "enum": [
+                                    "snapshot",
+                                    "live"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "_tag",
+                                "capturedAt",
+                                "source",
+                                "oldestVerdictAt",
+                                "newestVerdictAt",
+                                "freshness"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": {},
+                              "properties": {
+                                "_tag": {
+                                  "const": "empty",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "_tag"
+                              ],
+                              "type": "object"
+                            }
+                          ]
+                        },
                         "issues": {
                           "items": {
                             "additionalProperties": {},
@@ -12778,6 +13491,851 @@
           "readConsistency": "primary",
           "retry": "idempotent",
           "sideEffects": "none"
+        },
+        "x-gscdump-visibility": "public"
+      }
+    },
+    "/api/partner/v1/sites/{siteId}/indexing/watched": {
+      "get": {
+        "description": "Returns the Site's Watched URLs. gscdump inspects each one every 7 days, before other scheduled URLs, and never backs off. Each Checkpoint is one scheduled URL Inspection, newest first, with the parsed coverage state and Google's coverage text.",
+        "operationId": "partner.sites.indexing.watched.list",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "siteId",
+            "required": true,
+            "schema": {
+              "pattern": "^s_[\\w-]+$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "pattern": "^req_[\\w-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "cadenceDays": {
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991,
+                          "type": "integer"
+                        },
+                        "limit": {
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991,
+                          "type": "integer"
+                        },
+                        "meta": {
+                          "additionalProperties": {},
+                          "properties": {
+                            "siteUrl": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "siteUrl"
+                          ],
+                          "type": "object"
+                        },
+                        "watched": {
+                          "items": {
+                            "additionalProperties": {},
+                            "properties": {
+                              "addedAt": {
+                                "type": "string"
+                              },
+                              "checkpoints": {
+                                "items": {
+                                  "additionalProperties": {},
+                                  "properties": {
+                                    "checkedAt": {
+                                      "type": "string"
+                                    },
+                                    "coverageState": {
+                                      "enum": [
+                                        "unknown_to_google",
+                                        "discovered_not_indexed",
+                                        "crawled_not_indexed",
+                                        "indexed",
+                                        "noindex",
+                                        "blocked_robots",
+                                        "soft_404",
+                                        "not_found",
+                                        "server_error",
+                                        "access_denied",
+                                        "access_forbidden",
+                                        "blocked_4xx",
+                                        "redirect",
+                                        "redirect_error",
+                                        "alternate_canonical",
+                                        "duplicate_no_canonical",
+                                        "duplicate_google_canonical",
+                                        "page_removed",
+                                        "unrecognized",
+                                        "not_reported"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    "googleCoverageState": {
+                                      "type": [
+                                        "string",
+                                        "null"
+                                      ]
+                                    },
+                                    "lastCrawlTime": {
+                                      "type": [
+                                        "string",
+                                        "null"
+                                      ]
+                                    },
+                                    "verdict": {
+                                      "type": [
+                                        "string",
+                                        "null"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "checkedAt",
+                                    "coverageState",
+                                    "googleCoverageState",
+                                    "verdict",
+                                    "lastCrawlTime"
+                                  ],
+                                  "type": "object"
+                                },
+                                "type": "array"
+                              },
+                              "dueAt": {
+                                "type": "string"
+                              },
+                              "url": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "url",
+                              "addedAt",
+                              "dueAt",
+                              "checkpoints"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "watched",
+                        "limit",
+                        "cadenceDays",
+                        "meta"
+                      ],
+                      "type": "object"
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "requestId": {
+                          "pattern": "^req_[\\w-]+$",
+                          "type": "string"
+                        },
+                        "surface": {
+                          "const": "partner",
+                          "type": "string"
+                        },
+                        "version": {
+                          "const": "1.0",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "requestId",
+                        "surface",
+                        "version"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.sites.indexing.watched.list.error"
+                }
+              }
+            },
+            "description": "Declared client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.sites.indexing.watched.list.error"
+                }
+              }
+            },
+            "description": "Safe internal or contract error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.sites.indexing.watched.list.error"
+                }
+              }
+            },
+            "description": "Stable error envelope"
+          }
+        },
+        "security": [
+          {
+            "user_key": []
+          },
+          {
+            "partner_key": []
+          }
+        ],
+        "summary": "List Watched URLs",
+        "tags": [
+          "Indexing"
+        ],
+        "x-gscdump-errors": [
+          "invalid_request",
+          "unauthorized",
+          "forbidden",
+          "site_not_found",
+          "rate_limited",
+          "internal_error",
+          "contract_violation"
+        ],
+        "x-gscdump-examples": {
+          "request": {
+            "params": {
+              "siteId": "s_01"
+            }
+          },
+          "response": {
+            "data": {
+              "cadenceDays": 7,
+              "limit": 50,
+              "meta": {
+                "siteUrl": "sc-domain:example.com"
+              },
+              "watched": [
+                {
+                  "addedAt": "2026-09-30T00:00:00.000Z",
+                  "checkpoints": [
+                    {
+                      "checkedAt": "2026-09-30T01:00:00.000Z",
+                      "coverageState": "unknown_to_google",
+                      "googleCoverageState": "URL is unknown to Google",
+                      "lastCrawlTime": null,
+                      "verdict": "NEUTRAL"
+                    }
+                  ],
+                  "dueAt": "2026-10-07T01:00:00.000Z",
+                  "url": "https://example.com/guide"
+                }
+              ]
+            },
+            "meta": {
+              "requestId": "req_01",
+              "surface": "partner",
+              "version": "1.0"
+            }
+          }
+        },
+        "x-gscdump-lifecycle": {
+          "introduced": "4.4.0"
+        },
+        "x-gscdump-ownership": [
+          {
+            "credential": "user_key",
+            "rule": "authorized_site"
+          },
+          {
+            "credential": "partner_key",
+            "rule": "authorized_site"
+          }
+        ],
+        "x-gscdump-resources": {
+          "changes": [],
+          "reads": [
+            {
+              "idFrom": "params.siteId",
+              "type": "site.indexing"
+            }
+          ]
+        },
+        "x-gscdump-scopes": [
+          "indexing:read"
+        ],
+        "x-gscdump-semantics": {
+          "idempotent": true,
+          "kind": "query",
+          "readConsistency": "primary",
+          "retry": "idempotent",
+          "sideEffects": "none"
+        },
+        "x-gscdump-visibility": "public"
+      },
+      "post": {
+        "description": "Adds URLs on the Site host to the Site's Watched URLs, up to 50 per Site. A new Watched URL is due for inspection at once. Each scheduled inspection spends the Site's daily URL Inspection budget and the URL Inspections meter. URLs off the Site host, fragment URLs, and URLs past the limit come back in `skipped`.",
+        "operationId": "partner.sites.indexing.watched.add",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "siteId",
+            "required": true,
+            "schema": {
+              "pattern": "^s_[\\w-]+$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "pattern": "^req_[\\w-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "urls": {
+                    "items": {
+                      "format": "uri",
+                      "type": "string"
+                    },
+                    "maxItems": 50,
+                    "minItems": 1,
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "urls"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "changed": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "limit": {
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991,
+                          "type": "integer"
+                        },
+                        "skipped": {
+                          "items": {
+                            "additionalProperties": {},
+                            "properties": {
+                              "reason": {
+                                "enum": [
+                                  "domain_mismatch",
+                                  "fragment",
+                                  "limit_reached"
+                                ],
+                                "type": "string"
+                              },
+                              "url": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "url",
+                              "reason"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "total": {
+                          "maximum": 9007199254740991,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "unchanged": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "changed",
+                        "unchanged",
+                        "skipped",
+                        "total",
+                        "limit"
+                      ],
+                      "type": "object"
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "requestId": {
+                          "pattern": "^req_[\\w-]+$",
+                          "type": "string"
+                        },
+                        "surface": {
+                          "const": "partner",
+                          "type": "string"
+                        },
+                        "version": {
+                          "const": "1.0",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "requestId",
+                        "surface",
+                        "version"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.sites.indexing.watched.add.error"
+                }
+              }
+            },
+            "description": "Declared client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.sites.indexing.watched.add.error"
+                }
+              }
+            },
+            "description": "Safe internal or contract error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.sites.indexing.watched.add.error"
+                }
+              }
+            },
+            "description": "Stable error envelope"
+          }
+        },
+        "security": [
+          {
+            "user_key": []
+          },
+          {
+            "partner_key": []
+          }
+        ],
+        "summary": "Add Watched URLs",
+        "tags": [
+          "Indexing"
+        ],
+        "x-gscdump-errors": [
+          "invalid_request",
+          "unauthorized",
+          "forbidden",
+          "site_not_found",
+          "rate_limited",
+          "internal_error",
+          "contract_violation"
+        ],
+        "x-gscdump-examples": {
+          "request": {
+            "body": {
+              "urls": [
+                "https://example.com/guide"
+              ]
+            },
+            "params": {
+              "siteId": "s_01"
+            }
+          },
+          "response": {
+            "data": {
+              "changed": [
+                "https://example.com/guide"
+              ],
+              "limit": 50,
+              "skipped": [],
+              "total": 1,
+              "unchanged": []
+            },
+            "meta": {
+              "requestId": "req_01",
+              "surface": "partner",
+              "version": "1.0"
+            }
+          }
+        },
+        "x-gscdump-lifecycle": {
+          "introduced": "4.4.0"
+        },
+        "x-gscdump-ownership": [
+          {
+            "credential": "user_key",
+            "rule": "authorized_site"
+          },
+          {
+            "credential": "partner_key",
+            "rule": "authorized_site"
+          }
+        ],
+        "x-gscdump-resources": {
+          "changes": [
+            {
+              "idFrom": "params.siteId",
+              "type": "site.indexing"
+            }
+          ],
+          "reads": [
+            {
+              "idFrom": "params.siteId",
+              "type": "site.indexing"
+            }
+          ]
+        },
+        "x-gscdump-scopes": [
+          "indexing:write"
+        ],
+        "x-gscdump-semantics": {
+          "idempotent": true,
+          "kind": "mutation",
+          "readConsistency": null,
+          "retry": "idempotent",
+          "sideEffects": "state"
+        },
+        "x-gscdump-visibility": "public"
+      }
+    },
+    "/api/partner/v1/sites/{siteId}/indexing/watched/remove": {
+      "post": {
+        "description": "Removes URLs from the Site's Watched URLs and deletes their Checkpoints. The stored URL Inspection results stay. URLs that were not watched come back in `unchanged`.",
+        "operationId": "partner.sites.indexing.watched.remove",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "siteId",
+            "required": true,
+            "schema": {
+              "pattern": "^s_[\\w-]+$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "pattern": "^req_[\\w-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "urls": {
+                    "items": {
+                      "format": "uri",
+                      "type": "string"
+                    },
+                    "maxItems": 50,
+                    "minItems": 1,
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "urls"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "changed": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "limit": {
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991,
+                          "type": "integer"
+                        },
+                        "skipped": {
+                          "items": {
+                            "additionalProperties": {},
+                            "properties": {
+                              "reason": {
+                                "enum": [
+                                  "domain_mismatch",
+                                  "fragment",
+                                  "limit_reached"
+                                ],
+                                "type": "string"
+                              },
+                              "url": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "url",
+                              "reason"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "total": {
+                          "maximum": 9007199254740991,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "unchanged": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "changed",
+                        "unchanged",
+                        "skipped",
+                        "total",
+                        "limit"
+                      ],
+                      "type": "object"
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "requestId": {
+                          "pattern": "^req_[\\w-]+$",
+                          "type": "string"
+                        },
+                        "surface": {
+                          "const": "partner",
+                          "type": "string"
+                        },
+                        "version": {
+                          "const": "1.0",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "requestId",
+                        "surface",
+                        "version"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.sites.indexing.watched.remove.error"
+                }
+              }
+            },
+            "description": "Declared client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.sites.indexing.watched.remove.error"
+                }
+              }
+            },
+            "description": "Safe internal or contract error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.sites.indexing.watched.remove.error"
+                }
+              }
+            },
+            "description": "Stable error envelope"
+          }
+        },
+        "security": [
+          {
+            "user_key": []
+          },
+          {
+            "partner_key": []
+          }
+        ],
+        "summary": "Remove Watched URLs",
+        "tags": [
+          "Indexing"
+        ],
+        "x-gscdump-errors": [
+          "invalid_request",
+          "unauthorized",
+          "forbidden",
+          "site_not_found",
+          "rate_limited",
+          "internal_error",
+          "contract_violation"
+        ],
+        "x-gscdump-examples": {
+          "request": {
+            "body": {
+              "urls": [
+                "https://example.com/guide"
+              ]
+            },
+            "params": {
+              "siteId": "s_01"
+            }
+          },
+          "response": {
+            "data": {
+              "changed": [
+                "https://example.com/guide"
+              ],
+              "limit": 50,
+              "skipped": [],
+              "total": 0,
+              "unchanged": []
+            },
+            "meta": {
+              "requestId": "req_01",
+              "surface": "partner",
+              "version": "1.0"
+            }
+          }
+        },
+        "x-gscdump-lifecycle": {
+          "introduced": "4.4.0"
+        },
+        "x-gscdump-ownership": [
+          {
+            "credential": "user_key",
+            "rule": "authorized_site"
+          },
+          {
+            "credential": "partner_key",
+            "rule": "authorized_site"
+          }
+        ],
+        "x-gscdump-resources": {
+          "changes": [
+            {
+              "idFrom": "params.siteId",
+              "type": "site.indexing"
+            }
+          ],
+          "reads": [
+            {
+              "idFrom": "params.siteId",
+              "type": "site.indexing"
+            }
+          ]
+        },
+        "x-gscdump-scopes": [
+          "indexing:write"
+        ],
+        "x-gscdump-semantics": {
+          "idempotent": true,
+          "kind": "mutation",
+          "readConsistency": null,
+          "retry": "idempotent",
+          "sideEffects": "state"
         },
         "x-gscdump-visibility": "public"
       }

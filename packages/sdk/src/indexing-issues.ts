@@ -73,8 +73,8 @@ export const issueDetails: Record<string, IndexingIssueDetail> = {
     fix: 'If the removal was intentional, back it with a real signal: a noindex tag, a 404/410, or authentication. The removal tool alone does not keep a page out of Search permanently.',
   },
   unknown_to_google: {
-    description: 'These URLs exist on your site but Google hasn\'t discovered them yet. They may be orphaned pages or missing from your sitemap.',
-    fix: 'Add these URLs to your sitemap. Create internal links to them from well-indexed pages. Submit the sitemap in Google Search Console.',
+    description: 'Google has no record of these URLs. It has not crawled them and has not queued them for a crawl. A URL can stay unknown even when it is in a sitemap that Google already read.',
+    fix: 'Check that each URL is in a sitemap Google reads. If it already is, the sitemap is not the gap: link to these URLs from pages Google already indexed, and earn links from other sites.',
   },
   stale_crawl: {
     description: 'Google hasn\'t re-crawled these pages in over 30 days. They may have low perceived value or your crawl budget may be exhausted.',
@@ -174,7 +174,7 @@ export const issueGroups: IssueGroup[] = [
     description: 'Help Google find and value your pages',
     effort: 'involved',
     controlLevel: 'partial',
-    education: 'Google found these pages but either didn\'t think they were worth indexing, or hasn\'t discovered them yet. For crawled-but-not-indexed pages, improving content quality and internal linking helps — but Google ultimately decides what to index. For undiscovered pages, adding them to your sitemap and linking to them from indexed pages is the fix.',
+    education: 'Google found these pages but either didn\'t think they were worth indexing, or hasn\'t discovered them yet. For crawled-but-not-indexed pages, improving content quality and internal linking helps — but Google ultimately decides what to index. For pages unknown to Google, check the sitemap first. If they are already in it, link to them from indexed pages.',
     issueTypes: ['crawled_not_indexed', 'discovered_not_indexed', 'unknown_to_google', 'stale_crawl', 'very_stale_crawl'],
   },
   {
