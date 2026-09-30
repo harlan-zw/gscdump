@@ -396,6 +396,10 @@ gscdump analyze striking-distance --site example.com --json
 - SQL-only Analyzers need Store rows. `--live` runs row-based Analyzers
   against Google.
 - Results name candidates for review. They do not prove why traffic changed.
+- On a traffic collapse, run `gscdump analyze trajectory --site example.com --json` first. It reads the whole
+  record, 486 days by default. Quote `classification._tag`, such as `launch-honeymoon-then-cliff` or `sudden-drop`,
+  with its dates, and quote `basis`. `basis._tag` is `clicks` when impressions cannot carry the read, for example
+  when the peak falls in the period Search Console over-counted impressions, which ended 2026-04-27.
 
 ## Inspect and index
 
@@ -457,8 +461,11 @@ Rules for every answer:
   They are also not the Search Console Page indexing report. The two can differ a lot, and the Page indexing report can list many more URLs.
 - A verdict can be months older than its capture. Unchanged URLs are rechecked less often over time. Say when most verdicts are old.
 - A move between rungs shows in the trend. Compare two `counted` days and name the dates.
-- If `unknown_to_google` URLs are already in a sitemap, Google read the sitemap or can read it, and did not take the URLs.
-  Do not tell the owner to add them to the sitemap. Check membership with `gscdump sitemaps membership`.
+- `capture.scope` says which URLs the counts cover. `sitemap_urls` means every counted URL is in a live sitemap.
+  `inspected_urls` means sitemap membership was not available, so the counts can include URLs outside every sitemap.
+- If `unknown_to_google` URLs are already in a sitemap, the sitemap is not the gap. Do not tell the owner to add them to it.
+  Read the sitemap's last download with `gscdump sitemaps current --site SITE --json`. If Google downloaded it, say that Google read the sitemap and did not take the URLs.
+  Check one URL's membership with `gscdump sitemaps membership`.
 - Name no cause beyond what the evidence shows.
 - Cite the command behind each number.
 
