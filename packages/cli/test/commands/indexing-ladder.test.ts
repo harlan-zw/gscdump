@@ -54,7 +54,7 @@ const summary = {
     _tag: 'captured',
     capturedAt: '2026-09-29T02:00:00.000Z',
     source: 'snapshot',
-    scope: 'sitemap_urls',
+    scope: 'sitemap_members',
     oldestVerdictAt: '2026-08-20T03:00:00.000Z',
     newestVerdictAt: '2026-09-29T01:00:00.000Z',
     freshness,

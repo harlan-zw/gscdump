@@ -29,7 +29,7 @@ function captureLines(capture: Capture | undefined): string[] {
   if (capture._tag === 'empty')
     return ['No URL Inspection verdicts are stored for this Site.']
   const scope = {
-    sitemap_urls: 'URLs in the Site\'s live sitemaps',
+    sitemap_members: 'URLs in the Site\'s live sitemaps',
     inspected_urls: 'every inspected URL, because sitemap membership was not available',
     unrecorded: 'an unrecorded scope',
   }[capture.scope]

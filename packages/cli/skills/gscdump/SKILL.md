@@ -461,7 +461,7 @@ Rules for every answer:
   They are also not the Search Console Page indexing report. The two can differ a lot, and the Page indexing report can list many more URLs.
 - A verdict can be months older than its capture. Unchanged URLs are rechecked less often over time. Say when most verdicts are old.
 - A move between rungs shows in the trend. Compare two `counted` days and name the dates.
-- `capture.scope` says which URLs the counts cover. `sitemap_urls` means every counted URL is in a live sitemap.
+- `capture.scope` says which URLs the counts cover. `sitemap_members` means every counted URL is in a live sitemap.
   `inspected_urls` means sitemap membership was not available, so the counts can include URLs outside every sitemap.
 - If `unknown_to_google` URLs are already in a sitemap, the sitemap is not the gap. Do not tell the owner to add them to it.
   Read the sitemap's last download with `gscdump sitemaps current --site SITE --json`. If Google downloaded it, say that Google read the sitemap and did not take the URLs.

@@ -90,7 +90,7 @@ export type VerdictFreshness = z.infer<typeof verdictFreshnessSchema>
  *
  * - `captured`: `capturedAt` is when gscdump computed the counts. `source` is
  *   `snapshot` for the stored daily summary or `live` for a count made during
- *   this request. `scope` is `sitemap_urls` when the counts cover only URLs in
+ *   this request. `scope` is `sitemap_members` when the counts cover only URLs in
  *   the Site's live sitemaps, `inspected_urls` when sitemap membership was not
  *   available and the counts cover every inspected URL, and `unrecorded` for a
  *   summary stored before gscdump recorded its scope. `oldestVerdictAt` and
@@ -102,7 +102,7 @@ export const indexingCaptureSchema = z.discriminatedUnion('_tag', [
     _tag: z.literal('captured'),
     capturedAt: z.string(),
     source: z.enum(['snapshot', 'live']),
-    scope: z.enum(['sitemap_urls', 'inspected_urls', 'unrecorded']),
+    scope: z.enum(['sitemap_members', 'inspected_urls', 'unrecorded']),
     oldestVerdictAt: z.string().nullable(),
     newestVerdictAt: z.string().nullable(),
     freshness: verdictFreshnessSchema,

@@ -9329,7 +9329,7 @@
                                 },
                                 "scope": {
                                   "enum": [
-                                    "sitemap_urls",
+                                    "sitemap_members",
                                     "inspected_urls",
                                     "unrecorded"
                                   ],
@@ -11605,7 +11605,7 @@
                                 },
                                 "scope": {
                                   "enum": [
-                                    "sitemap_urls",
+                                    "sitemap_members",
                                     "inspected_urls",
                                     "unrecorded"
                                   ],
