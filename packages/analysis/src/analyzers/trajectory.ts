@@ -8,8 +8,11 @@
  *
  * `analyzeTrajectory` is pure. The `trajectory` Analyzer feeds it from the
  * `dates` table. The caller decides how far back to read; pass the full record.
- * The last date in the input is the end of the latest window, so the caller
- * must not pass days Search Console has not finalized.
+ *
+ * The caller also says which days are known (`TrajectoryRecord.knownThrough`).
+ * Days with no traffic have no row, so a known day without a row is zero
+ * traffic. That is how a Site that lost all visibility reads as a drop. Days
+ * after `knownThrough` are unknown, not zero, and the analyzer never reads them.
  */
 
 import type { AnalysisParams } from '@gscdump/engine/analysis-types'
@@ -63,8 +66,8 @@ export const METRIC_DISAGREEMENT = 0.25
 export const CLIFF_FRACTION = 0.15
 
 /**
- * A cliff lasts at most 21 days from the end of the peak window to the end of
- * the drop. That is "roughly two weeks" plus up to one window of smear from
+ * A cliff lasts at most 21 days from the last window within `DECLINE_RATIO`
+ * of the peak to the end of the drop. That is "roughly two weeks" plus up to one window of smear from
  * the 7-day rolling sum.
  */
 export const CLIFF_MAX_DAYS = 21
@@ -93,6 +96,23 @@ export const NEAR_PEAK_RATIO = 0.9
 /** Latest at 70% of peak or worse, without a cliff, is a gradual decline. */
 export const DECLINE_RATIO = 0.7
 
+/**
+ * A day counts at most this many times the median of the 15 days around it.
+ * One outlier day then cannot set the peak, while a launch that holds for
+ * about a week still counts in full. The median needs 8 of 15 days to be
+ * high, so a burst shorter than that is treated as an outlier.
+ */
+export const OUTLIER_DAY_MULTIPLE = 3
+
+/** The outlier median reads this many days each side of a day: 7 + 1 + 7 = 15. */
+export const OUTLIER_MEDIAN_RADIUS_DAYS = 7
+
+/**
+ * A day is never capped below this many clicks or impressions. Without a
+ * floor, a sparse site with a median of zero would cap every day to zero.
+ */
+export const OUTLIER_DAY_FLOOR = 3
+
 /** Growth compares the latest week with the week 8 weeks earlier. */
 export const GROWTH_LOOKBACK_DAYS = 56
 
@@ -106,6 +126,25 @@ export interface TrajectoryDay {
   date: string
   clicks: number
   impressions: number
+}
+
+/**
+ * The input of `analyzeTrajectory`: which days are known, and what they held.
+ */
+export interface TrajectoryRecord {
+  /**
+   * Days that had traffic. A day between the first row and `knownThrough`
+   * with no row is known, and had no traffic.
+   */
+  days: readonly TrajectoryDay[]
+  /**
+   * `YYYY-MM-DD`. The last day whose data is known: the last synced day, or
+   * the requested end when the whole range was fetched. The latest week ends
+   * here. Days after it are unknown, so they are never read as zero. A date
+   * earlier than the last row is ignored, and an invalid one falls back to
+   * the last row with a caveat.
+   */
+  knownThrough: string
 }
 
 export interface TrajectoryWindow {
@@ -134,6 +173,7 @@ export type TrajectoryCaveat
     note: string
   }
   | { _tag: 'skipped-rows', count: number, note: string }
+  | { _tag: 'invalid-known-through', value: string, note: string }
 
 export type TrajectoryClassification
   = | { _tag: 'insufficient-data', reason: 'too-few-days' | 'no-traffic', days: number }
@@ -153,13 +193,19 @@ export interface TrajectoryResult {
   recordStartDate: string | null
   /** First day with any clicks or impressions. */
   firstDataDate: string | null
+  /** The end of the known range: `knownThrough`, or the last row when that is later. */
   lastDataDate: string | null
-  /** Days from the record start to the last date, gaps included. */
+  /** Days from the record start to the end of the known range, gaps included. */
   days: number
   basis: TrajectoryBasis
   peak: TrajectoryWindow | null
   latest: TrajectoryWindow | null
-  /** Latest 7-day total over peak 7-day total, on the basis metric. Null when the record is too thin. */
+  /**
+   * Latest 7-day total over peak 7-day total, on the basis metric. One
+   * outlier day is capped first (`OUTLIER_DAY_MULTIPLE`), so `peak` and
+   * `latest` hold raw totals and this ratio can differ from their quotient.
+   * Null when the record is too thin.
+   */
   latestToPeakRatio: number | null
   /** Whole weeks from the end of the peak window to the last date. */
   weeksSincePeak: number | null
@@ -189,8 +235,12 @@ function dateAt(startMs: number, index: number): string {
   return toIsoDate(new Date(startMs + index * MS_PER_DAY))
 }
 
-/** Sum duplicate dates and fill gaps with zero, so a missing day reads as no traffic. */
-function fillSeries(days: readonly TrajectoryDay[]): FilledSeries | null {
+/**
+ * Sum duplicate dates and fill gaps with zero, so a missing day reads as no
+ * traffic. The series runs from the first row to `endMs` when that is later
+ * than the last row. It never starts before the first row.
+ */
+function fillSeries(days: readonly TrajectoryDay[], endMs: number | null): FilledSeries | null {
   const byMs = new Map<number, { clicks: number, impressions: number }>()
   let skipped = 0
   for (const day of days) {
@@ -208,7 +258,7 @@ function fillSeries(days: readonly TrajectoryDay[]): FilledSeries | null {
     return null
   const keys = [...byMs.keys()]
   const first = Math.min(...keys)
-  const last = Math.max(...keys)
+  const last = Math.max(...keys, endMs ?? Number.NEGATIVE_INFINITY)
   const length = Math.round((last - first) / MS_PER_DAY) + 1
   const clicks = Array.from<number>({ length }).fill(0)
   const impressions = Array.from<number>({ length }).fill(0)
@@ -232,6 +282,24 @@ function rollingSums(series: readonly number[]): number[] {
       out[i] = sum
   }
   return out
+}
+
+function median(values: number[]): number {
+  values.sort((a, b) => a - b)
+  const mid = values.length >> 1
+  return values.length % 2 ? values[mid]! : (values[mid - 1]! + values[mid]!) / 2
+}
+
+/**
+ * Cap each day at `OUTLIER_DAY_MULTIPLE` times the median of the days around
+ * it (never under `OUTLIER_DAY_FLOOR`). The peak reads this series, so a single
+ * viral day cannot make a steady Site look like it collapsed.
+ */
+function capOutlierDays(series: readonly number[]): number[] {
+  return series.map((value, i) => {
+    const around = series.slice(Math.max(0, i - OUTLIER_MEDIAN_RADIUS_DAYS), i + OUTLIER_MEDIAN_RADIUS_DAYS + 1)
+    return Math.min(value, Math.max(OUTLIER_DAY_MULTIPLE * median(around), OUTLIER_DAY_FLOOR))
+  })
 }
 
 /** Index of the largest window. A plateau resolves to its last window, so a drop measures from the plateau's end. */
@@ -263,7 +331,12 @@ function overlapsOvercount(startDate: string, endDate: string): boolean {
   return startDate <= IMPRESSIONS_OVERCOUNT_THROUGH && endDate >= IMPRESSIONS_OVERCOUNT_FROM
 }
 
-const EMPTY_BASIS: TrajectoryBasis = { _tag: 'impressions', note: 'Impressions are the default basis. No record to read.' }
+function emptyBasis(classification: TrajectoryClassification): TrajectoryBasis {
+  const reason = classification._tag === 'insufficient-data' && classification.reason === 'no-traffic'
+    ? `The peak week holds under ${MIN_PEAK_WEEK_CLICKS} clicks and under ${MIN_PEAK_WEEK_IMPRESSIONS} impressions.`
+    : `The record is under ${MIN_RECORD_DAYS} days.`
+  return { _tag: 'impressions', note: `Impressions are the default basis. No basis carries a read. ${reason}` }
+}
 
 function emptyResult(
   filled: FilledSeries | null,
@@ -278,7 +351,7 @@ function emptyResult(
     firstDataDate: firstTraffic >= 0 ? dateAt(startMs, firstTraffic) : null,
     lastDataDate: filled ? dateAt(startMs, days - 1) : null,
     days,
-    basis: EMPTY_BASIS,
+    basis: emptyBasis(classification),
     peak: null,
     latest: null,
     latestToPeakRatio: null,
@@ -288,6 +361,7 @@ function emptyResult(
   }
 }
 
+/** Choose the basis from the outlier-capped rolling sums `rc` and `ri`. */
 function chooseBasis(
   rc: readonly number[],
   ri: readonly number[],
@@ -353,7 +427,17 @@ function classify(
       break
     }
   }
-  if (dropIdx !== -1 && dropIdx - peakIdx <= CLIFF_MAX_DAYS) {
+  // The drop starts where the Site was last within DECLINE_RATIO of the peak,
+  // not at the single highest window. A noisy plateau or a capped outlier day
+  // can put the peak weeks before the cliff.
+  let cliffStartIdx = peakIdx
+  for (let j = dropIdx - 1; j > peakIdx; j--) {
+    if (rolling[j]! >= DECLINE_RATIO * peak) {
+      cliffStartIdx = j
+      break
+    }
+  }
+  if (dropIdx !== -1 && dropIdx - cliffStartIdx <= CLIFF_MAX_DAYS) {
     let staysLow = true
     for (let k = dropIdx; k <= lastIdx; k++) {
       if (rolling[k]! > STAYS_LOW_FRACTION * peak) {
@@ -362,7 +446,7 @@ function classify(
       }
     }
     if (staysLow) {
-      const dropDays = dropIdx - peakIdx
+      const dropDays = dropIdx - cliffStartIdx
       const climbDays = peakIdx - firstTrafficIdx
       const firstWeekIdx = firstTrafficIdx + TRAJECTORY_WINDOW_DAYS - 1
       const startsNearZero = firstWeekIdx < peakIdx && rolling[firstWeekIdx]! <= LAUNCH_START_FRACTION * peak
@@ -385,12 +469,18 @@ function classify(
 /**
  * Name the shape of a Site's full daily record.
  *
- * Pass every preserved day. Missing days count as zero. Rows with a date that
- * is not `YYYY-MM-DD` are skipped and counted in `caveats`.
+ * Pass every preserved day and the last known day. Days between the first row
+ * and `knownThrough` with no row count as zero. Days after `knownThrough` are
+ * never read. Rows with a date that is not `YYYY-MM-DD` are skipped and counted
+ * in `caveats`.
  */
-export function analyzeTrajectory(days: readonly TrajectoryDay[]): TrajectoryResult {
-  const filled = fillSeries(days)
+export function analyzeTrajectory(record: TrajectoryRecord): TrajectoryResult {
+  const { days } = record
+  const knownMs = parseDay(record.knownThrough)
+  const filled = fillSeries(days, knownMs)
   const caveats: TrajectoryCaveat[] = []
+  if (knownMs === null)
+    caveats.push({ _tag: 'invalid-known-through', value: record.knownThrough, note: `"${record.knownThrough}" is not a YYYY-MM-DD date. The latest week ends at the last row.` })
   const skippedCount = filled ? filled.skipped : days.length
   if (skippedCount > 0)
     caveats.push({ _tag: 'skipped-rows', count: skippedCount, note: `${skippedCount} rows had no valid YYYY-MM-DD date and were skipped.` })
@@ -405,7 +495,10 @@ export function analyzeTrajectory(days: readonly TrajectoryDay[]): TrajectoryRes
   const rc = rollingSums(filled.clicks)
   const ri = rollingSums(filled.impressions)
 
-  const chosen = chooseBasis(rc, ri, startMs)
+  const cc = rollingSums(capOutlierDays(filled.clicks))
+  const ci = rollingSums(capOutlierDays(filled.impressions))
+
+  const chosen = chooseBasis(cc, ci, startMs)
   if (!chosen)
     return emptyResult(filled, { _tag: 'insufficient-data', reason: 'no-traffic', days: length }, caveats)
 
@@ -420,7 +513,7 @@ export function analyzeTrajectory(days: readonly TrajectoryDay[]): TrajectoryRes
     })
   }
 
-  const rolling = chosen.basis._tag === 'clicks' ? rc : ri
+  const rolling = chosen.basis._tag === 'clicks' ? cc : ci
   const peakIdx = peakIndex(rolling)
   const firstTrafficIdx = filled.clicks.findIndex((c, i) => c > 0 || filled.impressions[i]! > 0)
   const lastIdx = length - 1
@@ -482,7 +575,10 @@ export const trajectoryAnalyzer = defineAnalyzer<AnalysisParams, Row, Trajectory
   reduceSql(rows, params) {
     const arr = Array.isArray(rows) ? rows : []
     const { startDate, endDate } = trajectoryWindow(params)
-    const result = analyzeTrajectory(arr.map(r => ({ date: str(r.date), clicks: num(r.clicks), impressions: num(r.impressions) })))
+    const result = analyzeTrajectory({
+      days: arr.map(r => ({ date: str(r.date), clicks: num(r.clicks), impressions: num(r.impressions) })),
+      knownThrough: endDate,
+    })
     return { results: [result], meta: { total: 1, startDate, endDate } }
   },
 
@@ -495,7 +591,10 @@ export const trajectoryAnalyzer = defineAnalyzer<AnalysisParams, Row, Trajectory
   reduceRows(rows, params) {
     const dates = (Array.isArray(rows) ? rows : []) as unknown as DateRow[]
     const { startDate, endDate } = trajectoryWindow(params)
-    const result = analyzeTrajectory(dates.map(r => ({ date: r.date, clicks: r.clicks, impressions: r.impressions })))
+    const result = analyzeTrajectory({
+      days: dates.map(r => ({ date: r.date, clicks: r.clicks, impressions: r.impressions })),
+      knownThrough: endDate,
+    })
     return { results: [result], meta: { total: 1, startDate, endDate } }
   },
 })

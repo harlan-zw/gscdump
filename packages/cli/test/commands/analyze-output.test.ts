@@ -114,6 +114,18 @@ describe('analyzer human output', () => {
     expect(text).toContain('! Search Console over-counted impressions.')
   })
 
+  it('rejects an invalid trajectory --end', async () => {
+    await expect(output('trajectory', ['--end', 'yesterday'])).rejects.toThrow('Invalid --end')
+    await expect(output('trajectory', ['--end', '2026-13-45'])).rejects.toThrow('Invalid --end')
+  })
+
+  it('prints nested analyzer fields as JSON in CSV output', async () => {
+    boundary.result = { results: [{ classification: { _tag: 'steady' }, days: 90 }], meta: {} }
+    const text = await output('trajectory', ['--format', 'csv'])
+    expect(text).not.toContain('[object Object]')
+    expect(text).toContain('"{""_tag"":""steady""}",90')
+  })
+
   it('shows a zero baseline as data without a percentage claim', async () => {
     Object.defineProperty(process.stdout, 'columns', { configurable: true, value: 40 })
     boundary.result = { results: [{ keyword: 'example', recentClicks: 100, baselineClicks: 0, clicksChange: 100, clicksChangePercent: 100 }], meta: {} }

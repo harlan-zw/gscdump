@@ -90,6 +90,8 @@ function withWindow(tool: AnalysisTool, params: AnalysisParams, args: Record<str
   // The trajectory reads the whole record by default, not the 28 day window.
   if (tool === 'trajectory' && !optional('period') && !optional('start')) {
     const endDate = optional('end') ?? anchor
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(endDate) || Number.isNaN(Date.parse(`${endDate}T00:00:00Z`)))
+      throw new Error(`Invalid --end "${endDate}". Use YYYY-MM-DD.`)
     const start = new Date(Date.parse(`${endDate}T00:00:00Z`) - (TRAJECTORY_DEFAULT_DAYS - 1) * 86_400_000)
     return { ...params, startDate: start.toISOString().slice(0, 10), endDate }
   }
