@@ -98,6 +98,22 @@ describe('analyzer human output', () => {
     expect(text).toContain('* partial month')
   })
 
+  it('prints the trajectory shape, the basis, and the impressions caveat', async () => {
+    boundary.result = { results: [{
+      firstDataDate: '2026-04-15',
+      peak: { startDate: '2026-04-23', endDate: '2026-04-29', clicks: 130, impressions: 29455 },
+      latest: { startDate: '2026-09-20', endDate: '2026-09-26', clicks: 0, impressions: 3 },
+      latestToPeakRatio: 0,
+      basis: { _tag: 'clicks', reason: 'impressions-overcount-window', note: 'Clicks carry this read.' },
+      classification: { _tag: 'launch-honeymoon-then-cliff', climbDays: 13, dropDays: 12 },
+      caveats: [{ _tag: 'impressions-overcount', note: 'Search Console over-counted impressions.' }],
+    }], meta: { total: 1 } }
+    const text = await output('trajectory')
+    expect(text).toContain('Shape: launch-honeymoon-then-cliff')
+    expect(text).toContain('Latest to peak (clicks): 0.0%')
+    expect(text).toContain('! Search Console over-counted impressions.')
+  })
+
   it('shows a zero baseline as data without a percentage claim', async () => {
     Object.defineProperty(process.stdout, 'columns', { configurable: true, value: 40 })
     boundary.result = { results: [{ keyword: 'example', recentClicks: 100, baselineClicks: 0, clicksChange: 100, clicksChangePercent: 100 }], meta: {} }

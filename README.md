@@ -22,7 +22,7 @@
 ## Features
 
 - 🤖 **AI assistants:** run Reports through the CLI or MCP and read the results as JSON.
-- 🔍 **29 SEO Analyzers:** find content decay, competing pages, traffic changes, and queries worth targeting.
+- 🔍 **30 SEO Analyzers:** find content decay, competing pages, traffic changes, and queries worth targeting.
 - 📋 **Reports:** eight Reports combine Analyzers to answer questions about your search traffic.
 - 💾 **Own your data:** sync Search Console rows to a local Parquet Store and query them with DuckDB.
 - ⚡ **Indexing and sitemaps:** inspect URLs, send eligible indexing notifications, and manage sitemap submissions.

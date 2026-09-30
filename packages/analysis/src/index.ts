@@ -36,6 +36,15 @@ export type { MonthlyData, SeasonalityMetric, SeasonalityOptions, SeasonalityRes
 export { analyzeSeasonality } from './analyzers/seasonality'
 export type { StrikingDistanceInputRow, StrikingDistanceOptions, StrikingDistanceResult } from './analyzers/striking-distance'
 export { analyzeStrikingDistance } from './analyzers/striking-distance'
+export type {
+  TrajectoryBasis,
+  TrajectoryCaveat,
+  TrajectoryClassification,
+  TrajectoryDay,
+  TrajectoryResult,
+  TrajectoryWindow,
+} from './analyzers/trajectory'
+export { analyzeTrajectory, TRAJECTORY_DEFAULT_DAYS } from './analyzers/trajectory'
 export type { ZeroClickOptions, ZeroClickResult } from './analyzers/zero-click'
 export { analyzeZeroClick } from './analyzers/zero-click'
 export { analyzeInBrowser } from './browser'

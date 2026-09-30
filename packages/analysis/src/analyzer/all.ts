@@ -35,6 +35,7 @@ import { seasonalityAnalyzer } from '../analyzers/seasonality'
 import { stlDecomposeAnalyzer } from '../analyzers/stl-decompose'
 import { strikingDistanceAnalyzer } from '../analyzers/striking-distance'
 import { survivalAnalyzer } from '../analyzers/survival'
+import { trajectoryAnalyzer } from '../analyzers/trajectory'
 import { trendsAnalyzer } from '../analyzers/trends'
 import { zeroClickAnalyzer } from '../analyzers/zero-click'
 
@@ -66,6 +67,7 @@ export const ALL_ANALYZERS: readonly DefinedAnalyzer[] = [
   stlDecomposeAnalyzer,
   strikingDistanceAnalyzer,
   survivalAnalyzer,
+  trajectoryAnalyzer,
   trendsAnalyzer,
   zeroClickAnalyzer,
 ]
