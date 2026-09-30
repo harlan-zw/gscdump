@@ -131,6 +131,7 @@
   DEFAULT_BING_WEBMASTER_API_URL: string
   normalizeBingCrawlIssue: function
   normalizeBingCrawlStats: function
+  normalizeBingFeed: function
   normalizeBingIndexingEvidence: function
   normalizeBingPageStats: function
   normalizeBingQueryStats: function

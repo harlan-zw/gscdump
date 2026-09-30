@@ -72,6 +72,18 @@ export interface BingCrawlIssueWire {
   Url: string
 }
 
+export interface BingFeedWire {
+  __type?: string
+  Compressed: boolean
+  FileSize: number | null
+  LastCrawled: string | null
+  Status: string
+  Submitted: string | null
+  Type: string
+  Url: string
+  UrlCount: number | null
+}
+
 export interface BingWireResponse<T> {
   d: T
 }
@@ -152,6 +164,17 @@ export interface BingCrawlStats {
   inLinks: number
 }
 
+export interface BingFeed {
+  compressed: boolean
+  fileSize: number | null
+  lastCrawledAt: string | null
+  status: string
+  submittedAt: string | null
+  type: string
+  url: string
+  urlCount: number | null
+}
+
 export type BingCrawlIssue
   = | 'none'
     | '301'
@@ -228,6 +251,8 @@ export type BingOperation
     | 'GetRankAndTrafficStats'
     | 'GetCrawlStats'
     | 'GetCrawlIssues'
+    | 'GetFeeds'
+    | 'SubmitFeed'
     | 'VerifySite'
 
 export interface BingCallOptions {
@@ -264,6 +289,8 @@ export interface BingWebmasterClient {
   getRankAndTrafficStats: (siteUrl: string, options?: BingCallOptions) => Promise<Result<BingRankAndTrafficStats[], BingProviderError>>
   getCrawlStats: (siteUrl: string, options?: BingCallOptions) => Promise<Result<BingCrawlStats[], BingProviderError>>
   getCrawlIssues: (siteUrl: string, options?: BingCallOptions) => Promise<Result<BingUrlWithCrawlIssues[], BingProviderError>>
+  getFeeds: (siteUrl: string, options?: BingCallOptions) => Promise<Result<BingFeed[], BingProviderError>>
+  submitFeed: (siteUrl: string, feedUrl: string, options?: BingCallOptions) => Promise<Result<void, BingProviderError>>
   verifySite: (siteUrl: string, options?: BingCallOptions) => Promise<Result<void, BingProviderError>>
 }
 

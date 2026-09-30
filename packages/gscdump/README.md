@@ -134,7 +134,7 @@ sitemap membership is available through `@gscdump/sdk/v1`.
 - `gscdump/sitemap-identity`: sitemap scope and membership hashing
 - `gscdump/query`: query builder, columns, operators, Pacific date helpers, and logical query plans
 - `gscdump/query/plan`: logical query planning only
-- `gscdump/bing`: Bing Site, URL, traffic, and crawl evidence calls
+- `gscdump/bing`: Bing Site, URL, traffic, crawl evidence, and sitemap calls
 - `gscdump/dates`: explicit UTC and Pacific Search Console date helpers
 - `gscdump/contracts`: Search Analytics request and response contracts
 - `gscdump/result`: `Result` helpers
