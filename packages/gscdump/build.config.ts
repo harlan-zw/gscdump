@@ -9,6 +9,7 @@ export default defineBuildConfig({
         './src/bing/index.ts',
         './src/client.ts',
         './src/indexing.ts',
+        './src/indexnow.ts',
         './src/query/index.ts',
         './src/query/plan.ts',
         './src/errors.ts',

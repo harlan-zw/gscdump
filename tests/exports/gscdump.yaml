@@ -200,6 +200,8 @@
   requestIndexing: function
   runSequentialBatch: function
   URL_INSPECTION_QUOTA: object
+./indexnow:
+  indexNow: function
 ./normalize:
   normalizeUrl: function
 ./query:
