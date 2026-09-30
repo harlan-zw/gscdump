@@ -252,7 +252,7 @@ export const indexingDiagnosticsSchema = z.object({
   }).loose(),
   issues: z.array(indexingIssueSchema),
   samples: z.record(z.string(), z.array(indexingUrlRowSchema)).optional(),
-  // Optional only so a client can still read a host older than 4.4.0.
+  // Optional only so a client can still read a host deployed before this field.
   capture: indexingCaptureSchema.optional(),
   meta: z.object({ siteUrl: z.string() }).loose(),
 }).loose()
@@ -895,7 +895,7 @@ export const gscdumpIndexingResponseSchema = z.object({
       discoveredNotCrawled: z.number().nullable(),
     }).loose(),
     // One URL count per coverage state for this day. Optional only so a client
-    // can still read a host older than 4.4.0.
+    // can still read a host deployed before this field.
     coverageStates: coverageStatesPointSchema.optional(),
     signals: z.object({
       mobilePass: z.number(),
@@ -937,7 +937,7 @@ export const gscdumpIndexingResponseSchema = z.object({
     rollupBuiltAt: z.number().optional(),
   }).loose(),
   // When gscdump counted the verdicts in `summary`, and how old they are.
-  // Optional only so a client can still read a host older than 4.4.0.
+  // Optional only so a client can still read a host deployed before this field.
   capture: indexingCaptureSchema.optional(),
 }).loose()
 
@@ -964,7 +964,7 @@ export const gscdumpIndexingDiagnosticsResponseSchema = z.object({
   }).loose(),
   issues: z.array(indexingIssueSchema),
   samples: z.record(z.string(), z.array(indexingUrlRowSchema)).optional(),
-  // Optional only so a client can still read a host older than 4.4.0.
+  // Optional only so a client can still read a host deployed before this field.
   capture: indexingCaptureSchema.optional(),
   meta: z.object({ siteUrl: z.string() }).loose(),
 }).loose()

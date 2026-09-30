@@ -784,7 +784,7 @@ export interface GscdumpIndexingTrendPoint {
     crawledNotIndexed: number | null
     discoveredNotCrawled: number | null
   }
-  /** Optional only so a client can still read a host older than 4.4.0. */
+  /** Optional only so a client can still read a host deployed before this field. */
   coverageStates?: CoverageStatesPoint
   signals: {
     mobilePass: number
@@ -828,7 +828,7 @@ export interface GscdumpIndexingResponse {
     sitemapsPending: boolean
     rollupBuiltAt?: number
   }
-  /** Optional only so a client can still read a host older than 4.4.0. */
+  /** Optional only so a client can still read a host deployed before this field. */
   capture?: IndexingCapture
 }
 
@@ -883,7 +883,7 @@ export interface GscdumpIndexingDiagnosticsResponse {
     fix: string
   }>
   samples?: Record<string, GscdumpIndexingUrl[]>
-  /** Optional only so a client can still read a host older than 4.4.0. */
+  /** Optional only so a client can still read a host deployed before this field. */
   capture?: IndexingCapture
   meta: {
     siteUrl: string

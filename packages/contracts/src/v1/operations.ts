@@ -1734,7 +1734,7 @@ export function createGscdumpV1Protocol() {
         errors: partnerSiteErrors,
         errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
         resources: { reads: [{ type: 'site.indexing', idFrom: 'params.siteId' }], changes: [] },
-        lifecycle: { introduced: '4.4.0' },
+        lifecycle: { introduced: '4.5.0' },
         docs: {
           summary: 'List Watched URLs',
           description: 'Returns the Site\'s Watched URLs. gscdump inspects each one every 7 days, before other scheduled URLs, and never backs off. Each Checkpoint is one scheduled URL Inspection, newest first, with the parsed coverage state and Google\'s coverage text.',
@@ -1789,7 +1789,7 @@ export function createGscdumpV1Protocol() {
           reads: [{ type: 'site.indexing', idFrom: 'params.siteId' }],
           changes: [{ type: 'site.indexing', idFrom: 'params.siteId' }],
         },
-        lifecycle: { introduced: '4.4.0' },
+        lifecycle: { introduced: '4.5.0' },
         docs: {
           summary: 'Add Watched URLs',
           description: 'Adds URLs on the Site host to the Site\'s Watched URLs, up to 50 per Site. A new Watched URL is due for inspection at once. Each scheduled inspection spends the Site\'s daily URL Inspection budget and the URL Inspections meter. URLs off the Site host, fragment URLs, and URLs past the limit come back in `skipped`.',
@@ -1828,7 +1828,7 @@ export function createGscdumpV1Protocol() {
           reads: [{ type: 'site.indexing', idFrom: 'params.siteId' }],
           changes: [{ type: 'site.indexing', idFrom: 'params.siteId' }],
         },
-        lifecycle: { introduced: '4.4.0' },
+        lifecycle: { introduced: '4.5.0' },
         docs: {
           summary: 'Remove Watched URLs',
           description: 'Removes URLs from the Site\'s Watched URLs and deletes their Checkpoints. The stored URL Inspection results stay. URLs that were not watched come back in `unchanged`.',

@@ -13788,7 +13788,7 @@
           }
         },
         "x-gscdump-lifecycle": {
-          "introduced": "4.4.0"
+          "introduced": "4.5.0"
         },
         "x-gscdump-ownership": [
           {
@@ -14050,7 +14050,7 @@
           }
         },
         "x-gscdump-lifecycle": {
-          "introduced": "4.4.0"
+          "introduced": "4.5.0"
         },
         "x-gscdump-ownership": [
           {
@@ -14319,7 +14319,7 @@
           }
         },
         "x-gscdump-lifecycle": {
-          "introduced": "4.4.0"
+          "introduced": "4.5.0"
         },
         "x-gscdump-ownership": [
           {
