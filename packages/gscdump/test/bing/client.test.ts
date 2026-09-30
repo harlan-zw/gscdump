@@ -700,6 +700,27 @@ describe('bingWebmaster', () => {
     }] })
   })
 
+  it('reads the 1601 date Bing sends for a sitemap it never crawled as no value', async () => {
+    // The .NET FILETIME epoch. Bing sends it on LastCrawled and Submitted for
+    // a sitemap it has not processed, not the year-one value GetUrlInfo uses.
+    const fetch = queuedFetch(json({ d: [{
+      __type: 'Feed:#Microsoft.Bing.Webmaster.Api',
+      Compressed: false,
+      FileSize: 0,
+      LastCrawled: '/Date(-11644473600000)/',
+      Status: 'Pending',
+      Submitted: '/Date(-11644473600000+0000)/',
+      Type: 'Sitemap',
+      Url: 'https://nuxtseo.com/sitemap.xml',
+      UrlCount: 0,
+    }] }))
+    const client = bingWebmaster({ accessToken: 'access-token', clock, fetch })
+
+    const result = await client.getFeeds('https://nuxtseo.com/')
+
+    expect(result).toMatchObject({ ok: true, value: [{ lastCrawledAt: null, submittedAt: null }] })
+  })
+
   it('lists sitemap feeds with normalized dates and missing values', async () => {
     const fetch = queuedFetch(json({ d: [
       {

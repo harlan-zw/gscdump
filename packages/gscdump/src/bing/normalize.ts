@@ -15,7 +15,11 @@ import type {
 } from './types'
 import { err, ok } from '../core/result'
 
-const BING_UNAVAILABLE_DATE_MS = -62_135_568_000_000
+// Bing writes "no date" as a .NET minimum rather than null. GetUrlInfo uses
+// year one (-62_135_568_000_000). GetFeeds uses the 1601 FILETIME epoch for a
+// sitemap it has not crawled or processed yet. No real crawl predates 1601, so
+// anything at or before it reads as no value.
+const BING_UNAVAILABLE_DATE_MS = -11_644_473_600_000
 const BING_DATE_PATTERN = /^\/Date\((-?\d+)(?:[+-]\d{4})?\)\/$/
 
 function isRecord(value: unknown): value is Record<string, unknown> {
