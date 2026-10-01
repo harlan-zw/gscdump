@@ -27,15 +27,26 @@ function shouldShowSplash(rawArgs: string[]): boolean {
   return true
 }
 
+/** The value of `--format` or `-f` in any spelling, or undefined. */
+function formatFlag(rawArgs: readonly string[]): string | undefined {
+  for (const [index, arg] of rawArgs.entries()) {
+    if (arg === '--format' || arg === '-f')
+      return rawArgs[index + 1]
+    const inline = /^(?:--format=|-f=?)(.+)$/.exec(arg)
+    if (inline)
+      return inline[1]
+  }
+  return undefined
+}
+
 /**
- * The command line asks for JSON output with `--json` or `--format json`. The
- * command sets the final mode when it runs. This covers failures before that.
+ * The command line asks for JSON output: `--json`, `--format json`, or `query`
+ * with no `--format`, since JSON is its default. The command sets the final
+ * mode when it runs. This covers failures before that.
  */
 export function asksForJson(rawArgs: readonly string[]): boolean {
-  return rawArgs.some((arg, index) => arg === '--json'
-    || arg === '--format=json'
-    || arg === '-f=json'
-    || ((arg === '--format' || arg === '-f') && rawArgs[index + 1] === 'json'))
+  const format = formatFlag(rawArgs)
+  return rawArgs.includes('--json') || format === 'json' || (rawArgs[0] === 'query' && format === undefined)
 }
 
 // Top-level args are scoped to subcommands in citty, so we hoist a few global
@@ -43,7 +54,10 @@ export function asksForJson(rawArgs: readonly string[]): boolean {
 // stripping them before citty parses. Env vars provide the same controls.
 function prepareCliArgs(input: readonly string[]): string[] {
   const rawArgs = [...input]
-  useCliRuntime().authModeOverride = parseAuthMode(pluckArgValue(rawArgs, '--mode') ?? undefined)
+  const mode = pluckArgValue(rawArgs, '--mode')
+  if (mode !== null && mode !== 'local' && mode !== 'hosted')
+    throw commandLineError('Access mode must be local or hosted.')
+  useCliRuntime().authModeOverride = parseAuthMode(mode ?? undefined)
   const env = resolveCliEnvironment()
   setNoColor(!terminalOutputOptions().color)
 
@@ -81,7 +95,7 @@ function pluckArgValue(argv: string[], flag: string, allowQueryTiming = false): 
       continue
     }
     if (!next || (!inline && next.startsWith('-')))
-      throw new Error(`${flag} requires a value. Use ${flag}=VALUE.`)
+      throw commandLineError(`${flag} requires a value. Use ${flag}=VALUE.`)
     value = next
     argv.splice(i, inline ? 1 : 2)
     i--
@@ -170,9 +184,10 @@ export async function runCli(opts: RunCliOptions = {}): Promise<number> {
     runtime.jsonOutput = false
     const stdout = watchStdout()
     try {
+      // A failure before the command runs prints JSON when the command line asks for it.
+      runtime.jsonOutput = asksForJson(input)
       rawArgs = prepareCliArgs(input)
       runtime.rawArgs = [...rawArgs]
-      // A failure before the command runs prints JSON when the command line asks for it.
       runtime.jsonOutput = asksForJson(rawArgs)
       const argumentError = await checkCliArgs(main, rawArgs)
       if (argumentError)

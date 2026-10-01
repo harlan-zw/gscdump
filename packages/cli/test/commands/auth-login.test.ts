@@ -78,7 +78,7 @@ describe('forced auth login', () => {
       await fetch(callback).then(response => response.text())
     }
 
-    expect(await result).toEqual(new Error('process.exit(1)'))
+    expect(await result).toMatchObject({ message: expect.stringMatching(/^Login failed: /) })
     expect(await runWithCliRuntime(runtime, loadTokens)).toEqual(previousTokens)
   })
 

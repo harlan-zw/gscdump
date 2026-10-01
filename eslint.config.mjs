@@ -163,6 +163,12 @@ export default antfu({
         ...preferGranularCoreSubpaths.patterns,
       ],
     }],
+    // A failure must reach the shell, which prints `{ error }` under JSON output.
+    // `process.exit(1)` skips it, so an agent reading stdout gets nothing.
+    'no-restricted-syntax': ['error', {
+      selector: 'CallExpression[callee.object.name="process"][callee.property.name="exit"][arguments.0.value=1]',
+      message: 'Throw instead: commandLineError() for a bad command line, a stop for a known condition, or an Error. Exit 1 directly only after the command printed its result.',
+    }],
   },
 }, {
   files: ['packages/*/test/**/*.ts'],

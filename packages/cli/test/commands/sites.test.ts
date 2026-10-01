@@ -285,18 +285,12 @@ describe('sites verify-token', () => {
 
   it('rejects invalid method/site combinations', async () => {
     const cmd = sitesCommand.subCommands!['verify-token']
-    const exit = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
-      throw new Error(`__exit_${code}__`)
-    }) as never)
 
     await expect(cmd.run!({
       args: { url: 'sc-domain:example.com', method: 'META', json: true, quiet: false },
       rawArgs: [],
       cmd,
-    } as any)).rejects.toThrow('__exit_1__')
-
-    expect(exit).toHaveBeenCalledWith(1)
-    exit.mockRestore()
+    } as any)).rejects.toMatchObject({ stopDetails: { code: 'USAGE', message: expect.stringContaining('Method META not valid for domain property') } })
   })
 
   it('emits placement instructions for META', async () => {

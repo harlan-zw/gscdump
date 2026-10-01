@@ -7,6 +7,7 @@ import { profileCommandMeta } from '../command-meta'
 import { getConfigDir, setConfigDir } from '../config'
 import { resolveCliEnvironment } from '../environment'
 import { useCliRuntime } from '../runtime'
+import { commandLineError } from '../stop'
 import { applyOutputMode, displayPath, logger, OUTPUT_ARGS } from '../utils'
 import { ACTIVE_MARKER, getProfileDir, PROFILES_DIR, readActiveMarkerSync, ROOT_DIR } from './profile-selection'
 
@@ -109,10 +110,8 @@ const pathCmd = defineCommand({
   },
   async run({ args }) {
     const name = args.name ? String(args.name) : resolveActiveProfile()
-    if (!name) {
-      logger.error('No profile specified and none active (set --profile, GSCDUMP_PROFILE, or run `gscdump profile use <name>`)')
-      process.exit(1)
-    }
+    if (!name)
+      throw commandLineError('No profile specified and none active (set --profile, GSCDUMP_PROFILE, or run `gscdump profile use <name>`)')
     console.log(getProfileDir(name))
   },
 })
@@ -125,6 +124,7 @@ const currentCmd = defineCommand({
   async run() {
     const active = resolveActiveProfile()
     if (!active)
+      // eslint-disable-next-line no-restricted-syntax -- like \`which\`: no output and exit 1 when no profile is active
       process.exit(1)
     console.log(active)
   },
@@ -144,11 +144,8 @@ const useCmd = defineCommand({
     const name = String(args.name)
     const dir = getProfileDir(name)
     const exists = await fsp.stat(dir).then(() => true).catch(() => false)
-    if (!exists) {
-      logger.error(`Profile not found: ${name}`)
-      logger.info(`Create it with: gscdump profile create ${name}`)
-      process.exit(1)
-    }
+    if (!exists)
+      throw new Error(`Profile not found: ${name}. Create it with: gscdump profile create ${name}`)
     await setActiveProfile(name)
     logger.success(`Active profile: ${name}`)
   },
@@ -205,10 +202,8 @@ const deleteCmd = defineCommand({
     const name = String(args.name)
     const dir = getProfileDir(name)
     const exists = await fsp.stat(dir).then(() => true).catch(() => false)
-    if (!exists) {
-      logger.error(`Profile not found: ${name}`)
-      process.exit(1)
-    }
+    if (!exists)
+      throw new Error(`Profile not found: ${name}`)
     if (!args.yes) {
       const ok = await confirm({
         message: `Delete profile "${name}" at ${dir}? Tokens and config will be lost.`,

@@ -91,9 +91,9 @@ export function parseNameList<T extends string>(value: unknown, known: readonly 
   const names = String(value ?? '').split(',').map(name => name.trim()).filter(Boolean)
   const unknown = names.filter(name => !(known as readonly string[]).includes(name))
   if (unknown.length > 0)
-    throw new Error(`Unknown ${flag} name: ${unknown.join(', ')}. Valid names: ${known.join(', ')}.`)
+    throw commandLineError(`Unknown ${flag} name: ${unknown.join(', ')}. Valid names: ${known.join(', ')}.`)
   if (names.length === 0)
-    throw new Error(`${flag} needs at least one name. Valid names: ${known.join(', ')}.`)
+    throw commandLineError(`${flag} needs at least one name. Valid names: ${known.join(', ')}.`)
   return names as T[]
 }
 
@@ -105,7 +105,7 @@ export function parseIntegerOption(value: unknown, flag: string, minimum: 0 | 1 
   const parsed = Number(text)
   if (!/^\d+$/.test(text) || !Number.isSafeInteger(parsed) || parsed < minimum) {
     const requirement = minimum === 0 ? 'a non-negative integer' : 'a positive integer'
-    throw new Error(`${flag} must be ${requirement}.`)
+    throw commandLineError(`${flag} must be ${requirement}.`)
   }
   return parsed
 }
@@ -117,7 +117,7 @@ export function parseIntegerOption(value: unknown, flag: string, minimum: 0 | 1 
 export function parseFetchBudget(value: unknown): number | undefined {
   const budget = parseIntegerOption(value, '--fetch-budget')
   if (budget !== undefined && budget > MAX_FETCH_BUDGET)
-    throw new Error(`--fetch-budget must be at most ${MAX_FETCH_BUDGET}. Larger fetches use up the GSC quota.`)
+    throw commandLineError(`--fetch-budget must be at most ${MAX_FETCH_BUDGET}. Larger fetches use up the GSC quota.`)
   return budget
 }
 

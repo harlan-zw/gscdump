@@ -78,10 +78,8 @@ const showSubCommand = defineCommand({
       { userId: store.userId, siteId: store.siteIdFor(siteUrl) },
       String(args.url),
     )
-    if (!record) {
-      logger.warn(`No inspection record for ${args.url}`)
-      process.exit(1)
-    }
+    if (!record)
+      throw new Error(`No inspection record for ${args.url}`)
     if (json) {
       console.log(JSON.stringify(record, null, 2))
       return
@@ -144,10 +142,8 @@ const indexingSnapshotSubCommand = defineCommand({
     // Claim the siteId before spending quota, so the write below cannot
     // land beside another Site's data unlabelled.
     const claim = await recordStoreSite(store.dataDir, siteUrl, { userId: store.userId })
-    if (!claim.ok) {
-      logger.error(formatSiteIdCollision(claim.error))
-      process.exit(1)
-    }
+    if (!claim.ok)
+      throw new Error(formatSiteIdCollision(claim.error))
 
     const records: IndexingMetadataRecord[] = []
     const failures: Array<{ url: string, error: string }> = []
@@ -200,7 +196,7 @@ const indexingSnapshotSubCommand = defineCommand({
     }
 
     if (failures.length > 0)
-      process.exit(1)
+      throw new Error(`${failures.length} of ${urls.length} URL(s) failed. First: ${failures[0]!.url}: ${failures[0]!.error}`)
   },
 })
 

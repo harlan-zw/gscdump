@@ -1,9 +1,9 @@
-import process from 'node:process'
 import { defineCommand } from 'citty'
 import { batchRequestIndexing, getIndexingMetadata, requestIndexing, runSequentialBatch } from 'gscdump/indexing'
 import { indexingCommandMeta } from '../command-meta'
 import { createCommandContext } from '../context'
 import { loadSitemapUrls } from '../sitemap'
+import { commandLineError } from '../stop'
 import { applyOutputMode, logger, OUTPUT_ARGS, parseIntegerOption, readUrlList } from '../utils'
 import { indexingSummaryCommand } from './indexing-summary'
 import { indexingUrlsCommand } from './indexing-urls'
@@ -17,10 +17,8 @@ async function resolveUrlSource(args: { '_'?: unknown[], 'file'?: unknown, 'from
   const fromSitemap = args['from-sitemap']
   if (fromSitemap) {
     const result = await loadSitemapUrls(String(fromSitemap))
-    if (result._tag === 'error') {
-      logger.error(`Sitemap fetch failed: ${result.message}`)
-      process.exit(1)
-    }
+    if (result._tag === 'error')
+      throw new Error(`Sitemap fetch failed: ${result.message}`)
     if (!result.value.complete)
       logger.warn('Sitemap walk was incomplete; indexing only the URLs that were read')
     return result.value.urls
@@ -165,21 +163,14 @@ const batchCommand = defineCommand({
     const delayMs = parseIntegerOption(args['delay-ms'], '--delay-ms', 0) ?? 100
     const concurrency = parseIntegerOption(args.concurrency, '--concurrency') ?? 1
     const urls = await resolveUrlSource(args)
-    if (urls.length === 0) {
-      logger.error('No URLs provided. Pass URLs as args, --file, --from-sitemap, or stdin.')
-      process.exit(1)
-    }
+    if (urls.length === 0)
+      throw commandLineError('No URLs provided. Pass URLs as args, --file, --from-sitemap, or stdin.')
     const type = String(args.type) as 'URL_UPDATED' | 'URL_DELETED'
-    if (type !== 'URL_UPDATED' && type !== 'URL_DELETED') {
-      logger.error(`Invalid --type: ${type}. Use URL_UPDATED or URL_DELETED.`)
-      process.exit(1)
-    }
+    if (type !== 'URL_UPDATED' && type !== 'URL_DELETED')
+      throw commandLineError(`Invalid --type: ${type}. Use URL_UPDATED or URL_DELETED.`)
 
-    if (urls.length > INDEXING_DAILY_QUOTA && !args.yes && !args.json) {
-      logger.warn(`Submitting ${urls.length} URLs but the Indexing API daily quota is ${INDEXING_DAILY_QUOTA}/day.`)
-      logger.warn(`Excess submissions will fail with quota errors. Pass --yes to proceed anyway.`)
-      process.exit(1)
-    }
+    if (urls.length > INDEXING_DAILY_QUOTA && !args.yes && !args.json)
+      throw commandLineError(`Submitting ${urls.length} URLs but the Indexing API daily quota is ${INDEXING_DAILY_QUOTA}/day. Excess submissions will fail with quota errors. Pass --yes to proceed anyway.`)
     if (urls.length > INDEXING_DAILY_QUOTA && !args.json && !args.quiet)
       logger.warn(`Proceeding with ${urls.length} URLs (over the ${INDEXING_DAILY_QUOTA}/day quota). Excess will fail.`)
 
@@ -226,10 +217,8 @@ const batchStatusCommand = defineCommand({
     const delayMs = parseIntegerOption(args['delay-ms'], '--delay-ms', 0) ?? 100
     const concurrency = parseIntegerOption(args.concurrency, '--concurrency') ?? 1
     const urls = await resolveUrlSource(args)
-    if (urls.length === 0) {
-      logger.error('No URLs provided. Pass URLs as args, --file, --from-sitemap, or stdin.')
-      process.exit(1)
-    }
+    if (urls.length === 0)
+      throw commandLineError('No URLs provided. Pass URLs as args, --file, --from-sitemap, or stdin.')
     const ctx = await createCommandContext({ needsAuth: true, fetchOptions: { retry } })
 
     if (!args.json && !args.quiet)
