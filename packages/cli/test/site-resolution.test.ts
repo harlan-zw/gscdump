@@ -38,7 +38,7 @@ async function cli(...rawArgs: string[]): Promise<CliRun> {
   vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
     throw Object.assign(new Error('exit'), { exitCode: code ?? 0 })
   }) as never)
-  const code = await runCli({ rawArgs, environment: { GSCDUMP_CONFIG_DIR: configDir }, loadEnv: false })
+  const code = await runCli({ rawArgs, environment: { GSCDUMP_CONFIG_DIR: configDir } })
     .catch((error: { exitCode?: number }) => {
       if (error.exitCode === undefined)
         throw error

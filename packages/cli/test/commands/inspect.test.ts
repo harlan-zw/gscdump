@@ -126,7 +126,7 @@ describe('gscdump inspect', () => {
     await fs.rm(configDir, { recursive: true, force: true })
   })
 
-  const cli = (...args: string[]) => runCli({ rawArgs: ['--config-dir', configDir, 'inspect', ...args], loadEnv: false, environment: {} })
+  const cli = (...args: string[]) => runCli({ rawArgs: ['--config-dir', configDir, 'inspect', ...args], environment: {} })
 
   async function storedUrls(): Promise<string[]> {
     const store = createLocalStore({ dataDir })

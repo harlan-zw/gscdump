@@ -18,7 +18,7 @@ export function renderQuery(input: {
       columns[clicks] = barColumn(input.rows, 'clicks', options)
   }
   return [
-    ...textLines(`${parseGscSiteUrl(input.site).hostname} / query`, options, 'accent'),
+    ...textLines(`${parseGscSiteUrl(input.site).hostname} / ${input.dimensions.join(', ')}`, options, 'accent'),
     ...textLines(`${input.start} to ${input.end}`, options, 'muted'),
     '',
     ...renderTable(input.rows, columns, options),

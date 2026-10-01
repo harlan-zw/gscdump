@@ -80,7 +80,6 @@ describe('read routing', () => {
     const code = await runCli({
       rawArgs: args,
       environment: { GSCDUMP_CONFIG_DIR: root, GSCDUMP_AUTH_MODE: 'local', NO_COLOR: '1', ...(auth === 'google' ? { GSC_ACCESS_TOKEN: 'token' } : {}) },
-      loadEnv: false,
     })
     vi.restoreAllMocks()
     return { code, stdout: stdout.join('\n'), stderr: stderr.join('\n') }
@@ -104,6 +103,22 @@ describe('read routing', () => {
     expect(run.stderr).not.toContain('no pages data')
     expect(JSON.parse(run.stdout).error).toMatchObject({ code: 'NOT_CONNECTED', nextCommand: 'gscdump init' })
     expect(analyticsCalls).toBe(0)
+  })
+
+  it('returns a Store date query in date order with ISO dates', async () => {
+    const store = createLocalStore({ dataDir })
+    const scope = { userId: store.userId, siteId: store.siteIdFor(SITE), table: 'dates' as const }
+    for (const [date, clicks] of [['2026-08-01', 1], ['2026-08-02', 9], ['2026-08-03', 4]] as const) {
+      await store.engine.writeDay({ ...scope, date }, [{ date, clicks, impressions: 10 * clicks, sum_position: 0 }])
+      await store.engine.setSyncState({ ...scope, date }, 'done')
+    }
+    expect((await recordStoreSite(dataDir, SITE)).ok).toBe(true)
+
+    const run = await cli(['query', '--site', 'example.com', '-d', 'date', ...RANGE, '--limit', '2', '-f', 'json'])
+    expect(run.code, run.stderr).toBe(0)
+    const payload = JSON.parse(run.stdout)
+    expect(payload.meta).toEqual({ source: 'local' })
+    expect(payload.data.map((row: { date: string }) => row.date)).toEqual(['2026-08-01', '2026-08-02'])
   })
 
   it('answers from the live API when the Site has no Store data, and says so', async () => {

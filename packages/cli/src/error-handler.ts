@@ -1,12 +1,15 @@
 import type { AnalysisError } from '@gscdump/analysis/errors'
+import type { RecordReadRefusal } from '@gscdump/contracts'
 import type { EngineError } from '@gscdump/engine/errors'
 import type { GscError } from 'gscdump/errors'
 import type { QueryError } from 'gscdump/query'
 import { isAnalysisError } from '@gscdump/analysis/errors'
+import { parseRecordReadRefusal } from '@gscdump/contracts'
 import { isEngineError } from '@gscdump/engine/errors'
 import { classifyError } from 'gscdump/errors'
 import { isQueryError } from 'gscdump/query'
 import { isUsageError } from './command-registry'
+import { describeRecordReadRefusal } from './hosted-query'
 import { quotaStopOf } from './quota-ledger'
 
 /** A hosted 401: the gscdump.com API key failed, not a Google credential. */
@@ -155,8 +158,8 @@ export class LocalStoreUnsupportedError extends Error {
 
 /**
  * Heuristic: does this error look like a credentials problem? The shell then
- * prints where each credential came from, because a stale `.env` shadowing
- * fresh saved tokens is the usual cause.
+ * prints where each credential came from, because stale environment tokens
+ * shadowing fresh saved tokens are the usual cause.
  */
 export function isAuthError(err: unknown): boolean {
   const msg = (err instanceof Error ? err.message : String(err ?? '')).toLowerCase()
@@ -181,6 +184,16 @@ const PARAM_NAME_RE = /\b(prevStartDate|prevEndDate|brandTerms)\b/g
 
 // Built-in error types that signal a defect in gscdump, not a user mistake.
 const DEFECT_ERRORS = new Set(['TypeError', 'ReferenceError', 'RangeError', 'SyntaxError', 'EvalError', 'URIError'])
+
+/**
+ * A hosted read the Site's record cannot serve. Matched by name, not
+ * `instanceof`, so the error handler does not load the SDK on every run.
+ */
+function recordReadRefusalOf(error: unknown): RecordReadRefusal | null {
+  if (!(error instanceof Error) || error.name !== 'GscdumpV1Error')
+    return null
+  return parseRecordReadRefusal((error as { details?: unknown }).details)
+}
 
 export type CliErrorReport
   = | { kind: 'usage', message: string }
@@ -218,6 +231,9 @@ export function describeCliError(error: unknown): CliErrorReport {
       showAuthSources: false,
     }
   }
+  const refusal = recordReadRefusalOf(error)
+  if (refusal)
+    return { kind: 'expected', ...describeRecordReadRefusal(refusal), showAuthSources: false }
   const classified = classifyError(error)
   if (classified.message === HOSTED_KEY_REJECTED)
     return { kind: 'expected', message: classified.message, hint: '', showAuthSources: false }

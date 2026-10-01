@@ -80,21 +80,41 @@ function compileMetricFilter(filter: InternalFilter): RowMatcher {
   }
 }
 
-function compileDimensionFilterTree(filter: FilterInput | undefined): RowMatcher {
+/**
+ * Compile the dimension filters a row can be checked against. Google applies
+ * every dimension filter itself, and a row carries only its grouped
+ * dimensions. A filter on another dimension has no value to test here, so it
+ * is left to Google: a page-scoped `date` series used to lose every row.
+ *
+ * `null` means "cannot check here". An `and` group drops it; an `or` group
+ * that holds one cannot be checked at all, so it passes every row.
+ */
+function compileDimensionFilterTree(filter: FilterInput | undefined, grouped: ReadonlySet<string>): RowMatcher | null {
   if (!filter || !('_filters' in filter))
-    return () => true
-  const localFilters = filter._filters as LocalFilter[]
+    return null
+  const isOr = filter._groupType === 'or'
   const matchers: RowMatcher[] = []
-  for (const localFilter of localFilters) {
-    if (isLocalDimensionFilter(localFilter))
-      matchers.push(compileDimensionFilter(localFilter as InternalFilter))
+  for (const localFilter of filter._filters as LocalFilter[]) {
+    if (!isLocalDimensionFilter(localFilter))
+      continue
+    if (!grouped.has(localFilter.dimension)) {
+      if (isOr)
+        return null
+      continue
+    }
+    matchers.push(compileDimensionFilter(localFilter as InternalFilter))
   }
-  for (const group of filter._nestedGroups ?? [])
-    matchers.push(compileDimensionFilterTree(group))
+  for (const group of filter._nestedGroups ?? []) {
+    const matcher = compileDimensionFilterTree(group, grouped)
+    if (matcher)
+      matchers.push(matcher)
+    else if (isOr)
+      return null
+  }
 
   if (matchers.length === 0)
-    return () => true
-  if (filter._groupType === 'or') {
+    return null
+  if (isOr) {
     return (row) => {
       for (const matches of matchers) {
         if (matches(row))
@@ -170,7 +190,7 @@ export function applyBuilderStatePostProcessing(
   rows: Row[],
   state: BuilderState,
 ): Row[] {
-  const matchesDimensions = compileDimensionFilterTree(state.filter)
+  const matchesDimensions = compileDimensionFilterTree(state.filter, new Set(state.dimensions)) ?? (() => true)
   const metricMatchers = extractMetricFilters(state.filter).map(compileMetricFilter)
   const hasTopLevelFilter = extractSpecialOperatorFilters(state.filter)
     .some(filter => filter.operator === 'topLevel')

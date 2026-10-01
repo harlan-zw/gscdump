@@ -53,7 +53,6 @@ describe('inspect quota', () => {
   const inspect = (): Promise<number> => runCli({
     rawArgs: ['inspect', 'https://example.com/a', 'https://example.com/b', '--site', 'example.com', '--json'],
     environment: { GSCDUMP_CONFIG_DIR: root, GSC_ACCESS_TOKEN: 'token', GSCDUMP_AUTH_MODE: 'local' },
-    loadEnv: false,
   })
 
   it('counts each inspection in the shared quota ledger', async () => {

@@ -55,7 +55,6 @@ async function cli(...args: string[]): Promise<number> {
     rawArgs: ['--config-dir', directory, ...args],
     // Local Store reads build auth but never contact Google.
     environment: { HOME: directory, GSC_ACCESS_TOKEN: 'unused-offline-token', NO_COLOR: '1' },
-    loadEnv: false,
   })
 }
 

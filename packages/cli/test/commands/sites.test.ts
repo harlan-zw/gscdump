@@ -62,7 +62,8 @@ vi.mock('../../src/error-handler', () => ({
   gscErrorHandler: vi.fn((e: unknown) => { throw e }),
 }))
 
-vi.mock('../../src/utils', () => ({
+vi.mock('../../src/utils', async importOriginal => ({
+  ...await importOriginal<typeof import('../../src/utils')>(),
   OUTPUT_ARGS: { json: { type: 'boolean', default: false, description: 'Output as JSON' }, quiet: { type: 'boolean', alias: 'q', default: false, description: 'Suppress info/success output' } },
   applyOutputMode: vi.fn((a: any) => ({ json: Boolean(a?.json), quiet: Boolean(a?.json) || Boolean(a?.quiet) })),
   showSplash: vi.fn(),

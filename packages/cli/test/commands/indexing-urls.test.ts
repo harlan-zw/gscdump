@@ -109,7 +109,7 @@ describe('hosted indexing urls and sitemap commands', () => {
     await fs.rm(runtime.configDir, { recursive: true, force: true })
   })
 
-  const run = (args: string[]) => runCli({ rawArgs: args, runtime, loadEnv: false })
+  const run = (args: string[]) => runCli({ rawArgs: args, runtime })
   const indexingRequests = () => requests.filter(url => url.pathname.endsWith('/indexing/urls'))
 
   it('resolves a bare Site through /cli/me and prints a table of not indexed URLs', async () => {

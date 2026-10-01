@@ -9,7 +9,7 @@ import { BING_DATASETS, dumpBingSite, parseBingDumpOptions, resolveBingSites, un
 import { dumpHostedBingSite, hostedBingClient, inspectHostedBingUrl, listHostedBingSites, resolveHostedBingSites } from '../bing-hosted'
 import { bingCommandMeta } from '../command-meta'
 import { useCliRuntime } from '../runtime'
-import { applyOutputMode, logger, OUTPUT_ARGS } from '../utils'
+import { applyOutputMode, logger, OUTPUT_ARGS, plural } from '../utils'
 
 const siteArg = { type: 'string', alias: 's', description: 'Site ID or URL from `gscdump bing sites`' } as const
 
@@ -124,7 +124,7 @@ export const bingCommand = defineCommand({
         if (json)
           console.log(JSON.stringify({ searchEngine: 'bing', authenticated: true, verifiedSites: sites.filter(site => site.isVerified).length }))
         else
-          logger.success(`Bing authenticated. ${sites.filter(site => site.isVerified).length} verified sites.`)
+          logger.success(`Bing authenticated. ${plural(sites.filter(site => site.isVerified).length, 'verified site', 'verified sites')}.`)
       },
     }),
     sites: defineCommand({
@@ -169,7 +169,7 @@ export const bingCommand = defineCommand({
             const summary = await dumpHostedBingSite(authentication, site, args.out, options)
             summaries.push(summary)
             if (!json)
-              logger.success(`Bing ${site.siteUrl}: ${summary.files.length} files exported to ${args.out}.`)
+              logger.success(`Bing ${site.siteUrl}: ${plural(summary.files.length, 'file', 'files')} exported to ${args.out}.`)
           }
           if (json)
             console.log(JSON.stringify(args['all-sites'] ? { searchEngine: 'bing', sites: summaries } : summaries[0], null, 2))
@@ -182,7 +182,7 @@ export const bingCommand = defineCommand({
           const summary = await dumpBingSite(client, site, args.out, options)
           summaries.push(summary)
           if (!json)
-            logger.success(`Bing ${site}: ${summary.files.length} files exported to ${args.out}.`)
+            logger.success(`Bing ${site}: ${plural(summary.files.length, 'file', 'files')} exported to ${args.out}.`)
         }
         if (json)
           console.log(JSON.stringify(args['all-sites'] ? { searchEngine: 'bing', sites: summaries } : summaries[0], null, 2))

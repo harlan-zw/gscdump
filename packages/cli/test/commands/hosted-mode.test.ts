@@ -66,12 +66,18 @@ describe('hosted mode commands', () => {
     await fs.rm(runtime.configDir, { recursive: true, force: true })
   })
 
-  const run = (args: string[]) => runCli({ rawArgs: args, runtime, loadEnv: false })
+  const run = (args: string[]) => runCli({ rawArgs: args, runtime })
 
   it('lists hosted Sites from the hosted record', async () => {
     await expect(run(['sites', '--json'])).resolves.toBe(0)
     expect(JSON.parse(stdout.join('\n'))).toEqual([expect.objectContaining({ siteId: 's_site', siteUrl: 'sc-domain:example.com', hostedSync: expect.objectContaining({ syncStatus: 'synced' }) })])
     expect(requests.map(request => request.url.pathname)).toEqual(['/api/cli/me'])
+  })
+
+  it('counts one hosted Site in the singular', async () => {
+    runtime.logger.level = 3
+    await expect(run(['sites'])).resolves.toBe(0)
+    expect(stderr).toContain('Found 1 hosted Site:')
   })
 
   it('queries the hosted record through the public rows operation', async () => {
@@ -81,6 +87,12 @@ describe('hosted mode commands', () => {
     expect(output.data).toEqual([{ query: 'gscdump', clicks: 12, impressions: 340, ctr: 0.035, position: 4.2 }])
     const rows = requests.find(request => request.url.pathname.endsWith('/rows'))
     expect(rows?.body).toMatchObject({ dimensions: ['query'], rowLimit: 10, searchType: 'web' })
+  })
+
+  it('reads a date query from the hosted record in date order', async () => {
+    await expect(run(['query', '--site', 'example.com', '-d', 'date', '--limit', '7', '--format', 'json'])).resolves.toBe(0)
+    const rows = requests.find(request => request.url.pathname.endsWith('/rows'))
+    expect(rows?.body).toMatchObject({ dimensions: ['date'], orderBy: { column: 'date', dir: 'asc' }, rowLimit: 7 })
   })
 
   it.each([

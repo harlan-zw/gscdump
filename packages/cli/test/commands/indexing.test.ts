@@ -125,7 +125,6 @@ describe('indexing command', () => {
     publishMock.mockResolvedValue({ urlNotificationMetadata: { latestUpdate: { notifyTime: 't' } } })
     const code = await runCli({
       rawArgs: ['--config-dir', configDir, 'indexing', 'batch', 'https://a.com/', 'https://b.com/', 'https://c.com/', '--delay-ms', '0', '--json'],
-      loadEnv: false,
       environment: {},
     })
     expect(code).toBe(0)
@@ -136,7 +135,6 @@ describe('indexing command', () => {
     getMetadataMock.mockResolvedValue({ latestUpdate: { notifyTime: 'u' } })
     const code = await runCli({
       rawArgs: ['--config-dir', configDir, 'indexing', 'batch-status', 'https://a.com/', 'https://b.com/', '--delay-ms', '0', '--json'],
-      loadEnv: false,
       environment: {},
     })
     expect(code).toBe(0)

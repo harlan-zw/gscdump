@@ -33,16 +33,16 @@ afterEach(async () => {
 
 async function activeProfile(): Promise<string | null> {
   output.length = 0
-  await runCli({ rawArgs: ['--config-dir', root, 'profile', 'list', '--json'], loadEnv: false, environment: {} })
+  await runCli({ rawArgs: ['--config-dir', root, 'profile', 'list', '--json'], environment: {} })
   return JSON.parse(output.join('\n')).active
 }
 
 it('makes a new profile active by default', async () => {
-  expect(await runCli({ rawArgs: ['--config-dir', root, 'profile', 'create', 'work'], loadEnv: false, environment: {} })).toBe(0)
+  expect(await runCli({ rawArgs: ['--config-dir', root, 'profile', 'create', 'work'], environment: {} })).toBe(0)
   expect(await activeProfile()).toBe('work')
 })
 
 it('leaves the active profile alone with --no-use', async () => {
-  expect(await runCli({ rawArgs: ['--config-dir', root, 'profile', 'create', 'work', '--no-use'], loadEnv: false, environment: {} })).toBe(0)
+  expect(await runCli({ rawArgs: ['--config-dir', root, 'profile', 'create', 'work', '--no-use'], environment: {} })).toBe(0)
   expect(await activeProfile()).toBeNull()
 })

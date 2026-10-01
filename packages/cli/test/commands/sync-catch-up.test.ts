@@ -82,7 +82,6 @@ async function sync(...flags: string[]): Promise<Run> {
   // runCli catches every failure and returns 1; a mocked exit keeps its own code.
   const code = await runCli({
     rawArgs: ['sync', ...flags],
-    loadEnv: false,
     environment: { GSCDUMP_CONFIG_DIR: state.configDir, GSCDUMP_AUTH_MODE: 'local' },
   })
   if (code !== 0)
