@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { z } from 'zod'
+import { HOSTED_SESSION_EXPIRED, isSessionExpiredBody } from './hosted-session'
 import { useCliRuntime } from './runtime'
 import { stopError } from './stop'
 
@@ -191,12 +192,16 @@ export async function hostedRequest(state: HostedAuthentication, route: string, 
     const details = { statusCode: response.status, retryAfter: response.headers.get('retry-after'), response }
     if (response.status === 401) {
       const session = 'sessionId' in state
-      throw Object.assign(stopError({
-        code: 'HOSTED_CREDENTIALS_REJECTED',
-        message: session ? HOSTED_SESSION_REJECTED : HOSTED_KEY_REJECTED,
-        // A rejected API key needs a new key. Only its issuer can make one.
-        nextCommand: session ? 'gscdump auth login --mode hosted' : null,
-      }), details)
+      // A 401 body that is not JSON carries no reason. It stays an ordinary rejection.
+      const expired = session && isSessionExpiredBody(await response.json().catch(() => null))
+      throw Object.assign(stopError(expired
+        ? HOSTED_SESSION_EXPIRED
+        : {
+            code: 'HOSTED_CREDENTIALS_REJECTED',
+            message: session ? HOSTED_SESSION_REJECTED : HOSTED_KEY_REJECTED,
+            // A rejected API key needs a new key. Only its issuer can make one.
+            nextCommand: session ? 'gscdump auth login --mode hosted' : null,
+          }), details)
     }
     throw Object.assign(new Error(`Hosted request failed (${response.status}) for ${route.split('?')[0]}. Check \`gscdump auth status\`.`), details)
   }
@@ -225,13 +230,28 @@ export function siteManagerOf(state: HostedAuthentication, issuer: KeyIssuer | u
   return issuer ?? { _tag: 'key_issuer' }
 }
 
-/** The step that adds a Site to the hosted record, for example `Connect a Site in Request Indexing.` */
-export function connectSiteStep(manager: SiteManager): string {
+/** Where the holder connects a Site, for example `at https://gscdump.com/…`. */
+function connectSitePlace(manager: SiteManager): string {
   switch (manager._tag) {
-    case 'gscdump': return 'Connect a Site at https://gscdump.com/app/onboarding?step=connect-sites.'
-    case 'partner': return `Connect a Site in ${manager.name}.`
-    case 'key_issuer': return 'Connect a Site in the app that issued this API key.'
+    case 'gscdump': return 'at https://gscdump.com/app/onboarding?step=connect-sites'
+    case 'partner': return `in ${manager.name}`
+    case 'key_issuer': return 'in the app that issued this API key'
   }
+}
+
+/** The step that adds a Site to the hosted record, for example `Connect a Site at …`. */
+export function connectSiteStep(manager: SiteManager): string {
+  return `Connect a Site ${connectSitePlace(manager)}.`
+}
+
+/**
+ * The next step for a hosted record with no Sites, after `auth login` and in
+ * `auth status`. The gscdump.com app opens only after Hosted access is
+ * activated, so the connect link can open the activation page first.
+ */
+export function noSitesNextStep(manager: SiteManager): string {
+  const next = `Next: connect a Site ${connectSitePlace(manager)}.`
+  return manager._tag === 'gscdump' ? `${next} If Hosted access is not active, gscdump.com asks you to activate it first.` : next
 }
 
 /** Where a Site's settings live, for example `in the Site settings on gscdump.com`. */

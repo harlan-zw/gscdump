@@ -28,6 +28,7 @@ import { terminalOutputOptions } from '../render/terminal'
 import { decideRoute, describeStop, liveNote, readRouteState, readSiteStates, resolveReadSite, stopAtRoute } from '../route'
 import { useCliRuntime } from '../runtime'
 import { openSqlViews, referencedTables } from '../sql-views'
+import { commandLineError } from '../stop'
 import { ALL_SEARCH_TYPES, logger, parseSearchType, setJsonOutput, toCSV } from '../utils'
 import { checkWindowFlags, DEFAULT_WINDOW, newestDoneDate, parseWindowFlags } from '../window'
 
@@ -234,10 +235,8 @@ export const queryCommand = defineCommand({
   async run({ args }) {
     const ctxConfig = await loadConfig()
     const format = args.format ?? ctxConfig.defaultFormat ?? 'json'
-    if (format !== 'json' && format !== 'csv' && format !== 'table') {
-      logger.error('Invalid --format. Use table, json, or csv.')
-      process.exit(1)
-    }
+    if (format !== 'json' && format !== 'csv' && format !== 'table')
+      throw commandLineError('Invalid --format. Use table, json, or csv.')
     setJsonOutput(format === 'json')
     if (args.sql || args.schema) {
       await runSqlMode({
@@ -255,17 +254,13 @@ export const queryCommand = defineCommand({
     const dimNames = await resolveDimensions(args)
     const windowFlags = await promptRange(args)
     const invalidWindow = checkWindowFlags(windowFlags)
-    if (invalidWindow) {
-      logger.error(invalidWindow.message)
-      process.exit(1)
-    }
+    if (invalidWindow)
+      throw commandLineError(invalidWindow.message)
     await promptFilters(args as Record<string, unknown>)
     const limitArg = String(args.limit ?? ctxConfig.defaultLimit ?? 1000)
     const rowLimit = Number(limitArg)
-    if (!POSITIVE_INTEGER_RE.test(limitArg) || !Number.isSafeInteger(rowLimit) || rowLimit < 1) {
-      logger.error('Invalid --limit. Use a positive safe integer, such as --limit 1000.')
-      process.exit(1)
-    }
+    if (!POSITIVE_INTEGER_RE.test(limitArg) || !Number.isSafeInteger(rowLimit) || rowLimit < 1)
+      throw commandLineError('Invalid --limit. Use a positive safe integer, such as --limit 1000.')
     const filters = parseFilterArgs(args as Record<string, unknown>)
     const searchType = parseSearchType(args.type ?? ctxConfig.defaultSearchType, '--type')
     // The Store holds every search type; reading them together adds web and image rows into one total.
@@ -275,14 +270,10 @@ export const queryCommand = defineCommand({
       : ctxConfig.defaultDataState
     const aggregationType = args['aggregation-type'] ? String(args['aggregation-type']) : undefined
     const filterDims = filterDimensions(filters)
-    if (dataState && !DATA_STATES.includes(dataState as any)) {
-      logger.error(`Invalid --data-state: ${dataState}. Allowed: ${DATA_STATES.join(', ')}`)
-      process.exit(1)
-    }
-    if (aggregationType && !AGGREGATION_TYPES.includes(aggregationType as any)) {
-      logger.error(`Invalid --aggregation-type: ${aggregationType}. Allowed: ${AGGREGATION_TYPES.join(', ')}`)
-      process.exit(1)
-    }
+    if (dataState && !DATA_STATES.includes(dataState as any))
+      throw commandLineError(`Invalid --data-state: ${dataState}. Allowed: ${DATA_STATES.join(', ')}`)
+    if (aggregationType && !AGGREGATION_TYPES.includes(aggregationType as any))
+      throw commandLineError(`Invalid --aggregation-type: ${aggregationType}. Allowed: ${AGGREGATION_TYPES.join(', ')}`)
 
     const forceLive = Boolean(args.live)
     // Hosted mode reads the hosted record. It never reads the Store or calls Google.
@@ -417,8 +408,7 @@ export const queryCommand = defineCommand({
       },
       state,
     ).catch((e: Error) => {
-      logger.error(`Query failed: ${e.message}`)
-      process.exit(1)
+      throw new Error(`Query failed: ${e.message}`, { cause: e })
     })
 
     if (probe)
@@ -443,10 +433,8 @@ export const queryCommand = defineCommand({
 async function resolveDimensions(args: Record<string, unknown>): Promise<string[]> {
   if (args.dimensions != null) {
     const dimensions = String(args.dimensions).split(',').map(d => d.trim())
-    if (dimensions.some(d => !(DIMENSIONS as readonly string[]).includes(d))) {
-      logger.error(`Invalid --dimensions. Use a comma-separated list from: ${DIMENSIONS.join(', ')}.`)
-      process.exit(1)
-    }
+    if (dimensions.some(d => !(DIMENSIONS as readonly string[]).includes(d)))
+      throw commandLineError(`Invalid --dimensions. Use a comma-separated list from: ${DIMENSIONS.join(', ')}.`)
     return [...new Set(dimensions)]
   }
 
@@ -499,10 +487,8 @@ async function promptRange(args: Record<string, unknown>): Promise<WindowFlags> 
 
 function windowOrExit(flags: WindowFlags, anchor: string): { start: string, end: string } {
   const window = parseWindowFlags(flags, DEFAULT_WINDOW, anchor)
-  if (!window.ok) {
-    logger.error(window.error.message)
-    process.exit(1)
-  }
+  if (!window.ok)
+    throw commandLineError(window.error.message)
   return window.value
 }
 
@@ -652,8 +638,7 @@ async function runSql(views: SqlViews, sql: string): Promise<SqlResult & { warni
   for (const warning of warnings)
     logger.warn(warning)
   const result = await views.run(sql).catch((e: Error) => {
-    logger.error(`SQL failed: ${e.message}`)
-    process.exit(1)
+    throw new Error(`SQL failed: ${e.message}`, { cause: e })
   })
   return { ...result, warnings }
 }

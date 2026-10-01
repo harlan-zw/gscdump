@@ -88,7 +88,7 @@ describe('--site resolution without login', () => {
     await seed('sc-domain:example.com')
     const run = await cli('store', 'stats', '--site', 'nuxt.com', '--json')
     expect(run.code).toBe(1)
-    expect(run.stdout).toBe('')
+    expect(JSON.parse(run.stdout).error).toMatchObject({ code: 'FAILED', message: expect.stringContaining('The Store has no data for "nuxt.com".') })
     expect(run.stderr).toContain('The Store has no data for "nuxt.com". Local Sites: sc-domain:example.com')
   })
 
@@ -129,7 +129,7 @@ describe('site picker', () => {
     setTTY(false)
     const run = await cli('analyze', 'striking-distance', '--json')
     expect(run.code).toBe(1)
-    expect(run.stdout).toBe('')
+    expect(JSON.parse(run.stdout).error).toMatchObject({ code: 'FAILED', message: expect.stringContaining('Pass --site. Sites: sc-domain:example.com, sc-domain:other.com') })
     expect(run.stderr).toContain('Pass --site. Sites: sc-domain:example.com, sc-domain:other.com')
   })
 

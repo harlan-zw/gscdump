@@ -3,7 +3,7 @@ import type { RecordReadRefusal } from '@gscdump/contracts'
 import type { EngineError } from '@gscdump/engine/errors'
 import type { GscError } from 'gscdump/errors'
 import type { QueryError } from 'gscdump/query'
-import type { StopDetails } from './stop'
+import type { JsonError, StopDetails } from './stop'
 import { isAnalysisError } from '@gscdump/analysis/errors'
 import { parseRecordReadRefusal } from '@gscdump/contracts'
 import { isEngineError } from '@gscdump/engine/errors'
@@ -11,8 +11,9 @@ import { classifyError } from 'gscdump/errors'
 import { isQueryError } from 'gscdump/query'
 import { isUsageError } from './command-registry'
 import { describeRecordReadRefusal } from './hosted-query'
+import { HOSTED_SESSION_EXPIRED, isSessionExpiredError } from './hosted-session'
 import { quotaStopOf } from './quota-ledger'
-import { stopDetailsOf } from './stop'
+import { isUserStop, stopDetailsOf } from './stop'
 
 const QUOTA_MESSAGE_RE = /quota|rate\s*limit/i
 // eslint-disable-next-line no-control-regex
@@ -193,10 +194,10 @@ function recordReadRefusalOf(error: unknown): RecordReadRefusal | null {
   return parseRecordReadRefusal((error as { details?: unknown }).details)
 }
 
-/** `stop` is what a command that writes JSON prints on stdout as `{ error: stop }`. */
+/** A command that writes JSON prints {@link jsonErrorOf} the report on stdout as `{ error }`. */
 export type CliErrorReport
   = | { kind: 'usage', message: string }
-  /** A routing stop or a spent quota: normal progress, printed as a plain line. */
+  /** A routing stop, a spent quota, or a stop the user chose: printed as a plain line. */
     | { kind: 'stop', message: string, stop?: StopDetails }
     | { kind: 'expected', message: string, hint: string, showAuthSources: boolean, stop?: StopDetails }
     | { kind: 'defect', message: string, stack: string }
@@ -222,7 +223,9 @@ export function describeCliError(error: unknown): CliErrorReport {
   if (error instanceof Error && (error as { routeStop?: unknown }).routeStop !== undefined)
     return { kind: 'stop', message: error.message, ...(stop ? { stop } : {}) }
   if (error instanceof Error && quotaStopOf(error))
-    return { kind: 'stop', message: error.message }
+    return { kind: 'stop', message: error.message, stop: { code: 'QUOTA_USED_UP', message: error.message, nextCommand: null } }
+  if (isUserStop(error) && stop)
+    return { kind: 'stop', message: stop.message, stop }
   if (error instanceof Error && stop)
     return { kind: 'expected', message: error.message, hint: '', showAuthSources: false, stop }
   if (error instanceof TypeError && error.message === 'fetch failed') {
@@ -241,6 +244,10 @@ export function describeCliError(error: unknown): CliErrorReport {
       showAuthSources: false,
     }
   }
+  // A v1 call refused the CLI session. Without this, the Google sign-in hint
+  // and the Google credential sources print under a Hosted failure.
+  if (isSessionExpiredError(error))
+    return { kind: 'expected', message: HOSTED_SESSION_EXPIRED.message, hint: '', showAuthSources: false, stop: HOSTED_SESSION_EXPIRED }
   const refusal = recordReadRefusalOf(error)
   if (refusal) {
     const text = describeRecordReadRefusal(refusal)
@@ -257,9 +264,26 @@ export function describeCliError(error: unknown): CliErrorReport {
   }
 }
 
+/**
+ * The `{ error }` a command that writes JSON prints on stdout. A stop prints its
+ * own details. Every other failure gets `USAGE`, `FAILED`, or `UNEXPECTED`.
+ */
+export function jsonErrorOf(report: CliErrorReport): JsonError {
+  switch (report.kind) {
+    case 'usage':
+      return { code: 'USAGE', message: report.message, nextCommand: null }
+    case 'stop':
+      return report.stop ?? { code: 'FAILED', message: report.message, nextCommand: null }
+    case 'expected':
+      return report.stop ?? { code: 'FAILED', message: report.hint ? `${report.message} ${report.hint}` : report.message, nextCommand: null }
+    case 'defect':
+      return { code: 'UNEXPECTED', message: report.message, nextCommand: null }
+  }
+}
+
 export interface ReportCliErrorOptions {
   color: boolean
-  /** The command writes JSON to stdout, so a stop prints `{ error }` there too. */
+  /** The command writes JSON to stdout, so a failure prints `{ error }` there too. */
   json?: boolean
   /** Rendered usage of the selected command, shown above a usage error. */
   usage?: () => Promise<string>
@@ -271,12 +295,12 @@ export interface ReportCliErrorOptions {
 
 /**
  * Print a thrown value to stderr in its final form. The shell calls this once.
- * Under JSON output, a stop also prints `{ error: { code, message, nextCommand } }` on stdout.
+ * Under JSON output, every failure also prints `{ error: { code, message, nextCommand } }` on stdout.
  */
 export async function reportCliError(error: unknown, options: ReportCliErrorOptions): Promise<void> {
   const report = describeCliError(error)
-  if (options.json && (report.kind === 'stop' || report.kind === 'expected') && report.stop)
-    (options.writeStdout ?? ((value: string) => console.log(value)))(JSON.stringify({ error: report.stop }, null, 2))
+  if (options.json)
+    (options.writeStdout ?? ((value: string) => console.log(value)))(JSON.stringify({ error: jsonErrorOf(report) }, null, 2))
   const red = (text: string): string => options.color ? `\x1B[31m${text}\x1B[0m` : text
   const lines: string[] = []
   switch (report.kind) {
