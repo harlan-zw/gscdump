@@ -18,7 +18,7 @@ flowchart LR
   BI[Bing<br/><small>gscdump/bing</small>]
   SEN[Search Engine<br/><small>public discriminator</small>]
   IE[Indexing Evidence<br/><small>contracts/v1</small>]
-  SR[Submission Receipt<br/><small>delivery contract</small>]
+  SR[Submission Receipt<br/><small>IndexNow and Google delivery contracts</small>]
   MD[Mode<br/><small>--mode · @gscdump/cli</small>]
   STO[Store<br/><small>Parquet directory · @gscdump/cli</small>]
   HR[Hosted record<br/><small>gscdump.com/api</small>]
@@ -62,7 +62,7 @@ flowchart LR
 | Site | (no table; `siteId` string key) | `gscdump/tenant` | Team 1—N Site (hosted); Auth 1—N Site (CLI) | "property" (README, docs), "site" (`--site`, `siteUrl`) |
 | Search Engine | `GoogleSearchConsoleClient`; `gscdump/bing` | `gscdump`, `@gscdump/contracts` | Site 1—N Search Engine | "Google" or "Bing" |
 | Indexing Evidence | `gscdump/api/indexing`; `gscdump/bing`; `@gscdump/contracts/v1` | `gscdump`, `@gscdump/contracts` | (Site, URL, Search Engine) 1—N observation | "indexing evidence" |
-| Submission Receipt | deferred delivery contract in `@gscdump/contracts/v1` | `@gscdump/contracts` | Submission 1—1 Submission Receipt | "submission receipt" |
+| Submission Receipt | `indexNowSubmissionReceiptV1Schemas`, `googleSubmissionReceiptV1Schemas` in `@gscdump/contracts/v1` | `@gscdump/contracts` | Submission 1—1 Submission Receipt | "submission receipt" |
 | Coverage state | `COVERAGE_STATE_TAGS` in `@gscdump/contracts`; `parseCoverageState` in `gscdump` | `@gscdump/contracts`, `gscdump` | URL 1—1 Coverage state per inspection | "coverage state" |
 | Coverage ladder | `COVERAGE_LADDER` in `@gscdump/contracts` | `@gscdump/contracts` | Coverage ladder 1—4 Coverage state | "coverage ladder" |
 | Watched URL | `partner.sites.indexing.watched.*`; `WATCHED_URL_LIMIT` | `@gscdump/contracts` | Site 1—N Watched URL, at most 50 | "watched URL" |
@@ -117,7 +117,7 @@ The two ADR-0012 decisions are
 
 ### Submission Receipt
 **Is:** proof that a change notification was accepted or rejected.
-**Use for:** a later IndexNow delivery contract and immutable delivery records.
+**Use for:** IndexNow and Google Indexing API delivery contracts, and immutable delivery records.
 **Never:** Indexing Evidence, indexed verdict, submission evidence, acknowledgement.
 **Casing:** `Submission Receipt` in prose, `submissionReceipt` in identifiers.
 **Ratified by:** gscdump.com ADR-0008.
@@ -362,13 +362,20 @@ Why gscdump holds a Site and does not start its Backfill: `size_limit`, `sitemap
 The one stored Microsoft authorization of a user. It serves every Site the user owns. `partner.users.indexing.bing.sites.list` reports it as `authorized`, `reauthorization-required`, or `missing`. `partner.sites.indexing.bing.authorization.create` starts the Microsoft consent that creates or renews it.
 _Avoid_: Bing connection for the grant; `BingConnectionV1` names one Site's binding. Avoid "connect" as its verb, because Connect adds a Site.
 
+**Indexing API grant**:
+One Google OAuth grant that carries `auth/indexing`, stored per partner and user (`IndexingApiGrantV1`: `missing`, `granted`, `reauthorization-required`). The partner's dedicated Cloud project issues it, and it never shares a row with the Search Console connection. `partner.users.indexing.google.grant.update` hands it over. Ratified by gscdump.com ADR-0016.
+_Avoid_: indexing connection, indexing account, indexing token, or Google grant alone.
+
+**Google Submission refusal**:
+The `details` of a v1 error envelope when gscdump refuses a Google Submission before it sends anything. `details.reason` is one of `GOOGLE_SUBMISSION_REFUSAL_REASONS`. Read it with `parseGoogleSubmissionRefusal`.
+
 **Link** (proposed, awaiting confirmation):
 Bind one Site to the Site owner's Bing grant with no Microsoft redirect (`partner.sites.indexing.bing.link.create`). Only the Site owner may link.
 _Avoid_: connect, attach, or bind in public names.
 
 **Sitemap submission** (proposed, awaiting confirmation):
 The Sitemap gscdump would submit to Google for a Site, and what blocks it (`partner.sites.sitemaps.submission.get`). gscdump picks a Sitemap it found on the Site's own host, under the linked property, and checks its own record of the granted scopes and the property permission.
-_Avoid_: Submission Receipt for this; a Submission Receipt proves an IndexNow change notification.
+_Avoid_: Submission Receipt for this; a Submission Receipt proves a change notification.
 
 **Search Console API surface**:
 The package root is the sole direct Google Search Console / Indexing / Site Verification client surface. Query, date, result, normalization, and tenant concepts use their named subpaths; v1 removes the duplicate `gscdump/api` barrel.
