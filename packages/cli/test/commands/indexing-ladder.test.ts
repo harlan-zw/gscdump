@@ -84,6 +84,7 @@ describe('hosted indexing summary and watch commands', () => {
   let stdout: string[]
   let stderr: string
   let requests: Array<{ url: URL, method: string, body: unknown }>
+  let issuer: unknown
 
   beforeEach(async () => {
     const configDir = await fs.mkdtemp(path.join(os.tmpdir(), 'gscdump-indexing-ladder-'))
@@ -101,6 +102,7 @@ describe('hosted indexing summary and watch commands', () => {
     runtime.logger.level = 3
     stdout = []
     requests = []
+    issuer = undefined
     vi.spyOn(console, 'log').mockImplementation((...args) => stdout.push(args.join(' ')))
     vi.spyOn(console, 'error').mockImplementation(() => {})
     vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
@@ -111,7 +113,7 @@ describe('hosted indexing summary and watch commands', () => {
       const method = init?.method ?? 'GET'
       requests.push({ url, method, body: init?.body ? JSON.parse(String(init.body)) : undefined })
       if (url.pathname.endsWith('/cli/me'))
-        return Response.json({ user: { publicId: 'u_me', email: 'user@example.com' }, sites: [{ siteId: 's_site', siteUrl: 'sc-domain:example.com' }] })
+        return Response.json({ user: { publicId: 'u_me', email: 'user@example.com' }, issuer, sites: [{ siteId: 's_site', siteUrl: 'sc-domain:example.com' }] })
       if (url.pathname.endsWith('/sites/s_site/indexing'))
         return envelope(summary)
       if (url.pathname.endsWith('/sites/s_site/indexing/watched') && method === 'GET')
@@ -220,5 +222,13 @@ describe('hosted indexing summary and watch commands', () => {
     expect(stdout.join('\n')).toContain('Skipped (inspection_disabled): https://example.com/off')
     expect(stdout.join('\n')).toContain('turn on URL Inspection in the Site settings of the app that issued this API key.')
     expect(stdout.join('\n')).not.toContain('gscdump.com')
+  })
+
+  it('names the partner that issued the API key when URL Inspection is off', async () => {
+    issuer = { _tag: 'partner', name: 'Request Indexing' }
+
+    await run(['indexing', 'watch', 'add', '--site', 'example.com', 'https://example.com/off'])
+
+    expect(stdout.join('\n')).toContain('To use Watched URLs, turn on URL Inspection in the Site settings of Request Indexing.')
   })
 })

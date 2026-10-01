@@ -263,7 +263,7 @@ async function checkHostedConnection(authentication: HostedAuthentication): Prom
   const count = account.value.sites.length
   const sitesChecks: Check[] = [count > 0
     ? { name: 'hosted.sites', status: 'pass', detail: `${count} hosted Site(s)` }
-    : { name: 'hosted.sites', status: 'warn', detail: `no hosted Sites. ${connectSiteStep(siteManagerOf(authentication))}` }]
+    : { name: 'hosted.sites', status: 'warn', detail: `no hosted Sites. ${connectSiteStep(siteManagerOf(authentication, account.value.issuer))}` }]
   return [
     { name: 'auth', status: 'pass', detail: `Hosted mode via ${authentication.apiRoot}` },
     { name: 'auth.account', status: 'pass', detail: account.value.user.email },

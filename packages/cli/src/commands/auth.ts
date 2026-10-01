@@ -1,4 +1,4 @@
-import type { HostedAuthentication } from '../auth-state'
+import type { HostedAuthentication, KeyIssuer } from '../auth-state'
 import type { TokenInfo } from '../token-info'
 import path from 'node:path'
 import process from 'node:process'
@@ -35,10 +35,10 @@ async function requireLocalAuth(args: Record<string, unknown>): Promise<void> {
 const HOSTED_MODE_NOTE = 'Hosted mode reads your gscdump.com record. Commands that call Google need Local mode.'
 
 /** The one step after a Hosted login. Without a Site, the CLI has nothing to read. */
-function loginNextStep(state: HostedAuthentication, siteCount: number): string {
+function loginNextStep(state: HostedAuthentication, siteCount: number, issuer: KeyIssuer | undefined): string {
   return siteCount > 0
     ? 'Next: run `gscdump sites` to see each Site and its sync state.'
-    : noSitesNextStep(siteManagerOf(state))
+    : noSitesNextStep(siteManagerOf(state, issuer))
 }
 
 /** What Hosted mode can run. Every other Google command needs Local mode. */
@@ -85,7 +85,7 @@ export async function loginHosted(args: Record<string, unknown>): Promise<void> 
     await saveAuthentication(state)
     logger.success(`Hosted mode saved for ${account.user.email}`)
     logger.info(HOSTED_MODE_NOTE)
-    logger.info(loginNextStep(state, account.sites.length))
+    logger.info(loginNextStep(state, account.sites.length, account.issuer))
     return
   }
   const state = parseAuthentication({
@@ -99,7 +99,7 @@ export async function loginHosted(args: Record<string, unknown>): Promise<void> 
   await saveAuthentication(state)
   logger.success(`Hosted mode saved for ${account.user.email}`)
   logger.info(HOSTED_MODE_NOTE)
-  logger.info(loginNextStep(state, account.sites.length))
+  logger.info(loginNextStep(state, account.sites.length, account.issuer))
 }
 
 /**
@@ -181,7 +181,7 @@ async function runStatus(args: Record<string, unknown>): Promise<void> {
       for (const site of sites)
         console.log(`    ${site.siteUrl}  ${formatHostedSync(site)}`)
       if (sites.length === 0)
-        console.log(`  ${noSitesNextStep(siteManagerOf(authentication))}`)
+        console.log(`  ${noSitesNextStep(siteManagerOf(authentication, account.value.issuer))}`)
       console.log(`  ${HOSTED_MODE_NOTE}`)
       console.log(`  Hosted commands: ${HOSTED_COMMANDS.join(', ')}`)
     }

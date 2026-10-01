@@ -54,7 +54,7 @@ export async function resolveHostedBingSites(state: HostedAuthentication, input:
     throw new Error('Choose --site or --all-sites.')
   const account = await getHostedAccount(state)
   if (account.sites.length === 0)
-    throw stopError(noSitesStop(siteManagerOf(state)))
+    throw stopError(noSitesStop(siteManagerOf(state, account.issuer)))
   const exact = account.sites.filter(site => site.siteId === input.site || site.siteUrl === input.site)
   const normalize = (value: string): string | undefined => URL.parse(value.startsWith('sc-domain:') ? `https://${value.slice(10)}/` : value)?.toString()
   const requested = input.allSites

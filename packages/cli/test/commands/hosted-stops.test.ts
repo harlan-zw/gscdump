@@ -16,6 +16,7 @@ describe('hosted mode stops', () => {
   let stdout: string[]
   let stderr: string
   let accountSites: { siteId: string, siteUrl: string }[]
+  let issuer: unknown
   let meStatus: number
 
   beforeEach(async () => {
@@ -24,6 +25,7 @@ describe('hosted mode stops', () => {
     stderr = ''
     stdout = []
     accountSites = []
+    issuer = undefined
     meStatus = 200
     runtime = createCliRuntime({
       configDir,
@@ -46,7 +48,7 @@ describe('hosted mode stops', () => {
       const url = new URL(input instanceof Request ? input.url : input)
       if (url.pathname === '/api/cli/me') {
         return meStatus === 200
-          ? Response.json({ user: { publicId: 'u_me', email: 'user@example.com' }, sites: accountSites })
+          ? Response.json({ user: { publicId: 'u_me', email: 'user@example.com' }, issuer, sites: accountSites })
           : Response.json({ message: 'Invalid API key' }, { status: meStatus })
       }
       throw new Error(`Unexpected request: ${url.pathname}`)
@@ -79,6 +81,47 @@ describe('hosted mode stops', () => {
     })
     expect(stderr).toContain('Error: Your hosted record has no Sites.')
     expect(stderr).not.toContain('gscdump.com')
+  })
+
+  it.each([
+    ['indexing summary', ['indexing', 'summary', '--json']],
+    ['bing inspect', ['bing', 'inspect', 'https://example.com/', '--site', 'example.com', '--json']],
+  ])('%s names the partner that issued the API key', async (_label, args) => {
+    issuer = { _tag: 'partner', name: 'Request Indexing' }
+
+    await expect(run(args)).resolves.toBe(1)
+
+    expect(jsonError()).toEqual({
+      code: 'NO_SITES',
+      message: 'Your hosted record has no Sites. Connect a Site in Request Indexing. Then run the command again.',
+      nextCommand: null,
+    })
+    expect(stderr).not.toContain('gscdump.com')
+  })
+
+  it('names the gscdump.com onboarding page for an API key that gscdump.com issued', async () => {
+    issuer = { _tag: 'gscdump' }
+
+    await expect(run(['indexing', 'summary', '--json'])).resolves.toBe(1)
+
+    expect(jsonError()).toMatchObject({
+      message: 'Your hosted record has no Sites. Connect a Site at https://gscdump.com/app/onboarding?step=connect-sites. Then run the command again.',
+    })
+  })
+
+  it.each([
+    ['an issuer kind this CLI does not know', { _tag: 'team', name: 'Acme' }],
+    ['a partner name with a terminal escape', { _tag: 'partner', name: 'Request\u001B[2JIndexing' }],
+    ['an empty partner name', { _tag: 'partner', name: ' ' }],
+  ])('names no product for %s', async (_label, value) => {
+    issuer = value
+
+    await expect(run(['indexing', 'summary', '--json'])).resolves.toBe(1)
+
+    expect(jsonError()).toMatchObject({
+      code: 'NO_SITES',
+      message: 'Your hosted record has no Sites. Connect a Site in the app that issued this API key. Then run the command again.',
+    })
   })
 
   it('names the gscdump.com onboarding page for a browser CLI session', async () => {

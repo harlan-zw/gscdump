@@ -2,7 +2,7 @@ import type { GscdumpV1OperationResponse } from '@gscdump/sdk/v1'
 import type { SiteManager } from '../auth-state'
 import { WATCHED_URL_LIMIT } from '@gscdump/contracts'
 import { defineCommand } from 'citty'
-import { siteManagerOf, siteSettingsPlace } from '../auth-state'
+import { siteSettingsPlace } from '../auth-state'
 import { HOSTED_ARGS, resolveHostedSite } from '../hosted-site'
 import { renderTable } from '../render/layout'
 import { terminalOutputOptions } from '../render/terminal'
@@ -118,13 +118,13 @@ const addCommand = defineCommand({
   async run({ args }) {
     const { json } = applyOutputMode(args)
     const urls = await readUrls(args)
-    const { client, site, authentication } = await resolveHostedSite({ ...args, _: [] }, { name: 'indexing watch add', localAlternative: LOCAL_ALTERNATIVE })
+    const { client, site, siteManager } = await resolveHostedSite({ ...args, _: [] }, { name: 'indexing watch add', localAlternative: LOCAL_ALTERNATIVE })
     const data = await changeInChunks(urls, async chunk => (await client.addSiteWatchedUrls({ params: { siteId: site.siteId }, body: { urls: chunk } })).data)
     if (json) {
       console.log(JSON.stringify(data, null, 2))
       return
     }
-    printChange('Added', data, site.siteUrl, siteManagerOf(authentication))
+    printChange('Added', data, site.siteUrl, siteManager)
   },
 })
 
@@ -137,13 +137,13 @@ const removeCommand = defineCommand({
   async run({ args }) {
     const { json } = applyOutputMode(args)
     const urls = await readUrls(args)
-    const { client, site, authentication } = await resolveHostedSite({ ...args, _: [] }, { name: 'indexing watch remove', localAlternative: LOCAL_ALTERNATIVE })
+    const { client, site, siteManager } = await resolveHostedSite({ ...args, _: [] }, { name: 'indexing watch remove', localAlternative: LOCAL_ALTERNATIVE })
     const data = await changeInChunks(urls, async chunk => (await client.removeSiteWatchedUrls({ params: { siteId: site.siteId }, body: { urls: chunk } })).data)
     if (json) {
       console.log(JSON.stringify(data, null, 2))
       return
     }
-    printChange('Removed', data, site.siteUrl, siteManagerOf(authentication))
+    printChange('Removed', data, site.siteUrl, siteManager)
   },
 })
 
