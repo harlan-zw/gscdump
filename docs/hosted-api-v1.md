@@ -217,6 +217,23 @@ allowance it sends the `user.allowance.notice` webhook to the partner. Its
 `sites`, `preserved_rows`, or `url_inspections`, `threshold` is `80` or `100`,
 and `period` is the UTC month as `YYYY-MM`.
 
+## Record read refusals
+
+If the Site's record cannot serve an `analytics.rows.query` read, the host
+refuses it with `409 invalid_request`, and `details.reason` names the state.
+The host never answers that read from live Google, and never answers it with
+an empty `200`. An immediate retry gets the same answer. Parse `details` with
+`parseRecordReadRefusal` from `@gscdump/contracts`:
+
+| `details.reason` | When | Other `details` |
+| --- | --- | --- |
+| `record_not_ready` | The Site has no synced data, or its Team catalog does not serve reads yet. | none |
+| `range_not_synced` | Sync has not reached days inside the range that Google still serves. | `missingStart`, `missingEnd` (`YYYY-MM-DD`) |
+
+Both can carry the Site's `syncStatus`, `lastSyncAt` (Unix seconds),
+`oldestDateSynced`, and `newestDateSynced`. A corrupted catalog fails as
+retryable `503 internal_error` instead.
+
 ## Bing and Sitemap submission states
 
 gscdump applies the Bing linking rules and the Sitemap submission rules itself.

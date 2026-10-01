@@ -131,6 +131,7 @@
   multiSeriesStackedDaily: function
   parseEntitlementRefusal: function
   parseGrantedScopes: function
+  parseRecordReadRefusal: function
   partnerControlEndpointSchemas: object
   partnerEndpointSchemas: object
   partnerLifecycleAccountSchema: object
@@ -154,6 +155,8 @@
   propertyStatuses: object
   queryDimSourceResponseSchema: object
   querySourceModes: object
+  RECORD_READ_REFUSAL_REASONS: object
+  recordReadRefusalSchema: object
   registerPartnerSiteSchema: object
   registerPartnerUserSchema: object
   renamePartnerTeamSchema: object

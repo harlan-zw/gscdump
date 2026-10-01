@@ -1,3 +1,4 @@
+import type { RecordReadRefusal } from '@gscdump/contracts'
 import type { GscdumpV1Client } from '@gscdump/sdk/v1'
 import type { BuilderState, Filter } from 'gscdump/query'
 
@@ -23,6 +24,8 @@ function toWireFilter(filter: Filter<any>): WireFilter {
 /**
  * Read rows from the hosted record through the public v1 `analytics.rows.query`
  * operation. It pages with `startRow` up to `state.rowLimit`. It never calls Google.
+ * When the record cannot serve the read, the host refuses it with a typed 409
+ * that `describeCliError` renders, so a refusal never prints as an empty result.
  */
 export async function queryHostedRows(client: GscdumpV1Client, siteId: string, state: BuilderState): Promise<Record<string, unknown>[]> {
   const limit = state.rowLimit ?? PAGE_SIZE
@@ -42,4 +45,29 @@ export async function queryHostedRows(client: GscdumpV1Client, siteId: string, s
       break
   }
   return rows
+}
+
+/** The CLI line for a hosted read the Site's record cannot serve, and the next step. Pure. */
+export function describeRecordReadRefusal(refusal: RecordReadRefusal): { message: string, hint: string } {
+  const running = refusal.syncStatus === 'syncing' || refusal.syncStatus === 'pending'
+  if (refusal.reason === 'record_not_ready') {
+    const hint = refusal.syncStatus === 'synced' && refusal.lastSyncAt !== undefined
+      ? `Sync finished at ${utcMinute(refusal.lastSyncAt)}. gscdump prepares the record for reads after Sync. Try again in a few minutes.`
+      : running
+        ? 'Sync is still running. Run `gscdump sites` to see its progress, then try again when it finishes.'
+        : 'Try again in a few minutes. Run `gscdump sites` to see the Sync state.'
+    return { message: 'The Site\'s record is not readable yet.', hint }
+  }
+  const days = refusal.missingStart === refusal.missingEnd ? refusal.missingStart : `${refusal.missingStart} to ${refusal.missingEnd}`
+  const held = refusal.oldestDateSynced && refusal.newestDateSynced
+    ? `The record holds ${refusal.oldestDateSynced} to ${refusal.newestDateSynced}. `
+    : ''
+  const next = running
+    ? 'Sync is still running. Try again when it finishes.'
+    : 'If Sync finished in the last few minutes, try again soon. Otherwise, pick dates inside the record with --start and --end.'
+  return { message: `The Site's record does not hold ${days}.`, hint: `${held}${next}` }
+}
+
+function utcMinute(unixSeconds: number): string {
+  return `${new Date(unixSeconds * 1000).toISOString().slice(0, 16).replace('T', ' ')} UTC`
 }
