@@ -11,6 +11,7 @@ import { classifyError } from 'gscdump/errors'
 import { isQueryError } from 'gscdump/query'
 import { isUsageError } from './command-registry'
 import { describeRecordReadRefusal } from './hosted-query'
+import { HOSTED_SESSION_EXPIRED, isSessionExpiredError } from './hosted-session'
 import { quotaStopOf } from './quota-ledger'
 import { stopDetailsOf } from './stop'
 
@@ -241,6 +242,10 @@ export function describeCliError(error: unknown): CliErrorReport {
       showAuthSources: false,
     }
   }
+  // A v1 call refused the CLI session. Without this, the Google sign-in hint
+  // and the Google credential sources print under a Hosted failure.
+  if (isSessionExpiredError(error))
+    return { kind: 'expected', message: HOSTED_SESSION_EXPIRED.message, hint: '', showAuthSources: false, stop: HOSTED_SESSION_EXPIRED }
   const refusal = recordReadRefusalOf(error)
   if (refusal) {
     const text = describeRecordReadRefusal(refusal)
