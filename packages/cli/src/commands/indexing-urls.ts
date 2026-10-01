@@ -70,7 +70,8 @@ export const indexingUrlsCommand = defineCommand({
     if (limit > MAX_PAGE_SIZE)
       throw new Error(`--limit must be ${MAX_PAGE_SIZE} or less. Use --all to read every page.`)
     const search = args.search ? String(args.search) : undefined
-    applyOutputMode({ json: format !== 'table', quiet: args.quiet })
+    // CSV keeps stdout clean like JSON, but a stop prints JSON only under JSON output.
+    applyOutputMode({ json: format === 'json', quiet: Boolean(args.quiet) || format === 'csv' })
     const filters = { ...(status ? { status } : {}), ...(search ? { search } : {}) }
 
     const { client, site } = await resolveHostedSite(args, {

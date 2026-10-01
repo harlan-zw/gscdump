@@ -1,6 +1,8 @@
 import type { GscdumpV1OperationResponse } from '@gscdump/sdk/v1'
+import type { SiteManager } from '../auth-state'
 import { WATCHED_URL_LIMIT } from '@gscdump/contracts'
 import { defineCommand } from 'citty'
+import { siteManagerOf, siteSettingsPlace } from '../auth-state'
 import { HOSTED_ARGS, resolveHostedSite } from '../hosted-site'
 import { renderTable } from '../render/layout'
 import { terminalOutputOptions } from '../render/terminal'
@@ -31,18 +33,20 @@ function watchedRow(entry: WatchedUrls['watched'][number]): Record<string, unkno
   }
 }
 
-const SKIP_HINTS: Partial<Record<WatchedUrlsChange['skipped'][number]['reason'], string>> = {
-  inspection_disabled: 'gscdump never inspects this Site, so a Watched URL gets no Checkpoint. To use Watched URLs, turn on URL Inspection in the Site settings on gscdump.com.',
+function skipHint(reason: WatchedUrlsChange['skipped'][number]['reason'], manager: SiteManager): string | undefined {
+  return reason === 'inspection_disabled'
+    ? `gscdump never inspects this Site, so a Watched URL gets no Checkpoint. To use Watched URLs, turn on URL Inspection ${siteSettingsPlace(manager)}.`
+    : undefined
 }
 
-function printChange(verb: 'Added' | 'Removed', result: WatchedUrlsChange, siteUrl: string): void {
+function printChange(verb: 'Added' | 'Removed', result: WatchedUrlsChange, siteUrl: string, manager: SiteManager): void {
   for (const url of result.changed)
     console.log(`${verb}: ${url}`)
   for (const url of result.unchanged)
     console.log(`${verb === 'Added' ? 'Already watched' : 'Not watched'}: ${url}`)
   for (const { url, reason } of result.skipped)
     console.log(`Skipped (${reason}): ${url}`)
-  for (const hint of new Set(result.skipped.map(({ reason }) => SKIP_HINTS[reason]).filter(Boolean)))
+  for (const hint of new Set(result.skipped.map(({ reason }) => skipHint(reason, manager)).filter(Boolean)))
     console.log(hint)
   logger.info(`${siteUrl} has ${result.total} of ${result.limit} Watched URLs.`)
 }
@@ -114,13 +118,13 @@ const addCommand = defineCommand({
   async run({ args }) {
     const { json } = applyOutputMode(args)
     const urls = await readUrls(args)
-    const { client, site } = await resolveHostedSite({ ...args, _: [] }, { name: 'indexing watch add', localAlternative: LOCAL_ALTERNATIVE })
+    const { client, site, authentication } = await resolveHostedSite({ ...args, _: [] }, { name: 'indexing watch add', localAlternative: LOCAL_ALTERNATIVE })
     const data = await changeInChunks(urls, async chunk => (await client.addSiteWatchedUrls({ params: { siteId: site.siteId }, body: { urls: chunk } })).data)
     if (json) {
       console.log(JSON.stringify(data, null, 2))
       return
     }
-    printChange('Added', data, site.siteUrl)
+    printChange('Added', data, site.siteUrl, siteManagerOf(authentication))
   },
 })
 
@@ -133,13 +137,13 @@ const removeCommand = defineCommand({
   async run({ args }) {
     const { json } = applyOutputMode(args)
     const urls = await readUrls(args)
-    const { client, site } = await resolveHostedSite({ ...args, _: [] }, { name: 'indexing watch remove', localAlternative: LOCAL_ALTERNATIVE })
+    const { client, site, authentication } = await resolveHostedSite({ ...args, _: [] }, { name: 'indexing watch remove', localAlternative: LOCAL_ALTERNATIVE })
     const data = await changeInChunks(urls, async chunk => (await client.removeSiteWatchedUrls({ params: { siteId: site.siteId }, body: { urls: chunk } })).data)
     if (json) {
       console.log(JSON.stringify(data, null, 2))
       return
     }
-    printChange('Removed', data, site.siteUrl)
+    printChange('Removed', data, site.siteUrl, siteManagerOf(authentication))
   },
 })
 

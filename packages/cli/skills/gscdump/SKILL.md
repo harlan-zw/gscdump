@@ -11,7 +11,7 @@ For `query`, `-s` means `--site`, `-d` means `--dimensions`, and `-f` means `--f
 Use `--start` and `--end` for dates. `--site=SITE` also works.
 Use each option once, with either its short or long spelling.
 Put options after the subcommand name: `gscdump store stats --json`, not `gscdump store --json stats`.
-A failed command prints one `Error:` line to stderr and exits 1.
+A failed command prints one `Error:` line to stderr and exits 1. A [stop](#stops) with JSON output also prints `{ "error" }` on stdout.
 Example: `gscdump query --site=SITE --start=DATE --end=DATE -d page -f json`.
 
 ## Start each task
@@ -43,6 +43,9 @@ gscdump has 2 access modes. Check `gscdump auth status --json` before queries. R
 In Local mode, `googleAuthenticated: true` means Google accepted the credentials. When it is false, `googleError` says why.
 In Hosted mode, `hostedSync` lists each hosted Site with `syncStatus` and `syncProgress`, and `commands` lists what Hosted mode can run.
 `gscdump sites` shows the same Sites and progress.
+An empty `sites` list means the hosted record has no Sites. Commands that need a Site then stop with `NO_SITES`.
+Tell the user to connect a Site. A browser login connects Sites on gscdump.com.
+An API key connects Sites in the app that issued the key. That app can be a partner app, not gscdump.com.
 
 `--mode local|hosted` overrides one invocation. `GSCDUMP_AUTH_MODE` also overrides the saved mode.
 A successful login saves the mode per profile.
@@ -128,8 +131,7 @@ mixes Store rows and live rows.
 - `--live` always asks Search Console. It needs Local mode with Google credentials.
 - `query --sql` reads the Store only. It stops when no table it names has data.
 - JSON output carries `meta.source`: `local`, `live`, or `hosted`.
-- A stop with `--format json` or `--json` prints `{ "error": { "code", "message", "nextCommand" } }` on stdout and exits 1.
-  Codes: `NOT_CONNECTED`, `STORE_RANGE_NOT_COVERED` (with `missingDates`), `SYNC_RUNNING` (with `sync.done` and `sync.total`), `NO_SYNCED_DATA`, `STORE_ONLY`, `LIVE_ONLY`.
+- A routing stop with JSON output prints `{ "error" }` on stdout and exits 1. See [Stops](#stops).
   Partial coverage and a running sync are normal progress. Run `nextCommand`, or tell the user to.
 - A sync is running only while its heartbeat is recent. A killed sync does not block reads.
 - Every Search Analytics, URL Inspection, and Indexing API call spends the shared quota ledger in the data dir.
@@ -153,7 +155,8 @@ gscdump skill install --agent claude    # Codex: --agent codex
 ```
 
 After upgrading the CLI, run this command again to update the installed skill.
-The command prints where it wrote the skill. Clients without a skill
+The command prints where it wrote the skill, as a path that works from any directory, such as `~/.claude/skills/gscdump`.
+With `--json`, `destination` is the absolute path. Clients without a skill
 directory can read `gscdump --help` and `gscdump <command> --help` instead.
 
 ## Local mode setup
@@ -219,6 +222,35 @@ stays parseable. `--quiet` drops progress lines.
 Parse JSON. Never scrape human output.
 If the user requests JSON, return the CLI JSON unchanged. Do not replace it with a table.
 Do not rewrite rows, estimate metrics, or add manually calculated totals.
+
+## Stops
+
+A stop ends a command at a known condition and exits 1. stderr gets the message.
+If the command writes JSON, stdout gets `{ "error": { "code", "message", "nextCommand" } }`.
+A command writes JSON with `--json`, with `--format json`, and for `query` with its default format.
+Read `code`, not the message. If `nextCommand` is not null, run it, or tell the user to run it.
+A `gscdump auth login` command needs the user. Tell the user to run it. If `nextCommand` is null, tell the user the `message`.
+A routing stop also has `siteUrl`. `STORE_RANGE_NOT_COVERED` adds `missingDates`, and `SYNC_RUNNING` adds `sync.done` and `sync.total`.
+
+| Code | Meaning |
+| --- | --- |
+| `NOT_CONNECTED` | The Store cannot answer, and Google is not connected |
+| `STORE_RANGE_NOT_COVERED` | The Store does not have `missingDates` |
+| `SYNC_RUNNING` | A sync is still filling the dates |
+| `NO_SYNCED_DATA` | A Store-only read found no synced data |
+| `STORE_ONLY` | The read needs the Store, so `--live` cannot run it |
+| `LIVE_ONLY` | Only `--live` can answer the read |
+| `LOCAL_MODE_REQUIRED` | The command calls Google, and Hosted mode is selected |
+| `HOSTED_MODE_REQUIRED` | The command reads the hosted record, and Local mode is selected |
+| `HOSTED_CREDENTIALS_MISSING` | Hosted mode has no CLI session and no API key |
+| `HOSTED_CREDENTIALS_REJECTED` | gscdump.com rejected the CLI session or API key. For an API key, `nextCommand` is null: the user needs a new key from the app that issued it |
+| `NO_SITES` | The hosted record has no Sites. The message says where the user connects one |
+| `SITE_NOT_FOUND` | No hosted Site matches `--site` |
+| `SITE_AMBIGUOUS` | More than one hosted Site matches `--site` |
+| `SITE_REQUIRED` | The hosted record has more than one Site. Pass `--site` |
+| `BING_NOT_CONNECTED` | The Site has no hosted Bing connection |
+| `RECORD_NOT_READY` | gscdump has not prepared the Site's record for reads yet |
+| `RANGE_NOT_SYNCED` | The hosted record does not hold the requested dates |
 
 ## Commands
 

@@ -5,7 +5,7 @@ import { confirm, isCancel } from '@clack/prompts'
 import { defineCommand } from 'citty'
 import { resolveSiteInput } from 'gscdump'
 import { addSite, deleteSite, fetchSitesWithSitemaps, getVerificationToken, getVerifiedSite, listVerifiedSites, siteUrlToVerificationSite, unverifySite, verificationMethodsFor, verifySite } from 'gscdump/sites'
-import { formatHostedSync, getHostedAccount, LOCAL_MODE_REQUIRED, resolveAuthentication } from '../auth-state'
+import { connectSiteStep, formatHostedSync, getHostedAccount, localModeRequired, resolveAuthentication, siteManagerOf } from '../auth-state'
 import { sitesCommandMeta } from '../command-meta'
 import { createCommandContext, formatSiteResolution } from '../context'
 import { applyOutputMode, logger, OUTPUT_ARGS, plural } from '../utils'
@@ -381,7 +381,7 @@ const LIST_ARGS = {
 /** Hosted mode lists the Sites in the gscdump.com record. It never calls Google. */
 async function runListHostedSites(args: Record<string, unknown>, authentication: HostedAuthentication): Promise<void> {
   if (args['with-sitemaps'] || args['owner-only'])
-    throw new Error(`--with-sitemaps and --owner-only read Search Console permissions.\n${LOCAL_MODE_REQUIRED}`)
+    throw localModeRequired('--with-sitemaps and --owner-only read Search Console permissions.')
   const { sites } = await getHostedAccount(authentication)
   if (args.json) {
     console.log(JSON.stringify(sites.map(site => ({
@@ -392,7 +392,7 @@ async function runListHostedSites(args: Record<string, unknown>, authentication:
     return
   }
   if (sites.length === 0) {
-    logger.warn('Your hosted record has no Sites. Connect a Site at https://gscdump.com/app/onboarding?step=connect-sites.')
+    logger.warn(`Your hosted record has no Sites. ${connectSiteStep(siteManagerOf(authentication))}`)
     return
   }
   logger.success(`Found ${plural(sites.length, 'hosted Site', 'hosted Sites')}:`)

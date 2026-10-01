@@ -130,8 +130,11 @@ describe('query --sql views', () => {
   })
 
   it('stops with the next command when no table the query names has synced data', async () => {
-    await expect(sql('SELECT COUNT(*) AS n FROM countries')).rejects.toThrow('The Store has no countries data')
-    expect(JSON.parse(output.join('\n')).error).toMatchObject({ code: 'NOT_CONNECTED', nextCommand: 'gscdump init' })
+    // The shell prints `stopDetails` as `{ error }` on stdout under JSON output.
+    await expect(sql('SELECT COUNT(*) AS n FROM countries')).rejects.toMatchObject({
+      message: expect.stringContaining('The Store has no countries data'),
+      stopDetails: { code: 'NOT_CONNECTED', nextCommand: 'gscdump init' },
+    })
   })
 
   it('warns when a join names a table with no synced data', async () => {

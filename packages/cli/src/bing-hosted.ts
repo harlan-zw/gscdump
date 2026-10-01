@@ -2,9 +2,13 @@ import type { GscdumpV1Client, GscdumpV1OperationResponse } from '@gscdump/sdk/v
 import type { HostedAuthentication } from './auth-state'
 import type { BingDumpDataset, BingDumpSummary, parseBingDumpOptions } from './bing-data'
 import { createGscdumpV1Client } from '@gscdump/sdk/v1'
-import { getHostedAccount, hostedCredential } from './auth-state'
+import { getHostedAccount, hostedCredential, siteManagerOf } from './auth-state'
 import { writeBingDump } from './bing-data'
+import { noSitesStop } from './hosted-site'
+import { stopError } from './stop'
 import { logger } from './utils'
+
+const BING_SITES_COMMAND = 'gscdump bing sites --json'
 
 interface HostedBingSite {
   siteId: string
@@ -49,21 +53,24 @@ export async function resolveHostedBingSites(state: HostedAuthentication, input:
   if (Boolean(input.site) === Boolean(input.allSites))
     throw new Error('Choose --site or --all-sites.')
   const account = await getHostedAccount(state)
+  if (account.sites.length === 0)
+    throw stopError(noSitesStop(siteManagerOf(state)))
   const exact = account.sites.filter(site => site.siteId === input.site || site.siteUrl === input.site)
   const normalize = (value: string): string | undefined => URL.parse(value.startsWith('sc-domain:') ? `https://${value.slice(10)}/` : value)?.toString()
   const requested = input.allSites
     ? account.sites
     : exact.length ? exact : account.sites.filter(site => normalize(site.siteUrl) === normalize(input.site!) && normalize(input.site!) !== undefined)
   if (requested.length === 0)
-    throw new Error('No matching Bing site. Run `gscdump bing sites`.')
+    throw stopError({ code: 'SITE_NOT_FOUND', message: 'No matching Bing site. Run `gscdump bing sites`.', nextCommand: BING_SITES_COMMAND })
   if (!input.allSites && requested.length > 1)
-    throw new Error('Multiple Bing sites match. Use a site ID from `gscdump bing sites`.')
+    throw stopError({ code: 'SITE_AMBIGUOUS', message: 'Multiple Bing sites match. Use a site ID from `gscdump bing sites`.', nextCommand: BING_SITES_COMMAND })
   const connections = await loadHostedBingConnections(state, requested, { tolerateFailures: Boolean(input.allSites) })
   const selected = input.allSites ? connections.filter(site => site.connection._tag === 'connected') : connections
   if (selected.length === 0)
-    throw new Error('No matching Bing site. Run `gscdump bing sites`.')
-  if (input.requireConnected !== false && selected.some(site => site.connection._tag !== 'connected'))
-    throw new Error('Bing is not connected. Run `gscdump bing login --site SITE_ID`.')
+    throw stopError({ code: 'SITE_NOT_FOUND', message: 'No matching Bing site. Run `gscdump bing sites`.', nextCommand: BING_SITES_COMMAND })
+  const unconnected = input.requireConnected === false ? undefined : selected.find(site => site.connection._tag !== 'connected')
+  if (unconnected)
+    throw stopError({ code: 'BING_NOT_CONNECTED', message: `Bing is not connected for ${unconnected.siteUrl}. Run \`gscdump bing login --site ${unconnected.siteId}\`.`, nextCommand: `gscdump bing login --site ${unconnected.siteId}` })
   return selected
 }
 

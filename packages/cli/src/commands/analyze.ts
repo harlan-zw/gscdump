@@ -9,7 +9,7 @@ import { analysisNeeds, analyzerTables, resolveAnalysisSource } from '../analysi
 import { analyzeCommandMeta } from '../command-meta'
 import { coverageWarning, renderAnalysis } from '../render/analysis'
 import { terminalOutputOptions } from '../render/terminal'
-import { logger, parseFetchBudget, parseIntegerOption, toCSV } from '../utils'
+import { logger, parseFetchBudget, parseIntegerOption, setJsonOutput, toCSV } from '../utils'
 import { DEFAULT_WINDOW, parseWindowFlags, PERIOD_FLAGS, windowFlagErrorToException } from '../window'
 
 const ANALYSIS_TOOLS = defaultAnalyzerRegistry.listAnalyzerIds()
@@ -135,10 +135,10 @@ function makeToolCommand(tool: AnalysisTool): CommandDef<any> {
         throw new Error('Invalid --format. Use table, json, or csv.')
       const baseParams = buildParams(tool, args)
       const format = args.json ? 'json' : String(args.format ?? 'table')
+      setJsonOutput(format === 'json')
       const { runAnalysis, siteUrl, anchor } = await resolveAnalysisSource({
         site: args.site,
         live: !!args.live,
-        json: format === 'json',
         label: `analyze ${tool}`,
         types: [tool],
         anchorTables: analyzerTables(baseParams),

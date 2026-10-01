@@ -9,6 +9,7 @@ import { BING_DATASETS, dumpBingSite, parseBingDumpOptions, resolveBingSites, un
 import { dumpHostedBingSite, hostedBingClient, inspectHostedBingUrl, listHostedBingSites, resolveHostedBingSites } from '../bing-hosted'
 import { bingCommandMeta } from '../command-meta'
 import { useCliRuntime } from '../runtime'
+import { stopError } from '../stop'
 import { applyOutputMode, logger, OUTPUT_ARGS, plural } from '../utils'
 
 const siteArg = { type: 'string', alias: 's', description: 'Site ID or URL from `gscdump bing sites`' } as const
@@ -219,7 +220,7 @@ export const bingCommand = defineCommand({
         applyOutputMode(args)
         const authentication = await resolveAuthentication()
         if (authentication._tag !== 'Hosted')
-          throw new Error('Hosted Bing connection verification needs Hosted mode. Pass --mode hosted.')
+          throw stopError({ code: 'HOSTED_MODE_REQUIRED', message: 'Hosted Bing connection verification needs Hosted mode. Pass --mode hosted.', nextCommand: 'gscdump auth login --mode hosted' })
         const [site] = await resolveHostedBingSites(authentication, { site: args.site, requireConnected: false })
         const result = await hostedBingClient(authentication).verifySiteBingConnection({ params: { siteId: site!.siteId } })
         console.log(JSON.stringify(result.data, null, 2))

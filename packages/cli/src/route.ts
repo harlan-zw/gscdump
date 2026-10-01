@@ -12,12 +12,14 @@ import type { SearchType } from 'gscdump/query'
 import type { CommandContext } from './context'
 import type { CoverageSyncState } from './coverage'
 import type { LocalStore, SyncState, TableName } from './local-store'
+import type { StopCode, StopDetails, StopError } from './stop'
 import type { SyncRunStatus } from './sync-run'
 import { buildCoveragePlan, gapsForRange } from '@gscdump/engine/analysis-range'
 import { addDays } from 'gscdump/dates'
 import { probeAuth } from './auth'
 import { formatSiteResolution, siteArg } from './context'
 import { hasSyncedDays, syncStateCoverageReader } from './coverage'
+import { stopError } from './stop'
 import { listStoreSites } from './store-sites'
 import { isProcessAlive, readSyncRun, syncRunStatus } from './sync-run'
 
@@ -282,7 +284,7 @@ export function liveNote(site: string): string {
 }
 
 /** Machine-readable code of a stop, for `--json` output. */
-export function stopCode(route: Exclude<Route, { kind: 'local' } | { kind: 'live' }>): string {
+export function stopCode(route: Exclude<Route, { kind: 'local' } | { kind: 'live' }>): StopCode {
   if (route.kind === 'syncing')
     return 'SYNC_RUNNING'
   switch (route.reason.kind) {
@@ -300,9 +302,9 @@ export function stopCode(route: Exclude<Route, { kind: 'local' } | { kind: 'live
 
 export type RouteStop = Exclude<Route, { kind: 'local' } | { kind: 'live' }>
 
-/** An Error that ends a command at a stop. The CLI shell prints its message and no stack. */
-export function routeStopError(route: RouteStop, message: string): Error & { routeStop: RouteStop } {
-  return Object.assign(new Error(message), { name: 'RouteStopError', routeStop: route })
+/** An Error that ends a command at a stop. The CLI shell prints its message and no stack, and its JSON form under JSON output. */
+export function routeStopError(route: RouteStop, details: RouteStopDetails): StopError<RouteStopDetails> & { routeStop: RouteStop } {
+  return Object.assign(stopError(details, 'RouteStopError'), { routeStop: route })
 }
 
 export function routeStopOf(error: unknown): RouteStop | undefined {
@@ -397,11 +399,8 @@ export async function resolveReadSite(
   return { site: await (await opts.connect()).resolveSite(target, { scope: 'account' }), auth }
 }
 
-export interface RouteStopDetails {
-  code: string
-  message: string
+export interface RouteStopDetails extends StopDetails {
   siteUrl: string | null
-  nextCommand: string | null
   missingDates?: string[]
   sync?: { done: number, total: number }
 }
@@ -419,12 +418,10 @@ export function describeStop(route: RouteStop, req: RouteRequest, auth: RouteAut
 }
 
 /**
- * End the command at a stop. With `--json`, stdout gets `{ error }` so an
- * agent can read the next command. The shell prints the message to stderr.
+ * End the command at a stop. The shell prints the message to stderr. Under
+ * JSON output it also prints `{ error }` on stdout, so an agent can read the
+ * next command.
  */
-export function stopAtRoute(route: RouteStop, req: RouteRequest, auth: RouteAuth, opts: { json: boolean }): never {
-  const details = describeStop(route, req, auth)
-  if (opts.json)
-    console.log(JSON.stringify({ error: details }, null, 2))
-  throw routeStopError(route, details.message)
+export function stopAtRoute(route: RouteStop, req: RouteRequest, auth: RouteAuth): never {
+  throw routeStopError(route, describeStop(route, req, auth))
 }
