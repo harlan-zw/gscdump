@@ -82,6 +82,26 @@ describe('hosted query when the Site\'s record cannot serve the read', () => {
     await expect(query()).resolves.toBe(1)
 
     expect(stderr).toContain('Error: The Site\'s record does not hold 2026-09-03 to 2026-09-12.')
-    expect(stderr).toContain('The record holds 2026-09-13 to 2026-09-29. Sync is still running. Try again when it finishes.')
+    expect(stderr).toContain('Sync covers 2026-09-13 to 2026-09-29. Sync is still running. Try again when it finishes.')
+  })
+
+  // Production, 2026-10-01: the Site reported Sync through 2026-09-29 while the
+  // record stopped at 2026-09-28. The hint said the record held 2026-09-29.
+  it('does not claim the record holds days Sync covered but the record lacks', async () => {
+    refusal = { reason: 'range_not_synced', missingStart: '2026-09-29', missingEnd: '2026-09-29', syncStatus: 'synced', lastSyncAt: 1790824592, oldestDateSynced: '2025-05-30', newestDateSynced: '2026-09-29' }
+
+    await expect(query()).resolves.toBe(1)
+
+    expect(stderr).toContain('Error: The Site\'s record does not hold 2026-09-29.')
+    expect(stderr).toContain('Sync covers these days, but the record does not hold them yet. Pick an earlier end date with --end, or try again later.')
+    expect(stderr).not.toContain('holds 2025-05-30 to 2026-09-29')
+  })
+
+  it('points a finished Sync at the dates it covers', async () => {
+    refusal = { reason: 'range_not_synced', missingStart: '2026-07-01', missingEnd: '2026-07-31', syncStatus: 'synced', oldestDateSynced: '2026-09-01', newestDateSynced: '2026-09-29' }
+
+    await expect(query()).resolves.toBe(1)
+
+    expect(stderr).toContain('Sync covers 2026-09-01 to 2026-09-29. Pick dates in that range with --start and --end.')
   })
 })

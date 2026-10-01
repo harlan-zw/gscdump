@@ -28,8 +28,9 @@ const siteSyncFields = {
  *
  * - `record_not_ready`: the Site has no synced data, or its Team catalog does
  *   not serve reads yet.
- * - `range_not_synced`: Sync has not reached the days from `missingStart` to
- *   `missingEnd` (`YYYY-MM-DD`), which Google still serves.
+ * - `range_not_synced`: the record lacks the days from `missingStart` to
+ *   `missingEnd` (`YYYY-MM-DD`), which Google still serves. The record can
+ *   lag `newestDateSynced`, so those days can sit inside the synced range.
  *
  * Both can carry the Site's `syncStatus`, `lastSyncAt` (Unix seconds),
  * `oldestDateSynced`, and `newestDateSynced`. Unknown `details` keys are
