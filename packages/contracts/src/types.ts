@@ -1224,7 +1224,6 @@ export interface GscdumpUserMeResponse {
   picture?: string
   setupComplete: boolean
   databaseReady: boolean
-  plan: string
   accountStatus: AccountStatus
   accountNextAction: AccountNextAction
   missingScopes: string[]

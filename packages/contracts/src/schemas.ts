@@ -990,7 +990,6 @@ export const gscdumpUserMeResponseSchema = z.object({
   picture: z.string().optional(),
   setupComplete: z.boolean(),
   databaseReady: z.boolean(),
-  plan: z.string(),
   accountStatus: z.enum(accountStatuses),
   accountNextAction: z.enum(accountNextActions),
   missingScopes: z.array(z.string()),
