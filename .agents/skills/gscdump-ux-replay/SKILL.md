@@ -1,6 +1,6 @@
 ---
 name: gscdump-ux-replay
-description: Replay gscdump onboarding with a fully local CLI user and a cloud user, capture loading states and screenshots, fix material defects, then combine the agent run with the user's own walkthrough. Use for launch rehearsals, first-user tests, or repeat onboarding checks.
+description: Replay gscdump onboarding with a Local CLI user and a Hosted user, capture loading states and screenshots, fix material defects, then combine the agent run with the user's own walkthrough. Use for launch rehearsals, first-user tests, or repeat onboarding checks.
 ---
 
 # gscdump UX replay
@@ -20,12 +20,12 @@ This is a product test, not a checklist that passes because commands exit zero.
 
 If the user asks for simultaneous personas, delegate one run to a sub-agent. Give each run a separate browser name, CLI config, and Store. Keep one shared note and reconcile findings yourself.
 
-## Persona A: fully local CLI
+## Persona A: Local CLI
 
 Goal: use a personal Google Cloud Desktop OAuth client or service account. Google data calls go directly from the CLI to Google. This persona does not use gscdump.com OAuth.
 
 1. Start from the GitHub README as a visitor. Follow its local path without filling gaps from memory.
-2. Make the choice between Cloud, Local with gscdump.com OAuth, and Bring Your Own Keys explicit. Choose Bring Your Own Keys for this run.
+2. Make the choice between Local and Hosted explicit. Choose Local for this run.
 3. Use a dedicated CLI config and Store. Check current docs for the config override. Never put credentials in commands, screenshots, notes, or process arguments.
 4. Set the Google credentials through the documented environment or a local ignored file. Have the user complete any Google sign-in prompt in their chosen profile.
 5. Run local login, auth status, and Sites. Confirm the credential source and that requests are direct.
@@ -35,9 +35,9 @@ Goal: use a personal Google Cloud Desktop OAuth client or service account. Googl
 
 Treat copied API keys as SDK or automation usage. CLI users should use `auth login`.
 
-## Persona B: cloud service
+## Persona B: Hosted
 
-Goal: sign in at gscdump.com, connect a Site, ingest history, and use the dashboard and cloud CLI. The CLI saves its browser-approved session. Do not ask the user to copy an API key.
+Goal: sign in at gscdump.com, connect a Site, ingest history, and use the dashboard and the CLI in Hosted mode. The CLI saves its browser-approved session. Do not ask the user to copy an API key.
 
 1. Start at the README and enter the production site in the requested main browser profile. Use the requested Google profile.
 2. Inspect the signed-out page before Google consent. Check signup availability and the waitlist path.
@@ -47,7 +47,7 @@ Goal: sign in at gscdump.com, connect a Site, ingest history, and use the dashbo
    Do not disconnect a Site or repeat a large ingest just to reset the test.
 5. For a large ingest, sample early, middle, near-complete, and final states. Capture any false completion, stale count, stuck spinner, or empty state shown before data loads.
 6. Open Overview and Queries while syncing and after completion. Reload once to catch first-render loading errors. Check the sidebar too.
-7. Run `gscdump auth login --mode cloud`, `auth status`, `sites`, and one live query from an isolated CLI config. Use the browser login flow, including `--no-browser` only when profile selection needs it.
+7. Run `gscdump auth login --mode hosted`, `auth status`, `sites`, and one live query from an isolated CLI config. Use the browser login flow, including `--no-browser` only when profile selection needs it.
 8. Compare CLI Site progress with the dashboard. Check Domain and URL prefix rows for duplicate-host confusion.
 
 Do not create or rotate production Google credentials unless the flow proves they are needed. Use the existing production OAuth client when it works.
