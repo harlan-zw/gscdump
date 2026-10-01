@@ -276,6 +276,16 @@
   defineHttpSurface: function
   defineResponseObject: function
   defineSuccessResponse: function
+  GOOGLE_INDEXING_API_PROJECT_DAILY_DEFAULT: number
+  GOOGLE_SUBMISSION_MAX_ATTEMPTS: number
+  GOOGLE_SUBMISSION_REFUSAL_REASONS: object
+  GOOGLE_SUBMISSION_REJECTION_REASONS: object
+  GOOGLE_SUBMISSION_SITE_DAILY_LIMIT: number
+  GOOGLE_SUBMISSION_URL_COOLDOWN_DAYS: number
+  googleSubmissionReceiptV1Schema: object
+  googleSubmissionReceiptV1Schemas: object
+  googleSubmissionRefusalSchema: object
+  googleSubmitV1Schema: object
   GSC_SITEMAP_SUBMIT_PERMISSION_LEVELS: object
   GSC_SITEMAP_SUBMIT_SCOPE: string
   GSCDUMP_HTTP_V1_VERSION: string
@@ -300,6 +310,9 @@
   HTTP_V1_METHODS: object
   HTTP_V1_SCOPES: object
   HTTP_V1_SURFACES: object
+  indexingApiGrantUpdateV1Schema: object
+  indexingApiGrantV1Schema: object
+  indexingApiGrantV1Schemas: object
   indexNowConfigureV1Schema: object
   indexNowConnectionV1Schema: object
   indexNowConnectionV1Schemas: object
@@ -309,6 +322,7 @@
   indexNowSubmitV1Schema: object
   isUnknownHttpV1OperationError: function
   listHttpOperations: function
+  parseGoogleSubmissionRefusal: function
   REALTIME_V1_EVENT_NAMES: object
   REALTIME_V1_EVENT_SEMANTICS: object
   REALTIME_V1_RESOURCE_TYPES: object
@@ -344,6 +358,16 @@
   defineHttpSurface: function
   defineResponseObject: function
   defineSuccessResponse: function
+  GOOGLE_INDEXING_API_PROJECT_DAILY_DEFAULT: number
+  GOOGLE_SUBMISSION_MAX_ATTEMPTS: number
+  GOOGLE_SUBMISSION_REFUSAL_REASONS: object
+  GOOGLE_SUBMISSION_REJECTION_REASONS: object
+  GOOGLE_SUBMISSION_SITE_DAILY_LIMIT: number
+  GOOGLE_SUBMISSION_URL_COOLDOWN_DAYS: number
+  googleSubmissionReceiptV1Schema: object
+  googleSubmissionReceiptV1Schemas: object
+  googleSubmissionRefusalSchema: object
+  googleSubmitV1Schema: object
   GSC_SITEMAP_SUBMIT_PERMISSION_LEVELS: object
   GSC_SITEMAP_SUBMIT_SCOPE: string
   GSCDUMP_HTTP_V1_VERSION: string
@@ -353,6 +377,9 @@
   HTTP_V1_METHODS: object
   HTTP_V1_SCOPES: object
   HTTP_V1_SURFACES: object
+  indexingApiGrantUpdateV1Schema: object
+  indexingApiGrantV1Schema: object
+  indexingApiGrantV1Schemas: object
   indexNowConfigureV1Schema: object
   indexNowConnectionV1Schema: object
   indexNowConnectionV1Schemas: object
@@ -362,6 +389,7 @@
   indexNowSubmitV1Schema: object
   isUnknownHttpV1OperationError: function
   listHttpOperations: function
+  parseGoogleSubmissionRefusal: function
   resolveHttpOperation: function
   sitemapGrantHolderV1Schemas: object
   sitemapSubmissionStateV1Schemas: object

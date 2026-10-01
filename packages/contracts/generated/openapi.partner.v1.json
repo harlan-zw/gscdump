@@ -1531,6 +1531,176 @@
           }
         ]
       },
+      "partner.sites.indexing.google.submissions.create.error": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "enum": [
+                  "invalid_request",
+                  "unauthorized",
+                  "forbidden",
+                  "site_not_found",
+                  "rate_limited",
+                  "internal_error",
+                  "contract_violation"
+                ],
+                "type": "string"
+              },
+              "details": {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/partner.sites.indexing.google.submissions.create.error.__schema0"
+                },
+                "propertyNames": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              "message": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "requestId": {
+                "pattern": "^req_[\\w-]+$",
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "requestId",
+              "retryable",
+              "details"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "partner.sites.indexing.google.submissions.create.error.__schema0": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          },
+          {
+            "items": {
+              "$ref": "#/components/schemas/partner.sites.indexing.google.submissions.create.error.__schema0"
+            },
+            "type": "array"
+          },
+          {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/partner.sites.indexing.google.submissions.create.error.__schema0"
+            },
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": "object"
+          }
+        ]
+      },
+      "partner.sites.indexing.google.submissions.list.error": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "enum": [
+                  "invalid_request",
+                  "unauthorized",
+                  "forbidden",
+                  "site_not_found",
+                  "rate_limited",
+                  "internal_error",
+                  "contract_violation"
+                ],
+                "type": "string"
+              },
+              "details": {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/partner.sites.indexing.google.submissions.list.error.__schema0"
+                },
+                "propertyNames": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              "message": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "requestId": {
+                "pattern": "^req_[\\w-]+$",
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "requestId",
+              "retryable",
+              "details"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "partner.sites.indexing.google.submissions.list.error.__schema0": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          },
+          {
+            "items": {
+              "$ref": "#/components/schemas/partner.sites.indexing.google.submissions.list.error.__schema0"
+            },
+            "type": "array"
+          },
+          {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/partner.sites.indexing.google.submissions.list.error.__schema0"
+            },
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": "object"
+          }
+        ]
+      },
       "partner.sites.indexing.indexnow.connection.configure.error": {
         "additionalProperties": false,
         "properties": {
@@ -5180,6 +5350,261 @@
           {
             "additionalProperties": {
               "$ref": "#/components/schemas/partner.users.indexing.bing.sites.list.error.__schema0"
+            },
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": "object"
+          }
+        ]
+      },
+      "partner.users.indexing.google.grant.get.error": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "enum": [
+                  "invalid_request",
+                  "unauthorized",
+                  "forbidden",
+                  "user_not_found",
+                  "rate_limited",
+                  "internal_error",
+                  "contract_violation"
+                ],
+                "type": "string"
+              },
+              "details": {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/partner.users.indexing.google.grant.get.error.__schema0"
+                },
+                "propertyNames": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              "message": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "requestId": {
+                "pattern": "^req_[\\w-]+$",
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "requestId",
+              "retryable",
+              "details"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "partner.users.indexing.google.grant.get.error.__schema0": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          },
+          {
+            "items": {
+              "$ref": "#/components/schemas/partner.users.indexing.google.grant.get.error.__schema0"
+            },
+            "type": "array"
+          },
+          {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/partner.users.indexing.google.grant.get.error.__schema0"
+            },
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": "object"
+          }
+        ]
+      },
+      "partner.users.indexing.google.grant.revoke.error": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "enum": [
+                  "invalid_request",
+                  "unauthorized",
+                  "forbidden",
+                  "user_not_found",
+                  "rate_limited",
+                  "internal_error",
+                  "contract_violation"
+                ],
+                "type": "string"
+              },
+              "details": {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/partner.users.indexing.google.grant.revoke.error.__schema0"
+                },
+                "propertyNames": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              "message": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "requestId": {
+                "pattern": "^req_[\\w-]+$",
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "requestId",
+              "retryable",
+              "details"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "partner.users.indexing.google.grant.revoke.error.__schema0": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          },
+          {
+            "items": {
+              "$ref": "#/components/schemas/partner.users.indexing.google.grant.revoke.error.__schema0"
+            },
+            "type": "array"
+          },
+          {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/partner.users.indexing.google.grant.revoke.error.__schema0"
+            },
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": "object"
+          }
+        ]
+      },
+      "partner.users.indexing.google.grant.update.error": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "enum": [
+                  "invalid_request",
+                  "unauthorized",
+                  "forbidden",
+                  "user_not_found",
+                  "rate_limited",
+                  "internal_error",
+                  "contract_violation"
+                ],
+                "type": "string"
+              },
+              "details": {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/partner.users.indexing.google.grant.update.error.__schema0"
+                },
+                "propertyNames": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              "message": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "requestId": {
+                "pattern": "^req_[\\w-]+$",
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "requestId",
+              "retryable",
+              "details"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "partner.users.indexing.google.grant.update.error.__schema0": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          },
+          {
+            "items": {
+              "$ref": "#/components/schemas/partner.users.indexing.google.grant.update.error.__schema0"
+            },
+            "type": "array"
+          },
+          {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/partner.users.indexing.google.grant.update.error.__schema0"
             },
             "propertyNames": {
               "type": "string"
@@ -14376,6 +14801,817 @@
           "readConsistency": "primary",
           "retry": "idempotent",
           "sideEffects": "none"
+        },
+        "x-gscdump-visibility": "public"
+      }
+    },
+    "/api/partner/v1/sites/{siteId}/indexing/google/submissions": {
+      "get": {
+        "description": "Returns Google Indexing API Submission Receipts for this Site, newest first.",
+        "operationId": "partner.sites.indexing.google.submissions.list",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "siteId",
+            "required": true,
+            "schema": {
+              "pattern": "^s_[\\w-]+$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "pattern": "^req_[\\w-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "pagination": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "hasMore": {
+                              "type": "boolean"
+                            },
+                            "limit": {
+                              "exclusiveMinimum": 0,
+                              "maximum": 9007199254740991,
+                              "type": "integer"
+                            },
+                            "offset": {
+                              "maximum": 9007199254740991,
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "total": {
+                              "maximum": 9007199254740991,
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "total",
+                            "limit",
+                            "offset",
+                            "hasMore"
+                          ],
+                          "type": "object"
+                        },
+                        "submissionReceipts": {
+                          "items": {
+                            "oneOf": [
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "_tag": {
+                                    "const": "accepted",
+                                    "type": "string"
+                                  },
+                                  "attempts": {
+                                    "maximum": 3,
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "createdAt": {
+                                    "format": "date-time",
+                                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                    "type": "string"
+                                  },
+                                  "httpStatus": {
+                                    "const": 200,
+                                    "type": "number"
+                                  },
+                                  "id": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "reason": {
+                                    "type": "null"
+                                  },
+                                  "updatedAt": {
+                                    "format": "date-time",
+                                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                    "type": "string"
+                                  },
+                                  "url": {
+                                    "format": "uri",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "_tag",
+                                  "id",
+                                  "url",
+                                  "createdAt",
+                                  "updatedAt",
+                                  "attempts",
+                                  "httpStatus",
+                                  "reason"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "_tag": {
+                                    "const": "rejected",
+                                    "type": "string"
+                                  },
+                                  "attempts": {
+                                    "maximum": 3,
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "createdAt": {
+                                    "format": "date-time",
+                                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                    "type": "string"
+                                  },
+                                  "httpStatus": {
+                                    "anyOf": [
+                                      {
+                                        "maximum": 499,
+                                        "minimum": 400,
+                                        "type": "integer"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "id": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "reason": {
+                                    "enum": [
+                                      "not-owner",
+                                      "access-revoked",
+                                      "quota-exhausted",
+                                      "reauthorization-required"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "updatedAt": {
+                                    "format": "date-time",
+                                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                    "type": "string"
+                                  },
+                                  "url": {
+                                    "format": "uri",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "_tag",
+                                  "id",
+                                  "url",
+                                  "createdAt",
+                                  "updatedAt",
+                                  "attempts",
+                                  "httpStatus",
+                                  "reason"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "_tag": {
+                                    "const": "failed",
+                                    "type": "string"
+                                  },
+                                  "attempts": {
+                                    "maximum": 3,
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "createdAt": {
+                                    "format": "date-time",
+                                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                    "type": "string"
+                                  },
+                                  "httpStatus": {
+                                    "anyOf": [
+                                      {
+                                        "maximum": 599,
+                                        "minimum": 100,
+                                        "type": "integer"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "id": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "reason": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "updatedAt": {
+                                    "format": "date-time",
+                                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                    "type": "string"
+                                  },
+                                  "url": {
+                                    "format": "uri",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "_tag",
+                                  "id",
+                                  "url",
+                                  "createdAt",
+                                  "updatedAt",
+                                  "attempts",
+                                  "httpStatus",
+                                  "reason"
+                                ],
+                                "type": "object"
+                              }
+                            ]
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "submissionReceipts",
+                        "pagination"
+                      ],
+                      "type": "object"
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "requestId": {
+                          "pattern": "^req_[\\w-]+$",
+                          "type": "string"
+                        },
+                        "surface": {
+                          "const": "partner",
+                          "type": "string"
+                        },
+                        "version": {
+                          "const": "1.0",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "requestId",
+                        "surface",
+                        "version"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.sites.indexing.google.submissions.list.error"
+                }
+              }
+            },
+            "description": "Declared client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.sites.indexing.google.submissions.list.error"
+                }
+              }
+            },
+            "description": "Safe internal or contract error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.sites.indexing.google.submissions.list.error"
+                }
+              }
+            },
+            "description": "Stable error envelope"
+          }
+        },
+        "security": [
+          {
+            "user_key": []
+          },
+          {
+            "partner_key": []
+          }
+        ],
+        "summary": "List Google Indexing API Submission Receipts",
+        "tags": [
+          "Indexing"
+        ],
+        "x-gscdump-errors": [
+          "invalid_request",
+          "unauthorized",
+          "forbidden",
+          "site_not_found",
+          "rate_limited",
+          "internal_error",
+          "contract_violation"
+        ],
+        "x-gscdump-examples": {
+          "request": {
+            "params": {
+              "siteId": "s_01"
+            },
+            "query": {
+              "limit": 25,
+              "offset": 0
+            }
+          },
+          "response": {
+            "data": {
+              "pagination": {
+                "hasMore": false,
+                "limit": 25,
+                "offset": 0,
+                "total": 0
+              },
+              "submissionReceipts": []
+            },
+            "meta": {
+              "requestId": "req_01",
+              "surface": "partner",
+              "version": "1.0"
+            }
+          }
+        },
+        "x-gscdump-lifecycle": {
+          "introduced": "4.9.0"
+        },
+        "x-gscdump-ownership": [
+          {
+            "credential": "user_key",
+            "rule": "authorized_site"
+          },
+          {
+            "credential": "partner_key",
+            "rule": "authorized_site"
+          }
+        ],
+        "x-gscdump-resources": {
+          "changes": [],
+          "reads": [
+            {
+              "idFrom": "params.siteId",
+              "type": "site.indexing"
+            }
+          ]
+        },
+        "x-gscdump-scopes": [
+          "indexing:read"
+        ],
+        "x-gscdump-semantics": {
+          "idempotent": true,
+          "kind": "query",
+          "readConsistency": "primary",
+          "retry": "idempotent",
+          "sideEffects": "none"
+        },
+        "x-gscdump-visibility": "public"
+      },
+      "post": {
+        "description": "Sends one URL_UPDATED notification for one URL with the Site user's Indexing API grant and returns a Submission Receipt. Acceptance does not prove indexing.",
+        "operationId": "partner.sites.indexing.google.submissions.create",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "siteId",
+            "required": true,
+            "schema": {
+              "pattern": "^s_[\\w-]+$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "pattern": "^req_[\\w-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "idempotencyKey": {
+                    "maxLength": 128,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "url": {
+                    "format": "uri",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "url",
+                  "idempotencyKey"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "submissionReceipt": {
+                          "oneOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "_tag": {
+                                  "const": "accepted",
+                                  "type": "string"
+                                },
+                                "attempts": {
+                                  "maximum": 3,
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "createdAt": {
+                                  "format": "date-time",
+                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                  "type": "string"
+                                },
+                                "httpStatus": {
+                                  "const": 200,
+                                  "type": "number"
+                                },
+                                "id": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "reason": {
+                                  "type": "null"
+                                },
+                                "updatedAt": {
+                                  "format": "date-time",
+                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                  "type": "string"
+                                },
+                                "url": {
+                                  "format": "uri",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "_tag",
+                                "id",
+                                "url",
+                                "createdAt",
+                                "updatedAt",
+                                "attempts",
+                                "httpStatus",
+                                "reason"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "_tag": {
+                                  "const": "rejected",
+                                  "type": "string"
+                                },
+                                "attempts": {
+                                  "maximum": 3,
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "createdAt": {
+                                  "format": "date-time",
+                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                  "type": "string"
+                                },
+                                "httpStatus": {
+                                  "anyOf": [
+                                    {
+                                      "maximum": 499,
+                                      "minimum": 400,
+                                      "type": "integer"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "id": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "reason": {
+                                  "enum": [
+                                    "not-owner",
+                                    "access-revoked",
+                                    "quota-exhausted",
+                                    "reauthorization-required"
+                                  ],
+                                  "type": "string"
+                                },
+                                "updatedAt": {
+                                  "format": "date-time",
+                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                  "type": "string"
+                                },
+                                "url": {
+                                  "format": "uri",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "_tag",
+                                "id",
+                                "url",
+                                "createdAt",
+                                "updatedAt",
+                                "attempts",
+                                "httpStatus",
+                                "reason"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "_tag": {
+                                  "const": "failed",
+                                  "type": "string"
+                                },
+                                "attempts": {
+                                  "maximum": 3,
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "createdAt": {
+                                  "format": "date-time",
+                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                  "type": "string"
+                                },
+                                "httpStatus": {
+                                  "anyOf": [
+                                    {
+                                      "maximum": 599,
+                                      "minimum": 100,
+                                      "type": "integer"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "id": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "reason": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "updatedAt": {
+                                  "format": "date-time",
+                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                  "type": "string"
+                                },
+                                "url": {
+                                  "format": "uri",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "_tag",
+                                "id",
+                                "url",
+                                "createdAt",
+                                "updatedAt",
+                                "attempts",
+                                "httpStatus",
+                                "reason"
+                              ],
+                              "type": "object"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "submissionReceipt"
+                      ],
+                      "type": "object"
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "requestId": {
+                          "pattern": "^req_[\\w-]+$",
+                          "type": "string"
+                        },
+                        "surface": {
+                          "const": "partner",
+                          "type": "string"
+                        },
+                        "version": {
+                          "const": "1.0",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "requestId",
+                        "surface",
+                        "version"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.sites.indexing.google.submissions.create.error"
+                }
+              }
+            },
+            "description": "Declared client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.sites.indexing.google.submissions.create.error"
+                }
+              }
+            },
+            "description": "Safe internal or contract error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.sites.indexing.google.submissions.create.error"
+                }
+              }
+            },
+            "description": "Stable error envelope"
+          }
+        },
+        "security": [
+          {
+            "partner_key": []
+          }
+        ],
+        "summary": "Submit a Google Indexing API notification",
+        "tags": [
+          "Indexing"
+        ],
+        "x-gscdump-errors": [
+          "invalid_request",
+          "unauthorized",
+          "forbidden",
+          "site_not_found",
+          "rate_limited",
+          "internal_error",
+          "contract_violation"
+        ],
+        "x-gscdump-examples": {
+          "request": {
+            "body": {
+              "idempotencyKey": "req_01",
+              "url": "https://example.com/jobs/1"
+            },
+            "params": {
+              "siteId": "s_01"
+            }
+          },
+          "response": {
+            "data": {
+              "submissionReceipt": {
+                "_tag": "accepted",
+                "attempts": 1,
+                "createdAt": "2026-10-01T00:00:00.000Z",
+                "httpStatus": 200,
+                "id": "gi_01",
+                "reason": null,
+                "updatedAt": "2026-10-01T00:00:00.000Z",
+                "url": "https://example.com/jobs/1"
+              }
+            },
+            "meta": {
+              "requestId": "req_01",
+              "surface": "partner",
+              "version": "1.0"
+            }
+          }
+        },
+        "x-gscdump-lifecycle": {
+          "introduced": "4.9.0"
+        },
+        "x-gscdump-ownership": [
+          {
+            "credential": "partner_key",
+            "rule": "authorized_site"
+          }
+        ],
+        "x-gscdump-resources": {
+          "changes": [
+            {
+              "idFrom": "params.siteId",
+              "type": "site.indexing"
+            }
+          ],
+          "reads": [
+            {
+              "idFrom": "params.siteId",
+              "type": "site.indexing"
+            }
+          ]
+        },
+        "x-gscdump-scopes": [
+          "indexing:write"
+        ],
+        "x-gscdump-semantics": {
+          "idempotent": true,
+          "kind": "mutation",
+          "readConsistency": null,
+          "retry": "idempotent",
+          "sideEffects": "state"
         },
         "x-gscdump-visibility": "public"
       }
@@ -28553,6 +29789,732 @@
           "readConsistency": "primary",
           "retry": "idempotent",
           "sideEffects": "none"
+        },
+        "x-gscdump-visibility": "public"
+      }
+    },
+    "/api/partner/v1/users/{userId}/indexing/google/grant": {
+      "delete": {
+        "description": "Revokes the grant at Google, then deletes it.",
+        "operationId": "partner.users.indexing.google.grant.revoke",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": {
+              "pattern": "^u_[\\w-]+$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "pattern": "^req_[\\w-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "oneOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "_tag": {
+                              "const": "missing",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "_tag"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "_tag": {
+                              "const": "granted",
+                              "type": "string"
+                            },
+                            "googleEmail": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "grantedAt": {
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "_tag",
+                            "googleEmail",
+                            "grantedAt"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "_tag": {
+                              "const": "reauthorization-required",
+                              "type": "string"
+                            },
+                            "googleEmail": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "_tag",
+                            "googleEmail"
+                          ],
+                          "type": "object"
+                        }
+                      ]
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "requestId": {
+                          "pattern": "^req_[\\w-]+$",
+                          "type": "string"
+                        },
+                        "surface": {
+                          "const": "partner",
+                          "type": "string"
+                        },
+                        "version": {
+                          "const": "1.0",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "requestId",
+                        "surface",
+                        "version"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.users.indexing.google.grant.revoke.error"
+                }
+              }
+            },
+            "description": "Declared client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.users.indexing.google.grant.revoke.error"
+                }
+              }
+            },
+            "description": "Safe internal or contract error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.users.indexing.google.grant.revoke.error"
+                }
+              }
+            },
+            "description": "Stable error envelope"
+          }
+        },
+        "security": [
+          {
+            "partner_key": []
+          }
+        ],
+        "summary": "Revoke Indexing API grant",
+        "tags": [
+          "Indexing"
+        ],
+        "x-gscdump-errors": [
+          "invalid_request",
+          "unauthorized",
+          "forbidden",
+          "user_not_found",
+          "rate_limited",
+          "internal_error",
+          "contract_violation"
+        ],
+        "x-gscdump-examples": {
+          "request": {
+            "params": {
+              "userId": "u_01"
+            }
+          },
+          "response": {
+            "data": {
+              "_tag": "missing"
+            },
+            "meta": {
+              "requestId": "req_01",
+              "surface": "partner",
+              "version": "1.0"
+            }
+          }
+        },
+        "x-gscdump-lifecycle": {
+          "introduced": "4.9.0"
+        },
+        "x-gscdump-ownership": [
+          {
+            "credential": "partner_key",
+            "rule": "linked_user"
+          }
+        ],
+        "x-gscdump-resources": {
+          "changes": [
+            {
+              "idFrom": "params.userId",
+              "type": "partner.user"
+            }
+          ],
+          "reads": [
+            {
+              "idFrom": "params.userId",
+              "type": "partner.user"
+            }
+          ]
+        },
+        "x-gscdump-scopes": [
+          "indexing:write"
+        ],
+        "x-gscdump-semantics": {
+          "idempotent": true,
+          "kind": "mutation",
+          "readConsistency": null,
+          "retry": "idempotent",
+          "sideEffects": "state"
+        },
+        "x-gscdump-visibility": "public"
+      },
+      "get": {
+        "description": "Returns the user's Google Indexing API grant for the calling partner.",
+        "operationId": "partner.users.indexing.google.grant.get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": {
+              "pattern": "^u_[\\w-]+$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "pattern": "^req_[\\w-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "oneOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "_tag": {
+                              "const": "missing",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "_tag"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "_tag": {
+                              "const": "granted",
+                              "type": "string"
+                            },
+                            "googleEmail": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "grantedAt": {
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "_tag",
+                            "googleEmail",
+                            "grantedAt"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "_tag": {
+                              "const": "reauthorization-required",
+                              "type": "string"
+                            },
+                            "googleEmail": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "_tag",
+                            "googleEmail"
+                          ],
+                          "type": "object"
+                        }
+                      ]
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "requestId": {
+                          "pattern": "^req_[\\w-]+$",
+                          "type": "string"
+                        },
+                        "surface": {
+                          "const": "partner",
+                          "type": "string"
+                        },
+                        "version": {
+                          "const": "1.0",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "requestId",
+                        "surface",
+                        "version"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.users.indexing.google.grant.get.error"
+                }
+              }
+            },
+            "description": "Declared client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.users.indexing.google.grant.get.error"
+                }
+              }
+            },
+            "description": "Safe internal or contract error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.users.indexing.google.grant.get.error"
+                }
+              }
+            },
+            "description": "Stable error envelope"
+          }
+        },
+        "security": [
+          {
+            "partner_key": []
+          }
+        ],
+        "summary": "Get Indexing API grant",
+        "tags": [
+          "Indexing"
+        ],
+        "x-gscdump-errors": [
+          "invalid_request",
+          "unauthorized",
+          "forbidden",
+          "user_not_found",
+          "rate_limited",
+          "internal_error",
+          "contract_violation"
+        ],
+        "x-gscdump-examples": {
+          "request": {
+            "params": {
+              "userId": "u_01"
+            }
+          },
+          "response": {
+            "data": {
+              "_tag": "missing"
+            },
+            "meta": {
+              "requestId": "req_01",
+              "surface": "partner",
+              "version": "1.0"
+            }
+          }
+        },
+        "x-gscdump-lifecycle": {
+          "introduced": "4.9.0"
+        },
+        "x-gscdump-ownership": [
+          {
+            "credential": "partner_key",
+            "rule": "linked_user"
+          }
+        ],
+        "x-gscdump-resources": {
+          "changes": [],
+          "reads": [
+            {
+              "idFrom": "params.userId",
+              "type": "partner.user"
+            }
+          ]
+        },
+        "x-gscdump-scopes": [
+          "indexing:read"
+        ],
+        "x-gscdump-semantics": {
+          "idempotent": true,
+          "kind": "query",
+          "readConsistency": "primary",
+          "retry": "idempotent",
+          "sideEffects": "none"
+        },
+        "x-gscdump-visibility": "public"
+      },
+      "patch": {
+        "description": "Stores the Google Indexing API grant that the partner obtained with its dedicated Cloud project. A grant without the Indexing API scope is refused.",
+        "operationId": "partner.users.indexing.google.grant.update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": {
+              "pattern": "^u_[\\w-]+$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "pattern": "^req_[\\w-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "googleEmail": {
+                    "anyOf": [
+                      {
+                        "format": "email",
+                        "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "refreshToken": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "scope": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "refreshToken",
+                  "scope",
+                  "googleEmail"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "oneOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "_tag": {
+                              "const": "missing",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "_tag"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "_tag": {
+                              "const": "granted",
+                              "type": "string"
+                            },
+                            "googleEmail": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "grantedAt": {
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "_tag",
+                            "googleEmail",
+                            "grantedAt"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "_tag": {
+                              "const": "reauthorization-required",
+                              "type": "string"
+                            },
+                            "googleEmail": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "_tag",
+                            "googleEmail"
+                          ],
+                          "type": "object"
+                        }
+                      ]
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "requestId": {
+                          "pattern": "^req_[\\w-]+$",
+                          "type": "string"
+                        },
+                        "surface": {
+                          "const": "partner",
+                          "type": "string"
+                        },
+                        "version": {
+                          "const": "1.0",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "requestId",
+                        "surface",
+                        "version"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.users.indexing.google.grant.update.error"
+                }
+              }
+            },
+            "description": "Declared client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.users.indexing.google.grant.update.error"
+                }
+              }
+            },
+            "description": "Safe internal or contract error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.users.indexing.google.grant.update.error"
+                }
+              }
+            },
+            "description": "Stable error envelope"
+          }
+        },
+        "security": [
+          {
+            "partner_key": []
+          }
+        ],
+        "summary": "Store Indexing API grant",
+        "tags": [
+          "Indexing"
+        ],
+        "x-gscdump-errors": [
+          "invalid_request",
+          "unauthorized",
+          "forbidden",
+          "user_not_found",
+          "rate_limited",
+          "internal_error",
+          "contract_violation"
+        ],
+        "x-gscdump-examples": {
+          "request": {
+            "body": {
+              "googleEmail": "owner@example.com",
+              "refreshToken": "refresh",
+              "scope": "openid email https://www.googleapis.com/auth/indexing"
+            },
+            "params": {
+              "userId": "u_01"
+            }
+          },
+          "response": {
+            "data": {
+              "_tag": "granted",
+              "googleEmail": "owner@example.com",
+              "grantedAt": "2026-10-01T00:00:00.000Z"
+            },
+            "meta": {
+              "requestId": "req_01",
+              "surface": "partner",
+              "version": "1.0"
+            }
+          }
+        },
+        "x-gscdump-lifecycle": {
+          "introduced": "4.9.0"
+        },
+        "x-gscdump-ownership": [
+          {
+            "credential": "partner_key",
+            "rule": "linked_user"
+          }
+        ],
+        "x-gscdump-resources": {
+          "changes": [
+            {
+              "idFrom": "params.userId",
+              "type": "partner.user"
+            }
+          ],
+          "reads": [
+            {
+              "idFrom": "params.userId",
+              "type": "partner.user"
+            }
+          ]
+        },
+        "x-gscdump-scopes": [
+          "indexing:write"
+        ],
+        "x-gscdump-semantics": {
+          "idempotent": true,
+          "kind": "mutation",
+          "readConsistency": null,
+          "retry": "idempotent",
+          "sideEffects": "state"
         },
         "x-gscdump-visibility": "public"
       }

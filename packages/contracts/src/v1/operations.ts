@@ -77,6 +77,7 @@ import {
   createGscdumpV1BrowserSchemas,
   GSCDUMP_V1_ANALYTICS_DIMENSIONS,
 } from './browser'
+import { googleSubmissionReceiptV1Schemas, googleSubmitV1Schema, indexingApiGrantUpdateV1Schema, indexingApiGrantV1Schemas } from './google-indexing'
 import {
   defineHttpOperation,
   defineHttpSurface,
@@ -396,6 +397,9 @@ export function createGscdumpV1Protocol() {
   const indexNowConnectionResponse = defineSuccessResponse(indexNowConnectionV1Schemas, partnerResponseMeta)
   const indexNowSubmissionResponse = defineSuccessResponse(defineResponseObject({ submissionReceipt: indexNowSubmissionReceiptV1Schemas.producer }, { submissionReceipt: indexNowSubmissionReceiptV1Schemas.client }), partnerResponseMeta)
   const indexNowSubmissionReceiptsResponse = defineSuccessResponse(defineResponseObject({ submissionReceipts: z.array(indexNowSubmissionReceiptV1Schemas.producer), pagination: bingIndexingEvidencePagination.producer }, { submissionReceipts: z.array(indexNowSubmissionReceiptV1Schemas.client), pagination: bingIndexingEvidencePagination.client }), partnerResponseMeta)
+  const indexingApiGrantResponse = defineSuccessResponse(indexingApiGrantV1Schemas, partnerResponseMeta)
+  const googleSubmissionResponse = defineSuccessResponse(defineResponseObject({ submissionReceipt: googleSubmissionReceiptV1Schemas.producer }, { submissionReceipt: googleSubmissionReceiptV1Schemas.client }), partnerResponseMeta)
+  const googleSubmissionReceiptsResponse = defineSuccessResponse(defineResponseObject({ submissionReceipts: z.array(googleSubmissionReceiptV1Schemas.producer), pagination: bingIndexingEvidencePagination.producer }, { submissionReceipts: z.array(googleSubmissionReceiptV1Schemas.client), pagination: bingIndexingEvidencePagination.client }), partnerResponseMeta)
   const bingSitesResponse = defineSuccessResponse(bingSitesV1Schemas, partnerResponseMeta)
   const bingLinkResponse = defineSuccessResponse(bingLinkResultV1Schemas, partnerResponseMeta)
   const bingAuthorizationResponse = defineSuccessResponse(bingAuthorizationV1Schemas, partnerResponseMeta)
@@ -1419,6 +1423,71 @@ export function createGscdumpV1Protocol() {
         resources: { reads: [{ type: 'site.indexing', idFrom: 'params.siteId' }], changes: [] },
         lifecycle: { introduced: '1.7.0' },
         docs: { summary: 'List IndexNow Submission Receipts', description: 'Returns Submission Receipts for this Site.', tags: ['Indexing'], examples: { request: { params: { siteId: 's_01' }, query: { limit: 25, offset: 0 } }, response: { data: { submissionReceipts: [], pagination: { total: 0, limit: 25, offset: 0, hasMore: false } }, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } } } },
+      }),
+      getUserIndexingApiGrant: defineHttpOperation({
+        ...gscdumpV1OperationRoute('partner.users.indexing.google.grant.get'),
+        visibility: 'public',
+        semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
+        auth: { credentials: ['partner_key'], scopes: ['indexing:read'], ownership: [{ credential: 'partner_key', rule: 'linked_user' }] },
+        request: { params: z.strictObject({ userId: realtimeSchemas.publicUserId }), query: null, headers: requestHeaders, body: null },
+        responses: { 200: indexingApiGrantResponse },
+        errors: partnerUserErrors,
+        errorResponse: errorEnvelopeSchemas(partnerUserErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [{ type: 'partner.user', idFrom: 'params.userId' }], changes: [] },
+        lifecycle: { introduced: '4.9.0' },
+        docs: { summary: 'Get Indexing API grant', description: 'Returns the user\'s Google Indexing API grant for the calling partner.', tags: ['Indexing'], examples: { request: { params: { userId: 'u_01' } }, response: { data: { _tag: 'missing' }, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } } } },
+      }),
+      updateUserIndexingApiGrant: defineHttpOperation({
+        ...gscdumpV1OperationRoute('partner.users.indexing.google.grant.update'),
+        visibility: 'public',
+        semantics: { kind: 'mutation', sideEffects: 'state', idempotent: true, retry: 'idempotent', readConsistency: null },
+        auth: { credentials: ['partner_key'], scopes: ['indexing:write'], ownership: [{ credential: 'partner_key', rule: 'linked_user' }] },
+        request: { params: z.strictObject({ userId: realtimeSchemas.publicUserId }), query: null, headers: requestHeaders, body: indexingApiGrantUpdateV1Schema },
+        responses: { 200: indexingApiGrantResponse },
+        errors: partnerUserErrors,
+        errorResponse: errorEnvelopeSchemas(partnerUserErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [{ type: 'partner.user', idFrom: 'params.userId' }], changes: [{ type: 'partner.user', idFrom: 'params.userId' }] },
+        lifecycle: { introduced: '4.9.0' },
+        docs: { summary: 'Store Indexing API grant', description: 'Stores the Google Indexing API grant that the partner obtained with its dedicated Cloud project. A grant without the Indexing API scope is refused.', tags: ['Indexing'], examples: { request: { params: { userId: 'u_01' }, body: { refreshToken: 'refresh', scope: 'openid email https://www.googleapis.com/auth/indexing', googleEmail: 'owner@example.com' } }, response: { data: { _tag: 'granted', googleEmail: 'owner@example.com', grantedAt: '2026-10-01T00:00:00.000Z' }, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } } } },
+      }),
+      revokeUserIndexingApiGrant: defineHttpOperation({
+        ...gscdumpV1OperationRoute('partner.users.indexing.google.grant.revoke'),
+        visibility: 'public',
+        semantics: { kind: 'mutation', sideEffects: 'state', idempotent: true, retry: 'idempotent', readConsistency: null },
+        auth: { credentials: ['partner_key'], scopes: ['indexing:write'], ownership: [{ credential: 'partner_key', rule: 'linked_user' }] },
+        request: { params: z.strictObject({ userId: realtimeSchemas.publicUserId }), query: null, headers: requestHeaders, body: null },
+        responses: { 200: indexingApiGrantResponse },
+        errors: partnerUserErrors,
+        errorResponse: errorEnvelopeSchemas(partnerUserErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [{ type: 'partner.user', idFrom: 'params.userId' }], changes: [{ type: 'partner.user', idFrom: 'params.userId' }] },
+        lifecycle: { introduced: '4.9.0' },
+        docs: { summary: 'Revoke Indexing API grant', description: 'Revokes the grant at Google, then deletes it.', tags: ['Indexing'], examples: { request: { params: { userId: 'u_01' } }, response: { data: { _tag: 'missing' }, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } } } },
+      }),
+      createSiteGoogleSubmission: defineHttpOperation({
+        ...gscdumpV1OperationRoute('partner.sites.indexing.google.submissions.create'),
+        visibility: 'public',
+        semantics: { kind: 'mutation', sideEffects: 'state', idempotent: true, retry: 'idempotent', readConsistency: null },
+        auth: { credentials: ['partner_key'], scopes: ['indexing:write'], ownership: [{ credential: 'partner_key', rule: 'authorized_site' }] },
+        request: { params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }), query: null, headers: requestHeaders, body: googleSubmitV1Schema },
+        responses: { 200: googleSubmissionResponse },
+        errors: partnerSiteErrors,
+        errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [{ type: 'site.indexing', idFrom: 'params.siteId' }], changes: [{ type: 'site.indexing', idFrom: 'params.siteId' }] },
+        lifecycle: { introduced: '4.9.0' },
+        docs: { summary: 'Submit a Google Indexing API notification', description: 'Sends one URL_UPDATED notification for one URL with the Site user\'s Indexing API grant and returns a Submission Receipt. Acceptance does not prove indexing.', tags: ['Indexing'], examples: { request: { params: { siteId: 's_01' }, body: { url: 'https://example.com/jobs/1', idempotencyKey: 'req_01' } }, response: { data: { submissionReceipt: { _tag: 'accepted', id: 'gi_01', url: 'https://example.com/jobs/1', createdAt: '2026-10-01T00:00:00.000Z', updatedAt: '2026-10-01T00:00:00.000Z', attempts: 1, httpStatus: 200, reason: null } }, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } } } },
+      }),
+      listSiteGoogleSubmissionReceipts: defineHttpOperation({
+        ...gscdumpV1OperationRoute('partner.sites.indexing.google.submissions.list'),
+        visibility: 'public',
+        semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
+        auth: { credentials: ['user_key', 'partner_key'], scopes: ['indexing:read'], ownership: [{ credential: 'user_key', rule: 'authorized_site' }, { credential: 'partner_key', rule: 'authorized_site' }] },
+        request: { params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }), query: z.strictObject({ limit: z.coerce.number().int().min(1).max(100).default(25), offset: z.coerce.number().int().min(0).default(0) }), headers: requestHeaders, body: null },
+        responses: { 200: googleSubmissionReceiptsResponse },
+        errors: partnerSiteErrors,
+        errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [{ type: 'site.indexing', idFrom: 'params.siteId' }], changes: [] },
+        lifecycle: { introduced: '4.9.0' },
+        docs: { summary: 'List Google Indexing API Submission Receipts', description: 'Returns Google Indexing API Submission Receipts for this Site, newest first.', tags: ['Indexing'], examples: { request: { params: { siteId: 's_01' }, query: { limit: 25, offset: 0 } }, response: { data: { submissionReceipts: [], pagination: { total: 0, limit: 25, offset: 0, hasMore: false } }, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } } } },
       }),
       listUserBingSites: defineHttpOperation({
         ...gscdumpV1OperationRoute('partner.users.indexing.bing.sites.list'),
@@ -3798,6 +3867,9 @@ export function createGscdumpV1Protocol() {
       indexNowConnectionResponse,
       indexNowSubmissionResponse,
       indexNowSubmissionReceiptsResponse,
+      indexingApiGrantResponse,
+      googleSubmissionResponse,
+      googleSubmissionReceiptsResponse,
       bingSitesResponse,
       bingLinkResponse,
       bingAuthorizationResponse,
