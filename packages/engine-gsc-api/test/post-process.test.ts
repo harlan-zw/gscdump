@@ -78,3 +78,44 @@ describe('live API row post-processing', () => {
     expect(applyBuilderStatePostProcessing(rows, state)).toEqual(expected)
   })
 })
+
+describe('live API row post-processing of ungrouped dimension filters', () => {
+  it('trusts Google for a filter on a dimension the rows do not carry', () => {
+    const rows = [{ date: '2026-09-27', clicks: 4 }, { date: '2026-09-28', clicks: 6 }]
+    const state = {
+      dimensions: ['date'],
+      filter: { _filters: [{ dimension: 'page', operator: 'includingRegex', expression: '^https?://example\\.com/' }] },
+    } as BuilderState
+
+    expect(applyBuilderStatePostProcessing(rows, state)).toHaveLength(2)
+  })
+
+  it('still checks a filter on a grouped dimension', () => {
+    const rows = [{ page: 'https://example.com/a', clicks: 4 }, { page: 'https://docs.example.com/b', clicks: 6 }]
+    const state = {
+      dimensions: ['page'],
+      filter: { _filters: [{ dimension: 'page', operator: 'includingRegex', expression: '^https?://example\\.com/' }] },
+    } as BuilderState
+
+    expect(applyBuilderStatePostProcessing(rows, state).map(row => row.page)).toEqual(['https://example.com/a'])
+  })
+
+  it('trusts Google for an or group that names an ungrouped dimension', () => {
+    const rows = [{ query: 'nuxt', clicks: 4 }, { query: 'vue', clicks: 6 }]
+    const state = {
+      dimensions: ['query'],
+      filter: {
+        _filters: [],
+        _nestedGroups: [{
+          _filters: [
+            { dimension: 'query', operator: 'equals', expression: 'nuxt' },
+            { dimension: 'page', operator: 'contains', expression: '/vue' },
+          ],
+          _groupType: 'or',
+        }],
+      },
+    } as BuilderState
+
+    expect(applyBuilderStatePostProcessing(rows, state)).toHaveLength(2)
+  })
+})

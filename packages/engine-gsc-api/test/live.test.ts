@@ -116,3 +116,23 @@ describe('createLiveGscSource page scope composition', () => {
     await expect(source.queryRows(state)).rejects.toMatchObject({ queryError: { kind: 'invalid-aggregation-type' } })
   })
 })
+
+// gscdump.com 2026-10-01: a Hosted read fell back to a host-scoped live source
+// for `-d date` and returned no rows. Google applies the page scope itself; the
+// rows it returns carry no `page` field to check the scope against again.
+describe('createLiveGscSource page scope without a page dimension', () => {
+  it('keeps the rows Google returns for a scoped date series', async () => {
+    const days = [
+      { date: '2026-09-27', clicks: 4, impressions: 40, ctr: 0.1, position: 5 },
+      { date: '2026-09-28', clicks: 6, impressions: 50, ctr: 0.12, position: 4 },
+    ]
+    const client = { query: vi.fn(() => (async function* () {
+      yield days
+    })()) }
+    const source = createLiveGscSource({ siteUrl: 'sc-domain:example.com', getAccessToken: async () => 't', createClient: () => client as any, pageScope: { host: 'example.com' } })
+
+    const rows = await source.queryRows(gsc.select(date).where(between(date, '2026-09-27', '2026-09-28')).getState())
+
+    expect(rows.map(row => row.date).sort()).toEqual(['2026-09-27', '2026-09-28'])
+  })
+})
