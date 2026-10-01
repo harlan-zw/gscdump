@@ -25,7 +25,7 @@ async function capture(stdout: boolean, stderr: boolean, args: string[] = []) {
   Object.defineProperty(process.stderr, 'isTTY', { configurable: true, value: stderr })
   const lines: string[] = []
   vi.spyOn(console, 'log').mockImplementation(value => lines.push(String(value)))
-  await runCli({ rawArgs: ['query', ...args], environment: {}, loadEnv: false })
+  await runCli({ rawArgs: ['query', ...args], environment: {} })
   return lines.join('\n')
 }
 

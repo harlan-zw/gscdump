@@ -47,15 +47,3 @@ export function pickCliEnvironmentValue(
   }
   return null
 }
-
-export function applyCliEnvironment(
-  updates: CliEnvironmentSource,
-  values: CliEnvironmentSource = useCliRuntime().environment,
-): void {
-  for (const [key, value] of Object.entries(updates)) {
-    if (value === undefined)
-      delete values[key]
-    else
-      values[key] = value
-  }
-}

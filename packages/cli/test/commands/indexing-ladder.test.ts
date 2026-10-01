@@ -144,7 +144,7 @@ describe('hosted indexing summary and watch commands', () => {
     await fs.rm(runtime.configDir, { recursive: true, force: true })
   })
 
-  const run = (args: string[]) => runCli({ rawArgs: args, runtime, loadEnv: false })
+  const run = (args: string[]) => runCli({ rawArgs: args, runtime })
   const apiRequests = () => requests.filter(request => !request.url.pathname.endsWith('/cli/me'))
 
   it('prints the hosted summary JSON unchanged', async () => {

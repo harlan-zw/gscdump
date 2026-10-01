@@ -1,7 +1,6 @@
 import type { ApiSite } from 'gscdump/sites'
 import type { HostedAuthentication } from '../auth-state'
 import fs from 'node:fs/promises'
-import path from 'node:path'
 import process from 'node:process'
 import { defineCommand } from 'citty'
 import { resolveSiteInput } from 'gscdump'
@@ -13,8 +12,7 @@ import { getHostedAccount, resolveAuthentication } from '../auth-state'
 import { doctorCommandMeta } from '../command-meta'
 import { loadConfig } from '../config'
 import { createCommandContext, formatSiteResolution } from '../context'
-import { parseEnvFile } from '../env-file'
-import { resolveCliEnvironment } from '../environment'
+import { pickCliEnvironmentValue, resolveCliEnvironment } from '../environment'
 import { createLocalStore } from '../local-store'
 import { currentAccessToken, fetchTokenInfo, redactTokens } from '../token-info'
 import { applyOutputMode, displayPath, logger, OUTPUT_ARGS } from '../utils'
@@ -28,65 +26,18 @@ interface Check {
 const FETCH_TIMEOUT_MS = 5000
 const TIME_SKEW_WARN_MS = 5 * 60_000
 const WATERMARK_STALE_DAYS_WARN = 7
-const RELEVANT_ENV_KEYS = [
-  'GSC_ACCESS_TOKEN',
-  'GSC_CLIENT_ID',
-  'GSC_CLIENT_SECRET',
-  'GSC_REFRESH_TOKEN',
-  'GOOGLE_ACCESS_TOKEN',
-  'GOOGLE_CLIENT_ID',
-  'GOOGLE_CLIENT_SECRET',
-  'GOOGLE_REFRESH_TOKEN',
-  'GOOGLE_APPLICATION_CREDENTIALS',
-  'GSC_SERVICE_ACCOUNT_JSON',
-]
-
-/** Redact a credential value, keeping the last 6 chars for visual identification. */
-function redact(v: string | undefined): string {
-  if (!v)
-    return '<missing>'
-  if (v.length <= 6)
-    return '***'
-  return `***${v.slice(-6)}`
-}
-
-// Inventory only — does NOT validate the credentials. The `auth` check below
-// is the source of truth for whether the env-provided creds actually work.
-async function checkEnv(): Promise<{ checks: Check[], envKeys: Set<string> }> {
-  const envPath = path.join(process.cwd(), '.env')
-  const parsed = parseEnvFile(envPath)
-  if (!parsed)
-    return { checks: [{ name: 'env', status: 'info', detail: 'no .env (using shell env / saved tokens)' }], envKeys: new Set() }
-
-  const relevant = RELEVANT_ENV_KEYS.filter(k => parsed[k] !== undefined)
-  const envKeys = new Set(relevant)
-  if (relevant.length === 0)
-    return { checks: [{ name: 'env', status: 'info', detail: `${displayPath(envPath)} found, no auth vars` }], envKeys }
-  // Show CLIENT_ID in full (it's not secret), redact the others.
-  const inventory = relevant.map((k) => {
-    const v = parsed[k]
-    if (k.endsWith('CLIENT_ID'))
-      return `${k}=${v}`
-    return `${k}=${redact(v)}`
-  })
-  return { checks: [{ name: 'env', status: 'info', detail: `${displayPath(envPath)} → ${inventory.join(', ')} (not validated — see auth)` }], envKeys }
-}
-
-function describeAuthSource(envKeys: Set<string>, byok: ReturnType<typeof resolveBYOK>): string {
+function describeAuthSource(byok: ReturnType<typeof resolveBYOK>): string {
   if (!byok)
     return 'saved tokens'
-  // Pinpoint which env var (and where it came from) actually drives BYOK.
+  // Name the environment variable that drives these credentials.
   const isAccessToken = typeof byok === 'string'
-  const driver = isAccessToken ? 'GSC_ACCESS_TOKEN' : 'GSC_REFRESH_TOKEN'
-  const driverKeys = isAccessToken
+  const driver = pickCliEnvironmentValue(isAccessToken
     ? ['GSC_ACCESS_TOKEN', 'GOOGLE_ACCESS_TOKEN']
-    : ['GSC_REFRESH_TOKEN', 'GOOGLE_REFRESH_TOKEN']
-  const fromEnvFile = driverKeys.some(k => envKeys.has(k))
-  const source = fromEnvFile ? '.env' : 'shell env'
-  return `environment credentials ${isAccessToken ? '(access-token)' : '(refresh-token)'} from ${source} via ${driver}`
+    : ['GSC_REFRESH_TOKEN', 'GOOGLE_REFRESH_TOKEN'])?.envVar ?? (isAccessToken ? 'GSC_ACCESS_TOKEN' : 'GSC_REFRESH_TOKEN')
+  return `environment credentials ${isAccessToken ? '(access-token)' : '(refresh-token)'} via ${driver}`
 }
 
-async function checkAuth(envKeys: Set<string>): Promise<{ checks: Check[], liveToken: string | null }> {
+async function checkAuth(): Promise<{ checks: Check[], liveToken: string | null }> {
   const checks: Check[] = []
   const serviceAccount = await resolveServiceAccount().catch((error: unknown) => {
     // A stale pointer (missing file or malformed JSON) falls through to
@@ -130,7 +81,7 @@ async function checkAuth(envKeys: Set<string>): Promise<{ checks: Check[], liveT
     ? { kind: 'failed' as const, detail: redactTokens(source.message) }
     : await currentAccessToken(source)
   if (current.kind === 'failed') {
-    checks.push({ name: 'auth', status: 'fail', detail: `${describeAuthSource(envKeys, byok)}: refresh failed: ${current.detail}. Run \`gscdump auth login --force\` and update the source above.` })
+    checks.push({ name: 'auth', status: 'fail', detail: `${describeAuthSource(byok)}: refresh failed: ${current.detail}. Run \`gscdump auth login --force\` and update the source above.` })
     return { checks, liveToken: null }
   }
   const liveToken = current.token
@@ -145,7 +96,7 @@ async function checkAuth(envKeys: Set<string>): Promise<{ checks: Check[], liveT
   checks.push({
     name: 'auth',
     status: 'pass',
-    detail: describeAuthSource(envKeys, byok),
+    detail: describeAuthSource(byok),
   })
   if (info.email)
     checks.push({ name: 'auth.account', status: 'pass', detail: info.email })
@@ -320,9 +271,9 @@ async function checkHostedConnection(authentication: HostedAuthentication): Prom
   ]
 }
 
-async function checkLocalConnection(envKeys: Set<string>): Promise<Check[]> {
+async function checkLocalConnection(): Promise<Check[]> {
   const [authResult, timeChecks, gscApi, indexingApi, siteVerificationApi] = await Promise.all([
-    checkAuth(envKeys),
+    checkAuth(),
     checkTimeSkew(),
     checkApiReachable('gsc.api', 'https://searchconsole.googleapis.com/$discovery/rest?version=v1'),
     checkApiReachable('indexing.api', 'https://indexing.googleapis.com/$discovery/rest?version=v3'),
@@ -343,17 +294,15 @@ export const doctorCommand = defineCommand({
     const { json } = applyOutputMode(args)
     const { dataDir } = await createCommandContext()
     const authentication = await resolveAuthentication()
-    const envResult = await checkEnv()
     const [connectionChecks, dataDirChecks, watermarkChecks] = await Promise.all([
       authentication._tag === 'Hosted'
         ? checkHostedConnection(authentication)
-        : checkLocalConnection(envResult.envKeys),
+        : checkLocalConnection(),
       checkDataDir(dataDir),
       checkStoreWatermarks(dataDir),
     ])
 
     const all = [
-      ...envResult.checks,
       ...connectionChecks,
       ...dataDirChecks,
       ...watermarkChecks,

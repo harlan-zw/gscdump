@@ -155,8 +155,8 @@ export class LocalStoreUnsupportedError extends Error {
 
 /**
  * Heuristic: does this error look like a credentials problem? The shell then
- * prints where each credential came from, because a stale `.env` shadowing
- * fresh saved tokens is the usual cause.
+ * prints where each credential came from, because stale environment tokens
+ * shadowing fresh saved tokens are the usual cause.
  */
 export function isAuthError(err: unknown): boolean {
   const msg = (err instanceof Error ? err.message : String(err ?? '')).toLowerCase()

@@ -239,6 +239,11 @@ export function displayPath(absPath: string): string {
   return absPath
 }
 
+/** A count with its noun, for example `1 Site` or `1,204 Sites`. */
+export function plural(count: number, one: string, many: string): string {
+  return `${count.toLocaleString('en-US')} ${count === 1 ? one : many}`
+}
+
 /**
  * Human-readable "X ago" for a millisecond timestamp.
  * Returns "just now", "Nm ago", "Nh ago", or "Nd ago".

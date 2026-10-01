@@ -127,6 +127,13 @@ describe('query command', () => {
     expect(mocks.storeQuery).not.toHaveBeenCalled()
   })
 
+  it('names the requested dimensions in the table heading', async () => {
+    mocks.rawQuery.mockResolvedValueOnce({ rows: [{ keys: ['2026-04-01'], clicks: 3, impressions: 40, ctr: 0.075, position: 6 }] }).mockResolvedValueOnce({ rows: [] })
+    await runCommand(queryCommand, { rawArgs: ['--live', '--dimensions', 'date', '--format', 'table', '--start', '2026-04-01', '--end', '2026-04-07'] })
+    const heading = consoleOutput.join('\n').split('\n')[0]
+    expect(heading?.trim()).toBe('example.com / date')
+  })
+
   it('trims and deduplicates dimensions', async () => {
     await runCommand(queryCommand, { rawArgs: ['--live', '--explain', '--dimensions', 'page, query,page'] })
 
@@ -282,7 +289,7 @@ describe('query command', () => {
     mocks.rawQuery.mockResolvedValueOnce({ rows: [{ keys: ['/docs'], clicks: 12, impressions: 1000, ctr: 0.012, position: 8.4 }] }).mockResolvedValueOnce({ rows: [] })
     await runCommand(queryCommand, { rawArgs: ['--live', '--dimensions', 'page', '--format', 'table', '--start', '2026-04-01', '--end', '2026-04-07'] })
     const output = consoleOutput.join('\n')
-    expect(output).toContain('example.com / query')
+    expect(output).toContain('example.com / page')
     expect(output.match(/\/docs/g)).toHaveLength(1)
     expect(output).toMatch(/[#█]+\s+12/)
     expect(output).toContain('1.20%')

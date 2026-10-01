@@ -16,7 +16,6 @@ import { err, ok, unwrapResult } from 'gscdump/result'
 import open from 'open'
 import { resolveAuthentication } from './auth-state'
 import { getConfigDir, loadConfig, saveConfig } from './config'
-import { getAppliedEnvKeys, getLoadedEnvPath } from './env-file'
 import { pickCliEnvironmentValue, resolveCliEnvironment } from './environment'
 import { displayPath, logger } from './utils'
 
@@ -509,7 +508,7 @@ interface ProvenanceRow {
 }
 
 function envSourceLabel(envVar: string): string {
-  return getAppliedEnvKeys().has(envVar) ? `.env (${envVar})` : `shell env (${envVar})`
+  return `environment (${envVar})`
 }
 
 function pickEnvSource(...envVars: string[]): { envVar: string, value: string } | null {
@@ -605,17 +604,6 @@ export async function describeAuthProvenance(): Promise<{
   const byokActive = effective === 'byok-refresh-token' || effective === 'byok-access-token'
   if (byokActive && tokens)
     warnings.push('Environment credentials take priority over saved tokens. If you just ran `auth login --force`, unset or update the environment tokens.')
-
-  if (effective === 'byok-refresh-token' && clientId && refreshTok) {
-    const idFromEnvFile = getAppliedEnvKeys().has(clientId.envVar)
-    const refreshFromEnvFile = getAppliedEnvKeys().has(refreshTok.envVar)
-    if (idFromEnvFile !== refreshFromEnvFile)
-      warnings.push(`client_id and refresh_token come from different sources (${envSourceLabel(clientId.envVar)} vs ${envSourceLabel(refreshTok.envVar)}); they may not match.`)
-  }
-
-  const envFile = getLoadedEnvPath()
-  if (envFile && getAppliedEnvKeys().size > 0)
-    warnings.push(`Loaded ${getAppliedEnvKeys().size} var(s) from ${displayPath(envFile)}.`)
 
   return { rows, effective, warnings }
 }

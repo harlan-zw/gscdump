@@ -44,7 +44,6 @@ describe('sync quota budget', () => {
     const code = await runCli({
       rawArgs: ['sync', '--site', 'example.com', '--tables', 'pages', '--types', 'web', '--start', '2026-08-01', '--end', '2026-08-01', '--no-sitemaps', '--no-inspections', '--concurrency', '1', '--json'],
       environment: { GSCDUMP_CONFIG_DIR: root, GSC_ACCESS_TOKEN: 'token', GSCDUMP_AUTH_MODE: 'local' },
-      loadEnv: false,
     })
 
     expect(code).toBe(0)

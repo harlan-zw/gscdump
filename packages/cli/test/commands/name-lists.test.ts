@@ -27,7 +27,7 @@ it.each([
   [['sync', '--types', 'web,bogus'], 'Unknown --types name: bogus. Valid names: web, image'],
   [['dump', '--tables', 'pagez'], 'Unknown --tables name: pagez. Valid names: pages, queries'],
 ])('rejects an unknown name before any work: %j', async (args, message) => {
-  expect(await runCli({ rawArgs: ['--config-dir', configDir, ...args], loadEnv: false, environment: {} })).toBe(1)
+  expect(await runCli({ rawArgs: ['--config-dir', configDir, ...args], environment: {} })).toBe(1)
   expect(errors.join('\n')).toContain(message)
   expect(context).not.toHaveBeenCalled()
 })

@@ -8,7 +8,7 @@ import { addSite, deleteSite, fetchSitesWithSitemaps, getVerificationToken, getV
 import { formatHostedSync, getHostedAccount, LOCAL_MODE_REQUIRED, resolveAuthentication } from '../auth-state'
 import { sitesCommandMeta } from '../command-meta'
 import { createCommandContext, formatSiteResolution } from '../context'
-import { applyOutputMode, logger, OUTPUT_ARGS } from '../utils'
+import { applyOutputMode, logger, OUTPUT_ARGS, plural } from '../utils'
 
 const ALL_METHODS: VerificationMethod[] = ['META', 'FILE', 'DNS_TXT', 'DNS_CNAME', 'ANALYTICS', 'TAG_MANAGER']
 
@@ -323,7 +323,7 @@ const verifyListCommand = defineCommand({
       logger.warn('No verified WebResources found')
       return
     }
-    logger.success(`${resources.length} verified WebResources:`)
+    logger.success(`${plural(resources.length, 'verified WebResource', 'verified WebResources')}:`)
     console.log()
     for (const r of resources) {
       const id = r.id ?? '?'
@@ -395,7 +395,7 @@ async function runListHostedSites(args: Record<string, unknown>, authentication:
     logger.warn('Your hosted record has no Sites. Connect a Site at https://gscdump.com/app/onboarding?step=connect-sites.')
     return
   }
-  logger.success(`Found ${sites.length} hosted sites:`)
+  logger.success(`Found ${plural(sites.length, 'hosted Site', 'hosted Sites')}:`)
   console.log()
   for (const site of sites)
     console.log(`  ${site.siteUrl} \x1B[90m(${site.siteId})\x1B[0m  hosted sync ${formatHostedSync(site)}`)
@@ -427,10 +427,10 @@ async function runListSites(args: Record<string, unknown>): Promise<void> {
       return
     }
     if (sites.length === 0) {
-      logger.warn(ownerOnly ? 'No owned sites found' : 'No verified sites found')
+      logger.warn(ownerOnly ? 'No owned Sites found' : 'No verified Sites found')
       return
     }
-    logger.success(`Found ${sites.length} ${ownerOnly ? 'owned' : 'verified'} sites:`)
+    logger.success(`Found ${ownerOnly ? plural(sites.length, 'owned Site', 'owned Sites') : plural(sites.length, 'verified Site', 'verified Sites')}:`)
     console.log()
     for (const site of sites) {
       const perm = site.permissionLevel === 'siteOwner' ? '\x1B[32m' : '\x1B[90m'
@@ -451,11 +451,11 @@ async function runListSites(args: Record<string, unknown>): Promise<void> {
   }
 
   if (sites.length === 0) {
-    logger.warn(ownerOnly ? 'No owned sites found' : 'No verified sites found')
+    logger.warn(ownerOnly ? 'No owned Sites found' : 'No verified Sites found')
     return
   }
 
-  logger.success(`Found ${sites.length} ${ownerOnly ? 'owned ' : ''}sites:`)
+  logger.success(`Found ${ownerOnly ? plural(sites.length, 'owned Site', 'owned Sites') : plural(sites.length, 'Site', 'Sites')}:`)
   console.log()
   for (const site of sites) {
     const perm = site.permissionLevel === 'siteOwner' ? '\x1B[32m' : '\x1B[90m'

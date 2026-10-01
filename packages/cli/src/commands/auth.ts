@@ -395,7 +395,7 @@ const loginCommand = defineCommand({
     }
 
     // After login, show the full provenance breakdown — surfaces the common
-    // footgun where stale BYOK env vars (from .env or shell) shadow the
+    // footgun where stale BYOK environment variables shadow the
     // tokens we just saved.
     if (resolveBYOK()) {
       console.log()

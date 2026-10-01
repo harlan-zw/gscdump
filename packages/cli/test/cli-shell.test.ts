@@ -52,7 +52,7 @@ afterEach(() => {
     Reflect.deleteProperty(process.stderr, 'isTTY')
 })
 
-const cli = (rawArgs: string[], environment: Record<string, string> = {}) => runCli({ rawArgs, loadEnv: false, environment })
+const cli = (rawArgs: string[], environment: Record<string, string> = {}) => runCli({ rawArgs, environment })
 
 describe('subcommand dispatch', () => {
   it('runs only the subcommand, never its parent', async () => {
