@@ -26,6 +26,7 @@ async function promptDataDir(existing?: string): Promise<string> {
     defaultValue: fallback,
   })
   if (isCancel(answer))
+    // eslint-disable-next-line no-restricted-syntax -- the user cancelled the prompt, so there is nothing to report
     process.exit(1)
   return String(answer) || fallback
 }
@@ -116,10 +117,8 @@ export const initCommand = defineCommand({
     if (!canPrompt()) {
       // No terminal: never prompt. Finish with saved tokens, or say which command to run.
       const tokens = await loadTokens()
-      if (!tokens) {
-        logger.error(`Init cannot prompt without a terminal.\n${ACCESS_NOT_SET_UP}`)
-        process.exit(1)
-      }
+      if (!tokens)
+        throw new Error(`Init cannot prompt without a terminal.\n${ACCESS_NOT_SET_UP}`)
       await saveConfig({ ...config, dataDir: config.dataDir ?? defaultDataDir() })
       await saveAuthentication({ _tag: 'Local' })
       logger.success('Setup complete with the saved Google login.')

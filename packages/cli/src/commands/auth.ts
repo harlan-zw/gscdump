@@ -314,15 +314,12 @@ const refreshCommand = defineCommand({
       return
     }
     const tokens = await loadTokens()
-    if (!tokens?.refresh_token) {
-      logger.error('No saved refresh token. Run `gscdump auth login`.')
-      process.exit(1)
-    }
+    if (!tokens?.refresh_token)
+      throw new Error('No saved refresh token. Run `gscdump auth login`.')
     // Force expiry so authenticate() runs the refresh path.
     await saveTokens({ ...tokens, expiry_date: 1 })
     const client = await getAuth({ interactive: false }).catch((e: Error) => {
-      logger.error(`Refresh failed: ${e.message}`)
-      process.exit(1)
+      throw new Error(`Refresh failed: ${e.message}`, { cause: e })
     })
     const refreshed = client.credentials
     if (refreshed?.access_token)
@@ -362,13 +359,11 @@ const loginCommand = defineCommand({
     if (args['service-account']) {
       const saPath = path.resolve(String(args['service-account']))
       const jwt = await loadServiceAccount(saPath).catch((e: Error) => {
-        logger.error(`Service-account load failed: ${e.message}`)
-        process.exit(1)
+        throw new Error(`Service-account load failed: ${e.message}`, { cause: e })
       })
       // Smoke-test the credentials by minting a token.
       await jwt.authorize().catch((e: Error) => {
-        logger.error(`Service-account auth failed: ${e.message}`)
-        process.exit(1)
+        throw new Error(`Service-account auth failed: ${e.message}`, { cause: e })
       })
       const config = await loadConfig()
       config.serviceAccountPath = saPath
@@ -379,8 +374,7 @@ const loginCommand = defineCommand({
       return
     }
     const oauth = await getAuth({ interactive: true, noBrowser: args.browser === false, force: Boolean(args.force) }).catch((e: Error) => {
-      logger.error(`Login failed: ${e.message}`)
-      process.exit(1)
+      throw new Error(`Login failed: ${e.message}`, { cause: e })
     })
     logger.success('Logged in')
 
@@ -465,6 +459,7 @@ const scopesCommand = defineCommand({
       else {
         logger.error('Not authenticated')
       }
+      // eslint-disable-next-line no-restricted-syntax -- the result above is printed; exit 1 marks it failed
       process.exit(1)
     }
 
@@ -476,6 +471,7 @@ const scopesCommand = defineCommand({
         console.log(s)
     }
     if (missing.length > 0)
+      // eslint-disable-next-line no-restricted-syntax -- the scopes are printed; exit 1 marks missing scopes
       process.exit(1)
   },
 })

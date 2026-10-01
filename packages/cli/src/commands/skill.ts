@@ -23,10 +23,8 @@ const installCommand = defineCommand({
       process.exit(2)
     }
     const result = await installSkill({ agent, homeDirectory: os.homedir(), target: args.target })
-    if (result._tag === 'Err') {
-      logger.error(result.message)
-      process.exit(1)
-    }
+    if (result._tag === 'Err')
+      throw new Error(result.message)
     if (json) {
       console.log(JSON.stringify(result.installation))
       return

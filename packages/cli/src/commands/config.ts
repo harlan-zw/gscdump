@@ -6,6 +6,7 @@ import { resolveSiteInput } from 'gscdump'
 import { configCommandMeta } from '../command-meta'
 import { getConfigPath, loadConfig, resolveDataDir, saveConfig } from '../config'
 import { createCommandContext, formatSiteResolution } from '../context'
+import { commandLineError } from '../stop'
 import { applyOutputMode, displayPath, logger, OUTPUT_ARGS } from '../utils'
 
 const showCommand = defineCommand({
@@ -87,21 +88,16 @@ const setCommand = defineCommand({
   },
   async run({ args }) {
     applyOutputMode(args)
-    if (!(VALID_KEYS as readonly string[]).includes(args.key)) {
-      logger.error(`Invalid key: ${args.key}`)
-      logger.info(`Valid keys: ${VALID_KEYS.join(', ')}`)
-      process.exit(1)
-    }
+    if (!(VALID_KEYS as readonly string[]).includes(args.key))
+      throw commandLineError(`Invalid key: ${args.key}. Valid keys: ${VALID_KEYS.join(', ')}`)
 
     const config = await loadConfig()
     const value: string | number = NUMERIC_KEYS.has(args.key)
       ? Number(args.value)
       : args.key === 'defaultSite' ? await canonicalSite(args.value) : args.value
-    if (NUMERIC_KEYS.has(args.key) && !Number.isFinite(value)) {
-      logger.error(`Invalid numeric value for ${args.key}: ${args.value}`)
-      process.exit(1)
-    }
-    ;(config as any)[args.key] = value
+    if (NUMERIC_KEYS.has(args.key) && !Number.isFinite(value))
+      throw commandLineError(`Invalid numeric value for ${args.key}: ${args.value}`)
+    Object.assign(config, { [args.key]: value })
     await saveConfig(config)
 
     logger.success(`Set ${args.key} = ${value}`)
@@ -123,11 +119,8 @@ const unsetCommand = defineCommand({
   },
   async run({ args }) {
     applyOutputMode(args)
-    if (!(VALID_KEYS as readonly string[]).includes(args.key)) {
-      logger.error(`Invalid key: ${args.key}`)
-      logger.info(`Valid keys: ${VALID_KEYS.join(', ')}`)
-      process.exit(1)
-    }
+    if (!(VALID_KEYS as readonly string[]).includes(args.key))
+      throw commandLineError(`Invalid key: ${args.key}. Valid keys: ${VALID_KEYS.join(', ')}`)
     const config = await loadConfig()
     delete (config as any)[args.key]
     await saveConfig(config)
@@ -218,6 +211,7 @@ const validateCommand = defineCommand({
       const failed = issues.some(i => i.level === 'fail')
       console.log(JSON.stringify({ ok: !failed, issues }, null, 2))
       if (failed)
+        // eslint-disable-next-line no-restricted-syntax -- the issues are printed; exit 1 marks a failed check
         process.exit(1)
       return
     }
@@ -230,6 +224,7 @@ const validateCommand = defineCommand({
       console.log(`  ${prefix} ${i.key}: ${i.message}`)
     }
     if (issues.some(i => i.level === 'fail'))
+      // eslint-disable-next-line no-restricted-syntax -- the issues are printed; exit 1 marks a failed check
       process.exit(1)
   },
 })

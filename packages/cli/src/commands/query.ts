@@ -406,10 +406,9 @@ export const queryCommand = defineCommand({
         searchType: localSearchType,
         ...(probe ? { profiler: probe.profiler } : {}),
       },
+      // The shell classifies the engine's own error and adds its typed hint.
       state,
-    ).catch((e: Error) => {
-      throw new Error(`Query failed: ${e.message}`, { cause: e })
-    })
+    )
 
     if (probe)
       logProfile(probe.spans)

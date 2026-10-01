@@ -514,8 +514,7 @@ export const syncCommand = defineCommand({
         continue
       }
       if (!args['all-sites']) {
-        logger.error(formatSiteIdCollision(claim.error))
-        process.exit(1)
+        throw new Error(formatSiteIdCollision(claim.error))
       }
       logger.warn(`Skipped ${siteUrl}. ${formatSiteIdCollision(claim.error)}`)
     }
@@ -535,10 +534,8 @@ export const syncCommand = defineCommand({
 
     if (!args['dry-run']) {
       const existing = syncRunStatus(await readSyncRun(store.dataDir), { now: Date.now(), isAlive: isProcessAlive })
-      if (existing.kind === 'running') {
-        logger.error(`Another sync is running (pid ${existing.record.pid}, ${existing.record.done}/${existing.record.planned} days). Wait for it to finish, or run \`gscdump sync --status\`.`)
-        process.exit(1)
-      }
+      if (existing.kind === 'running')
+        throw new Error(`Another sync is running (pid ${existing.record.pid}, ${existing.record.done}/${existing.record.planned} days). Wait for it to finish, or run \`gscdump sync --status\`.`)
     }
 
     const ledger = await openQuotaLedger({ dataDir: store.dataDir })
@@ -595,6 +592,7 @@ export const syncCommand = defineCommand({
       logger.info(`Not started: ${siteUrls.slice(results.length).join(', ')}. The next sync covers them.`)
     }
     if (failed)
+      // eslint-disable-next-line no-restricted-syntax -- the results are printed; exit 1 marks a failed Site
       process.exit(1)
   },
 })

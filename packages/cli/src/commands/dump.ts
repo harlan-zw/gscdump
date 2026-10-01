@@ -16,6 +16,7 @@ import { dumpBing } from '../dump-bing'
 import { DUMP_FORMATS, isDumpFormat, openDumpSink } from '../dump-writers'
 import { ENTITY_DATASETS, readEntityDatasets } from '../local-entities'
 import { allTables } from '../local-store'
+import { commandLineError } from '../stop'
 import { readSiteMap, siteUrlForId } from '../store-sites'
 import { DEFAULT_INSPECT_LIMIT } from '../sync-plan'
 import { isProcessAlive, readSyncRun, syncRunStatus } from '../sync-run'
@@ -74,10 +75,8 @@ export const dumpCommand = defineCommand({
   async run({ args }) {
     const { json, quiet } = applyOutputMode(args)
     const format = String(args.format)
-    if (!isDumpFormat(format)) {
-      logger.error(`Invalid --format: ${format}. Allowed: ${DUMP_FORMATS.join(', ')}`)
-      process.exit(1)
-    }
+    if (!isDumpFormat(format))
+      throw commandLineError(`Invalid --format: ${format}. Allowed: ${DUMP_FORMATS.join(', ')}`)
     const tablesFilter = args.tables
       ? new Set<string>(parseNameList(args.tables, [...allTables(), ...ENTITY_DATASETS, 'bing'], '--tables'))
       : null

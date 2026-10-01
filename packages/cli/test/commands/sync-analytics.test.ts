@@ -208,11 +208,7 @@ describe('sync command (local analytics)', () => {
     })
     await sync('https://example.com/')
     rawQuerySpy.mockClear()
-    vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
-      throw new Error(`__exit_${code}__`)
-    }) as never)
-    await expect(sync('http://example.com/')).rejects.toThrow('__exit_1__')
-    expect(vi.mocked(logger.error)).toHaveBeenCalledWith(expect.stringContaining('The Store keeps https://example.com/ under the same ID as http://example.com/'))
+    await expect(sync('http://example.com/')).rejects.toThrow('The Store keeps https://example.com/ under the same ID as http://example.com/')
     expect(rawQuerySpy).not.toHaveBeenCalled()
   })
 

@@ -328,6 +328,7 @@ export const doctorCommand = defineCommand({
     const failed = all.filter(c => c.status === 'fail')
     if (failed.length > 0) {
       logger.error(`${failed.length} check(s) failed`)
+      // eslint-disable-next-line no-restricted-syntax -- the checks are printed; exit 1 marks a failed check
       process.exit(1)
     }
     const warned = all.filter(c => c.status === 'warn')

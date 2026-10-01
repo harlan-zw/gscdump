@@ -86,6 +86,28 @@ describe('json errors', () => {
     expect(jsonError()).toMatchObject({ code: 'USAGE', nextCommand: null })
   })
 
+  // Review of #169: these paths logged and called process.exit(1), so the shell
+  // never saw them and stdout stayed empty under --json.
+  it.each([
+    ['indexing batch --type', ['indexing', 'batch', 'https://example.com/', '--type', 'BAD', '--json', '--mode', 'local'], 'Invalid --type: BAD.'],
+    ['dump --format', ['dump', '--format', 'xml', '--json', '--mode', 'local'], 'Invalid --format: xml.'],
+    ['config set with an unknown key', ['config', 'set', 'nope', '1', '--json'], 'Invalid key: nope.'],
+    ['an option parser', ['indexing', 'batch', 'https://example.com/', '--concurrency', '0', '--json', '--mode', 'local'], '--concurrency must be a positive integer.'],
+    ['--mode', ['sites', '--json', '--mode', 'cloud'], 'Access mode must be local or hosted.'],
+    ['query with its default JSON format', ['query', '-d', 'page', '--row-limit', '5'], 'Unknown option --row-limit.'],
+  ])('%s prints a USAGE error on stdout', async (_label, args, message) => {
+    await expect(run(args)).resolves.toBe(1)
+
+    expect(jsonError()).toMatchObject({ code: 'USAGE', nextCommand: null })
+    expect(jsonError().message).toContain(message)
+  })
+
+  it('config set with a non-numeric value prints a USAGE error', async () => {
+    await expect(run(['config', 'set', 'defaultLimit', 'many', '--json'])).resolves.toBe(1)
+
+    expect(jsonError()).toMatchObject({ code: 'USAGE', message: 'Invalid numeric value for defaultLimit: many' })
+  })
+
   it('keeps stdout empty for a failure without JSON output', async () => {
     me = () => Response.json({ message: 'Server error' }, { status: 500 })
 

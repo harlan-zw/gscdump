@@ -1,4 +1,3 @@
-import process from 'node:process'
 import { defineCommand } from 'citty'
 import { fetchSitemap } from 'gscdump/sites'
 import { sitemapsCommandMeta } from '../command-meta'
@@ -176,14 +175,10 @@ const discoverCommand = defineCommand({
       console.log(JSON.stringify({ domain, sitemap: url, status: discovery._tag }, null, 2))
       return
     }
-    if (discovery._tag === 'incomplete') {
-      logger.error(`Sitemap discovery was incomplete: ${discovery.failures[0] ?? 'unknown failure'}`)
-      process.exit(1)
-    }
-    if (!url) {
-      logger.warn(`No sitemap discovered for ${domain}`)
-      process.exit(1)
-    }
+    if (discovery._tag === 'incomplete')
+      throw new Error(`Sitemap discovery was incomplete: ${discovery.failures[0] ?? 'unknown failure'}`)
+    if (!url)
+      throw new Error(`No sitemap discovered for ${domain}`)
     logger.success(`Discovered sitemap: ${url}`)
   },
 })

@@ -8,6 +8,7 @@ import { addSite, deleteSite, fetchSitesWithSitemaps, getVerificationToken, getV
 import { connectSiteStep, formatHostedSync, getHostedAccount, localModeRequired, resolveAuthentication, siteManagerOf } from '../auth-state'
 import { sitesCommandMeta } from '../command-meta'
 import { createCommandContext, formatSiteResolution } from '../context'
+import { commandLineError } from '../stop'
 import { applyOutputMode, logger, OUTPUT_ARGS, plural } from '../utils'
 
 const ALL_METHODS: VerificationMethod[] = ['META', 'FILE', 'DNS_TXT', 'DNS_CNAME', 'ANALYTICS', 'TAG_MANAGER']
@@ -18,16 +19,12 @@ function pickDefaultMethod(siteUrl: string): VerificationMethod {
 
 function validateMethod(siteUrl: string, method: string): VerificationMethod {
   const upper = method.toUpperCase() as VerificationMethod
-  if (!ALL_METHODS.includes(upper)) {
-    logger.error(`Invalid --method: ${method}. Valid: ${ALL_METHODS.join(', ')}`)
-    process.exit(1)
-  }
+  if (!ALL_METHODS.includes(upper))
+    throw commandLineError(`Invalid --method: ${method}. Valid: ${ALL_METHODS.join(', ')}`)
   const site = siteUrlToVerificationSite(siteUrl)
   const allowed = verificationMethodsFor(site)
-  if (!allowed.includes(upper)) {
-    logger.error(`Method ${upper} not valid for ${site.type === 'INET_DOMAIN' ? 'domain' : 'URL-prefix'} property "${siteUrl}". Valid: ${allowed.join(', ')}`)
-    process.exit(1)
-  }
+  if (!allowed.includes(upper))
+    throw commandLineError(`Method ${upper} not valid for ${site.type === 'INET_DOMAIN' ? 'domain' : 'URL-prefix'} property "${siteUrl}". Valid: ${allowed.join(', ')}`)
   return upper
 }
 
@@ -357,6 +354,7 @@ const getCommand = defineCommand({
       if (args.json)
         console.log(JSON.stringify(null))
       logger.error(formatSiteResolution(resolution, 'account'))
+      // eslint-disable-next-line no-restricted-syntax -- JSON output already printed null
       process.exit(1)
     }
     const site = all.find(s => s.siteUrl === resolution.siteUrl)!

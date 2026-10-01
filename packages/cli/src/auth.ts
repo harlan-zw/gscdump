@@ -202,6 +202,7 @@ export async function getAuthCredentials(interactive: boolean): Promise<OAuth2Cr
     validate: v => v ? undefined : 'Required',
   })
   if (typeof clientIdResult !== 'string')
+    // eslint-disable-next-line no-restricted-syntax -- the user cancelled the prompt, so there is nothing to report
     process.exit(1)
 
   const clientSecretResult = await text({
@@ -209,6 +210,7 @@ export async function getAuthCredentials(interactive: boolean): Promise<OAuth2Cr
     validate: v => v ? undefined : 'Required',
   })
   if (typeof clientSecretResult !== 'string')
+    // eslint-disable-next-line no-restricted-syntax -- the user cancelled the prompt, so there is nothing to report
     process.exit(1)
 
   // Save the client so later non-interactive runs can refresh the tokens.

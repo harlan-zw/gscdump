@@ -281,7 +281,7 @@ describe('config command', () => {
           rawArgs: [],
           cmd: configCommand.subCommands!.unset,
         }),
-      ).rejects.toThrow(/process.exit/)
+      ).rejects.toMatchObject({ stopDetails: { code: 'USAGE', message: expect.stringContaining('Invalid key: nonExistent.') } })
     })
   })
 
