@@ -117,11 +117,11 @@ describe('query command', () => {
     ['--end', '2026-13-01'],
     ['--start', '2026-04-08'],
   ])('rejects %s=%s before accessing the Site', async (flag, value) => {
-    await expect(runCommand(queryCommand, {
+    const error = await runCommand(queryCommand, {
       rawArgs: ['--live', '--explain', '--start', '2026-04-01', '--end', '2026-04-07', flag, value],
-    })).rejects.toThrow('__exit_1__')
+    }).catch((cause: unknown) => cause)
 
-    expect(logger.error).toHaveBeenCalledWith(expect.stringContaining(flag))
+    expect(error).toMatchObject({ stopDetails: { code: 'USAGE', message: expect.stringContaining(flag) } })
     expect(mocks.resolveSite).not.toHaveBeenCalled()
     expect(mocks.rawQuery).not.toHaveBeenCalled()
     expect(mocks.storeQuery).not.toHaveBeenCalled()
@@ -200,9 +200,8 @@ describe('query command', () => {
   it('rejects invalid output formats before running raw SQL', async () => {
     await expect(runCommand(queryCommand, {
       rawArgs: ['--quiet', '--sql', 'SELECT 1', '--format', 'yaml'],
-    })).rejects.toThrow('__exit_1__')
+    })).rejects.toMatchObject({ stopDetails: { code: 'USAGE', message: expect.stringContaining('--format') } })
 
-    expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('--format'))
     expect(createCommandContext).not.toHaveBeenCalled()
   })
 
@@ -280,9 +279,7 @@ describe('query command', () => {
       },
       rawArgs: [],
       cmd: queryCommand,
-    } as any)).rejects.toThrow('__exit_1__')
-
-    expect(exitSpy).toHaveBeenCalledWith(1)
+    } as any)).rejects.toMatchObject({ stopDetails: { code: 'USAGE', message: expect.stringContaining('--data-state') } })
   })
 
   it('renders an explicit human query with charts and precise rates', async () => {

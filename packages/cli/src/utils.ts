@@ -8,6 +8,7 @@ import { MAX_FETCH_BUDGET } from '@gscdump/engine/analysis-types'
 import { SearchTypes } from 'gscdump/query'
 import pkg from '../package.json' with { type: 'json' }
 import { useCliRuntime } from './runtime'
+import { commandLineError } from './stop'
 
 export const ALL_SEARCH_TYPES = Object.values(SearchTypes) as readonly SearchType[]
 
@@ -70,17 +71,15 @@ export function applyOutputMode(args: { json?: unknown, quiet?: unknown }): { js
 
 /**
  * Validate a CLI-provided search-type slice against the gscdump source-of-truth
- * (`SearchTypes`). Exits on invalid input; returns `undefined` for falsy/missing
+ * (`SearchTypes`). Throws a `USAGE` stop on invalid input; returns `undefined` for falsy/missing
  * input so callers decide whether to fall back to cross-type union or a default.
  */
 export function parseSearchType(value: unknown, flag: string = '--search-type'): SearchType | undefined {
   if (!value)
     return undefined
   const v = String(value)
-  if (!ALL_SEARCH_TYPES.includes(v as SearchType)) {
-    logger.error(`Invalid ${flag}: ${v}. Allowed: ${ALL_SEARCH_TYPES.join(', ')}`)
-    process.exit(1)
-  }
+  if (!ALL_SEARCH_TYPES.includes(v as SearchType))
+    throw commandLineError(`Invalid ${flag}: ${v}. Allowed: ${ALL_SEARCH_TYPES.join(', ')}`)
   return v as SearchType
 }
 
@@ -221,7 +220,7 @@ function applyGradient(text: string): string {
 
 export function showSplash(): void {
   console.log()
-  console.log(`  ${applyGradient('GSC Dump')} v${VERSION}`)
+  console.log(`  ${applyGradient('gscdump')} v${VERSION}`)
   console.log()
 }
 

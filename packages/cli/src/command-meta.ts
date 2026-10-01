@@ -1,6 +1,6 @@
 export const initCommandMeta = {
   name: 'init',
-  description: 'Set up GSCDump authentication',
+  description: 'Set up gscdump authentication',
 }
 
 export const dumpCommandMeta = {
@@ -50,7 +50,7 @@ export const entitiesCommandMeta = {
 
 export const analyzeCommandMeta = {
   name: 'analyze',
-  description: 'SEO analysis tools',
+  description: 'Run an Analyzer over Search Console rows',
 }
 
 export const reportCommandMeta = {

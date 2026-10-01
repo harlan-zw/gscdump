@@ -11,7 +11,7 @@ For `query`, `-s` means `--site`, `-d` means `--dimensions`, and `-f` means `--f
 Use `--start` and `--end` for dates. `--site=SITE` also works.
 Use each option once, with either its short or long spelling.
 Put options after the subcommand name: `gscdump store stats --json`, not `gscdump store --json stats`.
-A failed command prints one `Error:` line to stderr and exits 1. A [stop](#stops) with JSON output also prints `{ "error" }` on stdout.
+A failed command prints one `Error:` line to stderr and exits 1. With JSON output it also prints `{ "error" }` on stdout. See [Stops](#stops).
 Example: `gscdump query --site=SITE --start=DATE --end=DATE -d page -f json`.
 
 ## Start each task
@@ -131,7 +131,7 @@ mixes Store rows and live rows.
 - `--live` always asks Search Console. It needs Local mode with Google credentials.
 - `query --sql` reads the Store only. It stops when no table it names has data.
 - JSON output carries `meta.source`: `local`, `live`, or `hosted`.
-- A routing stop with JSON output prints `{ "error" }` on stdout and exits 1. See [Stops](#stops).
+- A failure with JSON output prints `{ "error" }` on stdout and exits 1. See [Stops](#stops).
   Partial coverage and a running sync are normal progress. Run `nextCommand`, or tell the user to.
 - A sync is running only while its heartbeat is recent. A killed sync does not block reads.
 - Every Search Analytics, URL Inspection, and Indexing API call spends the shared quota ledger in the data dir.
@@ -226,20 +226,24 @@ Do not rewrite rows, estimate metrics, or add manually calculated totals.
 ## Stops
 
 A stop ends a command at a known condition and exits 1. stderr gets the message.
-If the command writes JSON, stdout gets `{ "error": { "code", "message", "nextCommand" } }`.
+If the command writes JSON, every failure prints `{ "error": { "code", "message", "nextCommand" } }` on stdout. A stop has a code from the table below.
+Any other failure has the code `FAILED`, such as a network or API error, or `UNEXPECTED`, a defect in the CLI.
 A command writes JSON with `--json`, with `--format json`, and for `query` with its default format.
+If a command printed its JSON result before it failed, such as `inspect` after a quota stop, stdout holds only that result.
 Read `code`, not the message. If `nextCommand` is not null, run it, or tell the user to run it.
 A `gscdump auth login` command needs the user. Tell the user to run it. If `nextCommand` is null, tell the user the `message`.
 A routing stop also has `siteUrl`. `STORE_RANGE_NOT_COVERED` adds `missingDates`, and `SYNC_RUNNING` adds `sync.done` and `sync.total`.
 
 | Code | Meaning |
 | --- | --- |
+| `USAGE` | The command line is wrong: an unknown command or option, or a value the option does not accept. Fix it with the command's `--help` |
 | `NOT_CONNECTED` | The Store cannot answer, and Google is not connected |
 | `STORE_RANGE_NOT_COVERED` | The Store does not have `missingDates` |
 | `SYNC_RUNNING` | A sync is still filling the dates |
 | `NO_SYNCED_DATA` | A Store-only read found no synced data |
 | `STORE_ONLY` | The read needs the Store, so `--live` cannot run it |
 | `LIVE_ONLY` | Only `--live` can answer the read |
+| `LOGIN_CANCELLED` | The user selected Cancel on the gscdump.com login page. Ask before you run `nextCommand` |
 | `LOCAL_MODE_REQUIRED` | The command calls Google, and Hosted mode is selected |
 | `HOSTED_MODE_REQUIRED` | The command reads the hosted record, and Local mode is selected |
 | `HOSTED_CREDENTIALS_MISSING` | Hosted mode has no CLI session and no API key |
@@ -251,6 +255,7 @@ A routing stop also has `siteUrl`. `STORE_RANGE_NOT_COVERED` adds `missingDates`
 | `BING_NOT_CONNECTED` | The Site has no hosted Bing connection |
 | `RECORD_NOT_READY` | gscdump has not prepared the Site's record for reads yet |
 | `RANGE_NOT_SYNCED` | The hosted record does not hold the requested dates |
+| `QUOTA_USED_UP` | A Google API quota is used up. The message says when it resets |
 
 ## Commands
 

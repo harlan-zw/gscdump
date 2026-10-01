@@ -208,12 +208,27 @@ export function siteManagerOf(state: HostedAuthentication): SiteManager {
   return 'sessionId' in state ? { _tag: 'gscdump' } : { _tag: 'key_issuer' }
 }
 
+/** Where the holder connects a Site, for example `at https://gscdump.com/…`. */
+function connectSitePlace(manager: SiteManager): string {
+  switch (manager._tag) {
+    case 'gscdump': return 'at https://gscdump.com/app/onboarding?step=connect-sites'
+    case 'key_issuer': return 'in the app that issued this API key'
+  }
+}
+
 /** The step that adds a Site to the hosted record, for example `Connect a Site at …`. */
 export function connectSiteStep(manager: SiteManager): string {
-  switch (manager._tag) {
-    case 'gscdump': return 'Connect a Site at https://gscdump.com/app/onboarding?step=connect-sites.'
-    case 'key_issuer': return 'Connect a Site in the app that issued this API key.'
-  }
+  return `Connect a Site ${connectSitePlace(manager)}.`
+}
+
+/**
+ * The next step for a hosted record with no Sites, after `auth login` and in
+ * `auth status`. The gscdump.com app opens only after Hosted access is
+ * activated, so the connect link can open the activation page first.
+ */
+export function noSitesNextStep(manager: SiteManager): string {
+  const next = `Next: connect a Site ${connectSitePlace(manager)}.`
+  return manager._tag === 'gscdump' ? `${next} If Hosted access is not active, gscdump.com asks you to activate it first.` : next
 }
 
 /** Where a Site's settings live, for example `in the Site settings on gscdump.com`. */

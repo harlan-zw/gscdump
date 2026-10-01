@@ -1,3 +1,4 @@
+import type { HostedAuthentication } from '../auth-state'
 import type { TokenInfo } from '../token-info'
 import path from 'node:path'
 import process from 'node:process'
@@ -6,7 +7,7 @@ import { defineCommand } from 'citty'
 import open from 'open'
 import { ACCESS_NOT_SET_UP, clearTokens, formatAuthProvenance, getAuth, loadServiceAccount, loadTokens, resolveBYOK, saveTokens } from '../auth'
 import { missingRequiredScopes } from '../auth-scopes'
-import { clearAuthentication, formatHostedSync, getHostedAccount, parseAuthentication, parseAuthMode, resolveAuthentication, revokeHostedSession, saveAuthentication } from '../auth-state'
+import { clearAuthentication, formatHostedSync, getHostedAccount, noSitesNextStep, parseAuthentication, parseAuthMode, resolveAuthentication, revokeHostedSession, saveAuthentication, siteManagerOf } from '../auth-state'
 import { clearBingCredentials, getBingClient, inspectBingCredentials } from '../bing-auth'
 import { authCommandMeta } from '../command-meta'
 import { loadConfig, saveConfig } from '../config'
@@ -32,6 +33,13 @@ async function requireLocalAuth(args: Record<string, unknown>): Promise<void> {
 }
 
 const HOSTED_MODE_NOTE = 'Hosted mode reads your gscdump.com record. Commands that call Google need Local mode.'
+
+/** The one step after a Hosted login. Without a Site, the CLI has nothing to read. */
+function loginNextStep(state: HostedAuthentication, siteCount: number): string {
+  return siteCount > 0
+    ? 'Next: run `gscdump sites` to see each Site and its sync state.'
+    : noSitesNextStep(siteManagerOf(state))
+}
 
 /** What Hosted mode can run. Every other Google command needs Local mode. */
 export const HOSTED_COMMANDS = [
@@ -77,6 +85,7 @@ export async function loginHosted(args: Record<string, unknown>): Promise<void> 
     await saveAuthentication(state)
     logger.success(`Hosted mode saved for ${account.user.email}`)
     logger.info(HOSTED_MODE_NOTE)
+    logger.info(loginNextStep(state, account.sites.length))
     return
   }
   const state = parseAuthentication({
@@ -90,6 +99,7 @@ export async function loginHosted(args: Record<string, unknown>): Promise<void> 
   await saveAuthentication(state)
   logger.success(`Hosted mode saved for ${account.user.email}`)
   logger.info(HOSTED_MODE_NOTE)
+  logger.info(loginNextStep(state, account.sites.length))
 }
 
 /**
@@ -170,6 +180,8 @@ async function runStatus(args: Record<string, unknown>): Promise<void> {
       console.log(`  Sites: ${sites.length}`)
       for (const site of sites)
         console.log(`    ${site.siteUrl}  ${formatHostedSync(site)}`)
+      if (sites.length === 0)
+        console.log(`  ${noSitesNextStep(siteManagerOf(authentication))}`)
       console.log(`  ${HOSTED_MODE_NOTE}`)
       console.log(`  Hosted commands: ${HOSTED_COMMANDS.join(', ')}`)
     }

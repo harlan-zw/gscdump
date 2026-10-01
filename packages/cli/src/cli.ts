@@ -9,6 +9,7 @@ import { resolveCliEnvironment } from './environment'
 import { reportCliError } from './error-handler'
 import { resolveOutputOptions, terminalOutputOptions } from './render/terminal'
 import { createCliRuntime, runWithCliRuntime, useCliRuntime } from './runtime'
+import { commandLineError } from './stop'
 import { setNoColor, showSplash, VERSION, withConfiguredOutput } from './utils'
 
 // Splash is purely cosmetic; suppress whenever it would corrupt machine output
@@ -24,6 +25,17 @@ function shouldShowSplash(rawArgs: string[]): boolean {
       return false
   }
   return true
+}
+
+/**
+ * The command line asks for JSON output with `--json` or `--format json`. The
+ * command sets the final mode when it runs. This covers failures before that.
+ */
+export function asksForJson(rawArgs: readonly string[]): boolean {
+  return rawArgs.some((arg, index) => arg === '--json'
+    || arg === '--format=json'
+    || arg === '-f=json'
+    || ((arg === '--format' || arg === '-f') && rawArgs[index + 1] === 'json'))
 }
 
 // Top-level args are scoped to subcommands in citty, so we hoist a few global
@@ -110,6 +122,33 @@ async function runMainCommand(rawArgs: string[]): Promise<void> {
   await runCommand(main, { rawArgs })
 }
 
+/**
+ * Watch stdout for one run. A command can print its JSON result and then fail,
+ * as `inspect` does when a quota stops it. The shell then prints no `{ error }`,
+ * so stdout stays one JSON document.
+ */
+function watchStdout(): { wrote: () => boolean, restore: () => void } {
+  let wrote = false
+  const write = process.stdout.write
+  const log = console.log
+  process.stdout.write = ((...args: Parameters<typeof write>) => {
+    wrote = true
+    return write.apply(process.stdout, args)
+  }) as typeof write
+  // Tests replace `console.log`, so it never reaches `process.stdout.write` there.
+  console.log = (...args: unknown[]) => {
+    wrote = true
+    log(...args)
+  }
+  return {
+    wrote: () => wrote,
+    restore: () => {
+      process.stdout.write = write
+      console.log = log
+    },
+  }
+}
+
 function stderrColor(runtime: CliRuntime, rawArgs: readonly string[]): boolean {
   return resolveOutputOptions({
     isTTY: process.stderr.isTTY,
@@ -129,24 +168,30 @@ export async function runCli(opts: RunCliOptions = {}): Promise<number> {
   return runWithCliRuntime(runtime, async () => {
     let rawArgs = [...input]
     runtime.jsonOutput = false
+    const stdout = watchStdout()
     try {
       rawArgs = prepareCliArgs(input)
       runtime.rawArgs = [...rawArgs]
+      // A failure before the command runs prints JSON when the command line asks for it.
+      runtime.jsonOutput = asksForJson(rawArgs)
       const argumentError = await checkCliArgs(main, rawArgs)
       if (argumentError)
-        throw new Error(argumentError)
+        throw commandLineError(argumentError)
       await withConfiguredOutput(() => runMainCommand(rawArgs))
       return 0
     }
     catch (error) {
       await reportCliError(error, {
         color: stderrColor(runtime, rawArgs),
-        json: runtime.jsonOutput,
+        json: runtime.jsonOutput && !stdout.wrote(),
         usage: async () => renderUsage(...await resolveUsageTarget(main, rawArgs)),
         // Loaded on demand: the auth module is heavy and only an auth failure needs it.
         authSources: async () => (await import('./auth')).formatAuthProvenance(),
       })
       return 1
+    }
+    finally {
+      stdout.restore()
     }
   })
 }
