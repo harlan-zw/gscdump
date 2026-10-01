@@ -228,7 +228,7 @@ an empty `200`. An immediate retry gets the same answer. Parse `details` with
 | `details.reason` | When | Other `details` |
 | --- | --- | --- |
 | `record_not_ready` | The Site has no synced data, or its Team catalog does not serve reads yet. | none |
-| `range_not_synced` | Sync has not reached days inside the range that Google still serves. | `missingStart`, `missingEnd` (`YYYY-MM-DD`) |
+| `range_not_synced` | The record lacks days inside the range that Google still serves. The record can lag `newestDateSynced`. | `missingStart`, `missingEnd` (`YYYY-MM-DD`) |
 
 Both can carry the Site's `syncStatus`, `lastSyncAt` (Unix seconds),
 `oldestDateSynced`, and `newestDateSynced`. A corrupted catalog fails as

@@ -59,13 +59,25 @@ export function describeRecordReadRefusal(refusal: RecordReadRefusal): { message
     return { message: 'The Site\'s record is not readable yet.', hint }
   }
   const days = refusal.missingStart === refusal.missingEnd ? refusal.missingStart : `${refusal.missingStart} to ${refusal.missingEnd}`
-  const held = refusal.oldestDateSynced && refusal.newestDateSynced
-    ? `The record holds ${refusal.oldestDateSynced} to ${refusal.newestDateSynced}. `
-    : ''
-  const next = running
-    ? 'Sync is still running. Try again when it finishes.'
-    : 'If Sync finished in the last few minutes, try again soon. Otherwise, pick dates inside the record with --start and --end.'
-  return { message: `The Site's record does not hold ${days}.`, hint: `${held}${next}` }
+  return { message: `The Site's record does not hold ${days}.`, hint: rangeHint(refusal, running) }
+}
+
+/**
+ * `oldestDateSynced` and `newestDateSynced` are what Sync reports, and the
+ * record can lag them. Days inside that range are not yet in the record, so
+ * the hint never says the record holds them.
+ */
+function rangeHint(refusal: Extract<RecordReadRefusal, { reason: 'range_not_synced' }>, running: boolean): string {
+  const { oldestDateSynced: oldest, newestDateSynced: newest } = refusal
+  const synced = oldest !== undefined && newest !== undefined
+  if (synced && refusal.missingStart >= oldest && refusal.missingEnd <= newest)
+    return 'Sync covers these days, but the record does not hold them yet. Pick an earlier end date with --end, or try again later.'
+  const covers = synced ? `Sync covers ${oldest} to ${newest}. ` : ''
+  if (running)
+    return `${covers}Sync is still running. Try again when it finishes.`
+  return synced
+    ? `${covers}Pick dates in that range with --start and --end.`
+    : 'Run `gscdump sites` to see the Sync state.'
 }
 
 function utcMinute(unixSeconds: number): string {
