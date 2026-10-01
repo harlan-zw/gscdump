@@ -128,7 +128,7 @@ export const initCommand = defineCommand({
     }
 
     console.log()
-    console.log('  \x1B[1mWelcome to GSCDump!\x1B[0m')
+    console.log('  \x1B[1mWelcome to gscdump\x1B[0m')
     console.log('  \x1B[90mGoogle Search Console data extraction CLI\x1B[0m')
     console.log()
 

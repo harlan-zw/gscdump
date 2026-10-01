@@ -39,7 +39,7 @@ it.each([
 it.each([['store', 'stats'], ['store']])('rejects an unsynced Site instead of printing empty Store metadata: %j', async (...command) => {
   const result = await invoke([...command, '--site', 'sc-domain:example.com', '--json'])
   expect(result.code).toBe(1)
-  expect(result.stdout).toBe('')
+  expect(JSON.parse(result.stdout)).toEqual({ error: { code: 'FAILED', message: 'The Store has no data. Run `gscdump sync --site example.com` first.', nextCommand: null } })
   expect(result.stderr).toContain('The Store has no data. Run `gscdump sync --site example.com` first.')
 })
 
