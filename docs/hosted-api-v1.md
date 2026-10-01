@@ -219,11 +219,11 @@ and `period` is the UTC month as `YYYY-MM`.
 
 ## Record read refusals
 
-`analytics.rows.query` reads the Site's record only. If the record cannot
-serve the read, the host refuses it with `409 invalid_request`, and
-`details.reason` names the state. The host never answers that read from live
-Google, and never answers it with an empty `200`. An immediate retry gets the
-same answer. Parse `details` with `parseRecordReadRefusal` from `@gscdump/contracts`:
+If the Site's record cannot serve an `analytics.rows.query` read, the host
+refuses it with `409 invalid_request`, and `details.reason` names the state.
+The host never answers that read from live Google, and never answers it with
+an empty `200`. An immediate retry gets the same answer. Parse `details` with
+`parseRecordReadRefusal` from `@gscdump/contracts`:
 
 | `details.reason` | When | Other `details` |
 | --- | --- | --- |
