@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { z } from 'zod'
+import { HOSTED_SESSION_EXPIRED, isSessionExpiredBody } from './hosted-session'
 import { useCliRuntime } from './runtime'
 import { stopError } from './stop'
 
@@ -178,12 +179,16 @@ export async function hostedRequest(state: HostedAuthentication, route: string, 
     const details = { statusCode: response.status, retryAfter: response.headers.get('retry-after'), response }
     if (response.status === 401) {
       const session = 'sessionId' in state
-      throw Object.assign(stopError({
-        code: 'HOSTED_CREDENTIALS_REJECTED',
-        message: session ? HOSTED_SESSION_REJECTED : HOSTED_KEY_REJECTED,
-        // A rejected API key needs a new key. Only its issuer can make one.
-        nextCommand: session ? 'gscdump auth login --mode hosted' : null,
-      }), details)
+      // A 401 body that is not JSON carries no reason. It stays an ordinary rejection.
+      const expired = session && isSessionExpiredBody(await response.json().catch(() => null))
+      throw Object.assign(stopError(expired
+        ? HOSTED_SESSION_EXPIRED
+        : {
+            code: 'HOSTED_CREDENTIALS_REJECTED',
+            message: session ? HOSTED_SESSION_REJECTED : HOSTED_KEY_REJECTED,
+            // A rejected API key needs a new key. Only its issuer can make one.
+            nextCommand: session ? 'gscdump auth login --mode hosted' : null,
+          }), details)
     }
     throw Object.assign(new Error(`Hosted request failed (${response.status}) for ${route.split('?')[0]}. Check \`gscdump auth status\`.`), details)
   }
