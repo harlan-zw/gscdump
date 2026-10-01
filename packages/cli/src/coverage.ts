@@ -15,6 +15,7 @@ import { INSPECTION_QPD_PER_PROPERTY } from './inspection-record'
 import { inspectionCandidates, loadInspectionState } from './local-entities'
 import { quotaLedgerPath, quotaStatus, readLedgerState } from './quota-ledger'
 import { datesForJob, FIRST_SYNC_DAYS, jobWindowStart } from './sync-plan'
+import { plural } from './utils'
 
 export type DatasetCoverage
   = | { kind: 'empty' }
@@ -204,10 +205,6 @@ export function hasSyncedDays(states: readonly CoverageSyncState[], table: strin
 
 function n(value: number): string {
   return value.toLocaleString('en-US')
-}
-
-function plural(count: number, one: string, many: string): string {
-  return `${n(count)} ${count === 1 ? one : many}`
 }
 
 function clock(at: number): string {

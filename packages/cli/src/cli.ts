@@ -5,7 +5,6 @@ import { parseAuthMode } from './auth-state'
 import { checkCliArgs } from './cli-args'
 import { CLI_SUBCOMMANDS, resolveUsageTarget } from './command-registry'
 import { applyProfileFromCli } from './commands/profile-selection'
-import { loadEnvFromCwd } from './env-file'
 import { resolveCliEnvironment } from './environment'
 import { reportCliError } from './error-handler'
 import { resolveOutputOptions, terminalOutputOptions } from './render/terminal'
@@ -93,7 +92,6 @@ export const main = defineCommand({
 
 export interface RunCliOptions {
   rawArgs?: string[]
-  loadEnv?: boolean
   environment?: Record<string, string | undefined>
   runtime?: CliRuntime
 }
@@ -131,8 +129,6 @@ export async function runCli(opts: RunCliOptions = {}): Promise<number> {
   return runWithCliRuntime(runtime, async () => {
     let rawArgs = [...input]
     try {
-      if (opts.loadEnv !== false)
-        loadEnvFromCwd()
       rawArgs = prepareCliArgs(input)
       runtime.rawArgs = [...rawArgs]
       const argumentError = await checkCliArgs(main, rawArgs)

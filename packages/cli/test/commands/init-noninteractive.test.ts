@@ -56,7 +56,7 @@ describe('init without a terminal', () => {
   })
 
   async function init(args: string[], environment: Record<string, string> = {}): Promise<void> {
-    await runCli({ rawArgs: ['init', ...args], loadEnv: false, environment: { GSCDUMP_CONFIG_DIR: dir, ...environment } })
+    await runCli({ rawArgs: ['init', ...args], environment: { GSCDUMP_CONFIG_DIR: dir, ...environment } })
       .catch((error: Error) => {
         if (!error.message.startsWith('process.exit'))
           throw error

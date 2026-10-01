@@ -18,7 +18,6 @@ describe('cli help', () => {
 
     await runCli({
       rawArgs: ['--help'],
-      loadEnv: false,
       environment: { NO_COLOR: '1' },
     })
 
@@ -32,7 +31,6 @@ describe('cli help', () => {
 
     await runCli({
       rawArgs: ['store', 'compact', '--help'],
-      loadEnv: false,
       environment: { NO_COLOR: '1' },
     })
 
@@ -45,7 +43,6 @@ describe('cli help', () => {
 
     await runCli({
       rawArgs: ['--config-dir=/tmp/gscdump-cli-help', 'config', 'path'],
-      loadEnv: false,
       environment: { NO_COLOR: '1' },
     })
 

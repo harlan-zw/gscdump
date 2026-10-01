@@ -10,7 +10,7 @@ import process from 'node:process'
 import { cancel, isCancel, multiselect, text } from '@clack/prompts'
 import { collectSpans } from '@gscdump/engine/profile'
 import { defineCommand } from 'citty'
-import { getLatestGscDate } from 'gscdump/dates'
+import { getLatestGscDate, toIsoDate } from 'gscdump/dates'
 import { and, between, country, date as dateCol, device, gsc, hour, page, query as queryCol, searchAppearance } from 'gscdump/query'
 import { inferDataset, isDatasetResolvable } from 'gscdump/query/plan'
 import { resolveAuthentication } from '../auth-state'
@@ -430,7 +430,7 @@ export const queryCommand = defineCommand({
         dimensions: dimNames,
         dateRange: { start: startDate, end: endDate },
         total: result.rows.length,
-        data: result.rows,
+        data: result.rows.map(withIsoDate),
         meta: { source: 'local' },
       },
       format,
@@ -565,12 +565,20 @@ function buildLocalState(
   const dateFilter = between(dateCol, startDate, endDate)
   const filter = dimensionFilter ? and(dateFilter, dimensionFilter) : dateFilter
 
-  return (gsc
+  const builder = gsc
     .select(...(dims as [Column<Dimension>, ...Column<Dimension>[]]))
     .where(filter)
+  // Google returns rows with a date dimension oldest first, and every other
+  // query by clicks. Store and Hosted reads ask for the same order, so
+  // `--limit` keeps the same rows in every mode.
+  return (dimNames.includes('date') ? builder.orderBy(dateCol, 'asc') : builder)
     .limit(rowLimit)
-  )
     .getState()
+}
+
+/** The Store returns DATE values as epoch milliseconds. Output them as `YYYY-MM-DD`, like live and hosted rows. */
+function withIsoDate(row: Record<string, unknown>): Record<string, unknown> {
+  return typeof row.date === 'number' ? { ...row, date: toIsoDate(new Date(row.date)) } : row
 }
 
 type SqlMode

@@ -5,7 +5,7 @@ import { sitemapsCommandMeta } from '../command-meta'
 import { createCommandContext } from '../context'
 import { HOSTED_ARGS, resolveHostedSite } from '../hosted-site'
 import { discoverLiveSitemap, loadSitemapUrls } from '../sitemap'
-import { applyOutputMode, logger, OUTPUT_ARGS, parseIntegerOption } from '../utils'
+import { applyOutputMode, logger, OUTPUT_ARGS, parseIntegerOption, plural } from '../utils'
 
 const HOSTED_SITEMAP_ALTERNATIVE = 'read a live sitemap with `gscdump sitemaps urls <sitemap-url>`'
 
@@ -57,12 +57,12 @@ const listCommand = defineCommand({
       return
     }
 
-    logger.success(`Found ${sitemaps.length} sitemaps:`)
+    logger.success(`Found ${plural(sitemaps.length, 'sitemap', 'sitemaps')}:`)
     console.log()
     for (const sm of sitemaps) {
       const pending = sm.isPending ? ' \x1B[33m(pending)\x1B[0m' : ''
-      const errors = sm.errors ? ` \x1B[31m${sm.errors} errors\x1B[0m` : ''
-      const warnings = sm.warnings ? ` \x1B[33m${sm.warnings} warnings\x1B[0m` : ''
+      const errors = sm.errors ? ` \x1B[31m${plural(sm.errors, 'error', 'errors')}\x1B[0m` : ''
+      const warnings = sm.warnings ? ` \x1B[33m${plural(sm.warnings, 'warning', 'warnings')}\x1B[0m` : ''
       const submitted = sm.lastSubmitted ? ` \x1B[90msubmitted ${sm.lastSubmitted}\x1B[0m` : ''
       console.log(`  ${sm.path}${pending}${errors}${warnings}${submitted}`)
     }

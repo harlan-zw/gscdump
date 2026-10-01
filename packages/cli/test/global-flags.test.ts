@@ -15,14 +15,14 @@ describe('global CLI flags', () => {
 
   it('preserves query timing and the following boolean flag', async () => {
     const runtime: CliRuntime = createCliRuntime({ environment: {} })
-    await runCli({ rawArgs: ['query', '--profile', '--quiet'], runtime, loadEnv: false })
+    await runCli({ rawArgs: ['query', '--profile', '--quiet'], runtime })
     expect(run).toHaveBeenCalledWith(expect.objectContaining({ args: expect.objectContaining({ profile: true, quiet: true }) }))
     expect(runtime.activeProfileOverride).toBeNull()
   })
 
   it('selects an account profile when the global flag has a value', async () => {
     const runtime = createCliRuntime({ environment: {} })
-    await runCli({ rawArgs: ['--profile', 'work', 'query', '--quiet'], runtime, loadEnv: false })
+    await runCli({ rawArgs: ['--profile', 'work', 'query', '--quiet'], runtime })
     expect(runtime.activeProfileOverride).toBe('work')
     expect(run).toHaveBeenCalledOnce()
   })
@@ -36,7 +36,7 @@ describe('global CLI flags', () => {
   ])('rejects a global flag without a value: %j', async (...rawArgs) => {
     const errors: string[] = []
     vi.spyOn(console, 'error').mockImplementation((...args) => errors.push(args.map(String).join(' ')))
-    expect(await runCli({ rawArgs, loadEnv: false, environment: {} })).toBe(1)
+    expect(await runCli({ rawArgs, environment: {} })).toBe(1)
     expect(errors.join('\n')).toMatch(/requires a value/)
   })
 })

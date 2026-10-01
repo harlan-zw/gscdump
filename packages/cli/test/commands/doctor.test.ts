@@ -29,7 +29,6 @@ vi.mock('../../src/auth', async importOriginal => ({
   getAuth: mocks.getAuth,
   resolveServiceAccount: mocks.resolveServiceAccount,
 }))
-vi.mock('../../src/env-file', () => ({ parseEnvFile: () => null }))
 vi.mock('../../src/local-store', () => ({
   createLocalStore: () => ({ userId: 'local', engine: { getWatermarks: mocks.getWatermarks } }),
 }))
