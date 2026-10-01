@@ -159,9 +159,22 @@ const hostedSiteSchema = z.object({
   newestDateSynced: z.string().nullable().optional(),
   oldestDateSynced: z.string().nullable().optional(),
 }).passthrough()
+/** A partner's display name, for example `Request Indexing`. It reaches the terminal, so control characters fail the parse. */
+const partnerNameSchema = z.string().trim().min(1).max(80).regex(/^\P{Cc}+$/u)
+const keyIssuerSchema = z.discriminatedUnion('_tag', [
+  z.object({ _tag: z.literal('gscdump') }),
+  z.object({ _tag: z.literal('partner'), name: partnerNameSchema }),
+])
+/** Who issued the Hosted credential, as `/cli/me` reports it. */
+export type KeyIssuer = z.infer<typeof keyIssuerSchema>
+
 const accountSchema = z.object({
   user: z.object({ publicId: z.string(), email: z.string() }),
   sites: z.array(hostedSiteSchema),
+  // An older gscdump.com omits `issuer`. An issuer this CLI cannot read, such
+  // as a later issuer kind, is unknown in the same way. Neither one fails the
+  // account: the stops then use wording that names no product.
+  issuer: keyIssuerSchema.optional().catch(undefined),
 })
 
 /** One Site in the hosted record, with its hosted sync state. */
@@ -196,22 +209,27 @@ export function hostedCredential(state: HostedAuthentication): string {
 
 /**
  * Where the holder of a Hosted credential manages Sites. A CLI session comes
- * from the gscdump.com browser login. An API key can come from gscdump.com or
- * from a partner app, and `/cli/me` does not say which. So the CLI names no
- * product for an API key: it never sends a partner's user to gscdump.com.
+ * from the gscdump.com browser login. An API key comes from gscdump.com or
+ * from a partner app, and `/cli/me` names its issuer. An older gscdump.com does
+ * not, so the CLI then names no product: it never sends a partner's user to
+ * gscdump.com.
  */
 export type SiteManager
   = | { _tag: 'gscdump' }
+    | { _tag: 'partner', name: string }
     | { _tag: 'key_issuer' }
 
-export function siteManagerOf(state: HostedAuthentication): SiteManager {
-  return 'sessionId' in state ? { _tag: 'gscdump' } : { _tag: 'key_issuer' }
+export function siteManagerOf(state: HostedAuthentication, issuer: KeyIssuer | undefined): SiteManager {
+  if ('sessionId' in state)
+    return { _tag: 'gscdump' }
+  return issuer ?? { _tag: 'key_issuer' }
 }
 
-/** The step that adds a Site to the hosted record, for example `Connect a Site at …`. */
+/** The step that adds a Site to the hosted record, for example `Connect a Site in Request Indexing.` */
 export function connectSiteStep(manager: SiteManager): string {
   switch (manager._tag) {
     case 'gscdump': return 'Connect a Site at https://gscdump.com/app/onboarding?step=connect-sites.'
+    case 'partner': return `Connect a Site in ${manager.name}.`
     case 'key_issuer': return 'Connect a Site in the app that issued this API key.'
   }
 }
@@ -220,6 +238,7 @@ export function connectSiteStep(manager: SiteManager): string {
 export function siteSettingsPlace(manager: SiteManager): string {
   switch (manager._tag) {
     case 'gscdump': return 'in the Site settings on gscdump.com'
+    case 'partner': return `in the Site settings of ${manager.name}`
     case 'key_issuer': return 'in the Site settings of the app that issued this API key'
   }
 }

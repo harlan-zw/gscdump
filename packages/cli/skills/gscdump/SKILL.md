@@ -44,8 +44,10 @@ In Local mode, `googleAuthenticated: true` means Google accepted the credentials
 In Hosted mode, `hostedSync` lists each hosted Site with `syncStatus` and `syncProgress`, and `commands` lists what Hosted mode can run.
 `gscdump sites` shows the same Sites and progress.
 An empty `sites` list means the hosted record has no Sites. Commands that need a Site then stop with `NO_SITES`.
-Tell the user to connect a Site. A browser login connects Sites on gscdump.com.
+Tell the user to connect a Site in the place the `NO_SITES` message names.
+A browser login connects Sites on gscdump.com.
 An API key connects Sites in the app that issued the key. That app can be a partner app, not gscdump.com.
+When gscdump.com names the app, the message names it too, for example `Connect a Site in Request Indexing.`
 
 `--mode local|hosted` overrides one invocation. `GSCDUMP_AUTH_MODE` also overrides the saved mode.
 A successful login saves the mode per profile.

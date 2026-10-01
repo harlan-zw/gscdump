@@ -382,7 +382,7 @@ const LIST_ARGS = {
 async function runListHostedSites(args: Record<string, unknown>, authentication: HostedAuthentication): Promise<void> {
   if (args['with-sitemaps'] || args['owner-only'])
     throw localModeRequired('--with-sitemaps and --owner-only read Search Console permissions.')
-  const { sites } = await getHostedAccount(authentication)
+  const { sites, issuer } = await getHostedAccount(authentication)
   if (args.json) {
     console.log(JSON.stringify(sites.map(site => ({
       siteId: site.siteId,
@@ -392,7 +392,7 @@ async function runListHostedSites(args: Record<string, unknown>, authentication:
     return
   }
   if (sites.length === 0) {
-    logger.warn(`Your hosted record has no Sites. ${connectSiteStep(siteManagerOf(authentication))}`)
+    logger.warn(`Your hosted record has no Sites. ${connectSiteStep(siteManagerOf(authentication, issuer))}`)
     return
   }
   logger.success(`Found ${plural(sites.length, 'hosted Site', 'hosted Sites')}:`)

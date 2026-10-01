@@ -79,7 +79,7 @@ export function siteMatchStop(match: Exclude<HostedSiteMatch, { kind: 'found' }>
 export async function resolveHostedSite(
   args: Record<string, unknown>,
   command: { name: string, localAlternative: string },
-): Promise<{ client: GscdumpV1Client, site: HostedSite, authentication: HostedAuthentication }> {
+): Promise<{ client: GscdumpV1Client, site: HostedSite, authentication: HostedAuthentication, siteManager: SiteManager }> {
   // citty parks undeclared positional tokens in `args._`; without this guard a
   // stale `sitemaps current s_01` invocation silently reads the default Site.
   if ((args._ as string[] | undefined)?.length)
@@ -99,12 +99,14 @@ export async function resolveHostedSite(
     throw new Error('The API root changed. Pass --api-key for the new API root.')
   const target = args.site ? String(args.site) : (await loadConfig()).defaultSite
   const account = await getHostedAccount(authentication)
+  const siteManager = siteManagerOf(authentication, account.issuer)
   const match = matchHostedSite(account.sites, target)
   if (match.kind !== 'found')
-    throw stopError(siteMatchStop(match, siteManagerOf(authentication)))
+    throw stopError(siteMatchStop(match, siteManager))
   return {
     client: createGscdumpV1Client({ apiRoot: authentication.apiRoot, credential: hostedCredential(authentication) }),
     site: match.site,
     authentication,
+    siteManager,
   }
 }
