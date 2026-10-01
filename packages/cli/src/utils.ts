@@ -49,6 +49,14 @@ export const OUTPUT_ARGS = {
 }
 
 /**
+ * Record that this command writes JSON to stdout. A stop then prints its
+ * `{ error }` form on stdout, so an agent never reads an empty result.
+ */
+export function setJsonOutput(json: boolean): void {
+  useCliRuntime().jsonOutput = json
+}
+
+/**
  * Apply `--json` / `--quiet` semantics: JSON implies quiet. Returns booleans
  * so callers can branch output without re-deriving them.
  */
@@ -56,6 +64,7 @@ export function applyOutputMode(args: { json?: unknown, quiet?: unknown }): { js
   const json = Boolean(args.json)
   const quiet = json || Boolean(args.quiet)
   setQuiet(quiet)
+  setJsonOutput(json)
   return { json, quiet }
 }
 
@@ -221,17 +230,12 @@ export function clearLine(): void {
 }
 
 /**
- * Format a path for display: relative to cwd when possible, with `~` for the
- * home directory otherwise. Avoids leaking the user's full home path into
- * logs and screenshots.
+ * Format a path for display, with `~` for the home directory. The result
+ * never depends on cwd, so an agent can use it from any directory. It also
+ * keeps the user's full home path out of logs and screenshots.
  */
 export function displayPath(absPath: string): string {
-  const cwd = process.cwd()
   const home = os.homedir()
-  if (absPath === cwd)
-    return '.'
-  if (absPath.startsWith(`${cwd}/`))
-    return absPath.slice(cwd.length + 1)
   if (absPath === home)
     return '~'
   if (absPath.startsWith(`${home}/`))

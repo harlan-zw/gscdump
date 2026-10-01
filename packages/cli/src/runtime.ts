@@ -14,6 +14,8 @@ export interface CliRuntime {
   configDir: string
   configDirOverridden: boolean
   environment: CliEnvironmentSource
+  /** The command writes JSON to stdout. A stop then prints its JSON form there too. */
+  jsonOutput: boolean
   logger: ConsolaInstance
   quiet: boolean
   rawArgs: string[]
@@ -43,6 +45,7 @@ export function createCliRuntime(opts: CreateCliRuntimeOptions = {}): CliRuntime
     configDir: opts.configDir ?? path.join(os.homedir(), '.config', 'gscdump'),
     configDirOverridden: false,
     environment: opts.environment ?? process.env,
+    jsonOutput: false,
     logger: baseLogger.withTag('gscdump'),
     quiet: false,
     rawArgs: [...(opts.rawArgs ?? process.argv.slice(2))],

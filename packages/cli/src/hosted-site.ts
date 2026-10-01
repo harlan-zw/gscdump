@@ -1,10 +1,11 @@
 import type { GscdumpV1Client } from '@gscdump/sdk/v1'
-import process from 'node:process'
+import type { HostedAuthentication, SiteManager } from './auth-state'
+import type { StopDetails } from './stop'
 import { createGscdumpV1Client } from '@gscdump/sdk/v1'
-import { getHostedAccount, hostedCredential, parseAuthentication, resolveAuthentication } from './auth-state'
+import { connectSiteStep, getHostedAccount, hostedCredential, parseAuthentication, resolveAuthentication, siteManagerOf } from './auth-state'
 import { loadConfig } from './config'
 import { resolveCliEnvironment } from './environment'
-import { logger } from './utils'
+import { stopError } from './stop'
 
 export const HOSTED_ARGS = {
   'site': { type: 'string' as const, alias: 's', description: 'Site URL (e.g., example.com, sc-domain:example.com, or https://example.com/)' },
@@ -52,49 +53,58 @@ export function matchHostedSite(sites: readonly HostedSite[], target: string | u
   return { kind: 'missing', target, sites: [...sites] }
 }
 
-function describeMatchFailure(match: Exclude<HostedSiteMatch, { kind: 'found' }>): string {
-  if (match.kind === 'ambiguous')
-    return `Multiple hosted Sites match "${match.target}": ${match.matches.map(site => site.siteUrl).join(', ')}. Pass the exact Site URL with --site.`
-  if (match.sites.length === 0)
-    return 'Your hosted account has no Sites. Add a Site at https://gscdump.com.'
-  const available = `Hosted Sites: ${match.sites.map(site => site.siteUrl).join(', ')}.`
-  return match.target
-    ? `No hosted Site matches "${match.target}". ${available}`
-    : `Pass --site. ${available}`
+/** The stop for a hosted record with no Sites. It names where this credential's holder connects one. */
+export function noSitesStop(manager: SiteManager): StopDetails {
+  return { code: 'NO_SITES', message: `Your hosted record has no Sites. ${connectSiteStep(manager)} Then run the command again.`, nextCommand: null }
 }
 
-function fail(message: string): never {
-  logger.error(message)
-  process.exit(1)
+/** The stop for a `--site` value that names no single hosted Site. Pure. */
+export function siteMatchStop(match: Exclude<HostedSiteMatch, { kind: 'found' }>, manager: SiteManager): StopDetails {
+  const nextCommand = 'gscdump sites --json'
+  if (match.kind === 'ambiguous')
+    return { code: 'SITE_AMBIGUOUS', message: `Multiple hosted Sites match "${match.target}": ${match.matches.map(site => site.siteUrl).join(', ')}. Pass the exact Site URL with --site.`, nextCommand }
+  if (match.sites.length === 0)
+    return noSitesStop(manager)
+  const available = `Hosted Sites: ${match.sites.map(site => site.siteUrl).join(', ')}.`
+  return match.target
+    ? { code: 'SITE_NOT_FOUND', message: `No hosted Site matches "${match.target}". ${available}`, nextCommand }
+    : { code: 'SITE_REQUIRED', message: `Pass --site. ${available}`, nextCommand }
 }
 
 /**
  * Resolve hosted authentication and a `--site` value to a v1 client and a hosted Site.
  * A local-only user gets one line that names the hosted requirement and `localAlternative`.
+ * Every failure is a stop, so a command with JSON output prints it on stdout.
  */
 export async function resolveHostedSite(
   args: Record<string, unknown>,
   command: { name: string, localAlternative: string },
-): Promise<{ client: GscdumpV1Client, site: HostedSite }> {
+): Promise<{ client: GscdumpV1Client, site: HostedSite, authentication: HostedAuthentication }> {
   // citty parks undeclared positional tokens in `args._`; without this guard a
   // stale `sitemaps current s_01` invocation silently reads the default Site.
   if ((args._ as string[] | undefined)?.length)
-    fail(`\`gscdump ${command.name}\` does not accept a positional Site ID. Pass --site instead.`)
+    throw new Error(`\`gscdump ${command.name}\` does not accept a positional Site ID. Pass --site instead.`)
   const environment = resolveCliEnvironment().values
   const authentication = args['api-key']
     ? parseAuthentication({ _tag: 'Hosted', apiKey: args['api-key'], apiRoot: String(args['api-root'] || environment.GSCDUMP_API_ROOT || 'https://gscdump.com/api') })
     : await resolveAuthentication()
-  if (authentication._tag !== 'Hosted')
-    fail(`\`gscdump ${command.name}\` reads the hosted record, so it needs Hosted mode. Run \`gscdump auth login --mode hosted\`, or pass --api-key. In Local mode, ${command.localAlternative}.`)
+  if (authentication._tag !== 'Hosted') {
+    throw stopError({
+      code: 'HOSTED_MODE_REQUIRED',
+      message: `\`gscdump ${command.name}\` reads the hosted record, so it needs Hosted mode. Run \`gscdump auth login --mode hosted\`, or pass --api-key. In Local mode, ${command.localAlternative}.`,
+      nextCommand: 'gscdump auth login --mode hosted',
+    })
+  }
   if (args['api-root'] && String(args['api-root']).replace(/\/+$/, '') !== authentication.apiRoot)
-    fail('The API root changed. Pass --api-key for the new API root.')
+    throw new Error('The API root changed. Pass --api-key for the new API root.')
   const target = args.site ? String(args.site) : (await loadConfig()).defaultSite
   const account = await getHostedAccount(authentication)
   const match = matchHostedSite(account.sites, target)
   if (match.kind !== 'found')
-    fail(describeMatchFailure(match))
+    throw stopError(siteMatchStop(match, siteManagerOf(authentication)))
   return {
     client: createGscdumpV1Client({ apiRoot: authentication.apiRoot, credential: hostedCredential(authentication) }),
     site: match.site,
+    authentication,
   }
 }

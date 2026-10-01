@@ -10,7 +10,7 @@ import { cancel, isCancel, select } from '@clack/prompts'
 import { parseGscSiteUrl, resolveSiteInput } from 'gscdump'
 import { googleSearchConsole as createGsc } from 'gscdump/client'
 import { resolveAuth } from './auth'
-import { LOCAL_MODE_REQUIRED, resolveAuthentication } from './auth-state'
+import { localModeRequired, resolveAuthentication } from './auth-state'
 import { loadResolvedConfig } from './config'
 import { createLocalStore } from './local-store'
 import { openQuotaLedger, quotaFetchOptions } from './quota-ledger'
@@ -83,7 +83,7 @@ export async function createCommandContext(
   const { config, dataDir } = await loadResolvedConfig()
   // Only Local mode calls Google. Hosted mode reads the hosted record and has no Google client.
   if (needsAuth && (await resolveAuthentication())._tag === 'Hosted')
-    throw new Error(LOCAL_MODE_REQUIRED)
+    throw localModeRequired()
   const fetchOptions = needsAuth && quota
     ? quotaFetchOptions(await openQuotaLedger({ dataDir }), opts.fetchOptions)
     : opts.fetchOptions

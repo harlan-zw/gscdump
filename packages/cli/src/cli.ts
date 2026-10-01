@@ -128,6 +128,7 @@ export async function runCli(opts: RunCliOptions = {}): Promise<number> {
   runtime.rawArgs = [...input]
   return runWithCliRuntime(runtime, async () => {
     let rawArgs = [...input]
+    runtime.jsonOutput = false
     try {
       rawArgs = prepareCliArgs(input)
       runtime.rawArgs = [...rawArgs]
@@ -140,6 +141,7 @@ export async function runCli(opts: RunCliOptions = {}): Promise<number> {
     catch (error) {
       await reportCliError(error, {
         color: stderrColor(runtime, rawArgs),
+        json: runtime.jsonOutput,
         usage: async () => renderUsage(...await resolveUsageTarget(main, rawArgs)),
         // Loaded on demand: the auth module is heavy and only an auth failure needs it.
         authSources: async () => (await import('./auth')).formatAuthProvenance(),

@@ -215,9 +215,10 @@ describe('hosted indexing summary and watch commands', () => {
     expect(requests.filter(request => request.method === 'POST')).toEqual([])
   })
 
-  it('prints why a Site with URL Inspection off skips a URL', async () => {
+  it('prints why a Site with URL Inspection off skips a URL, and names the app that issued the API key', async () => {
     await run(['indexing', 'watch', 'add', '--site', 'example.com', 'https://example.com/off'])
     expect(stdout.join('\n')).toContain('Skipped (inspection_disabled): https://example.com/off')
-    expect(stdout.join('\n')).toContain('turn on URL Inspection')
+    expect(stdout.join('\n')).toContain('turn on URL Inspection in the Site settings of the app that issued this API key.')
+    expect(stdout.join('\n')).not.toContain('gscdump.com')
   })
 })

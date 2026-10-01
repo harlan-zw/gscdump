@@ -8,7 +8,7 @@ import { googleSearchConsole } from 'gscdump/client'
 import { ofetch } from 'ofetch'
 import { getAuth, isStaleServiceAccountPointer, loadTokens, resolveAuth, resolveBYOK, resolveServiceAccount } from '../auth'
 import { missingRequiredScopes } from '../auth-scopes'
-import { getHostedAccount, resolveAuthentication } from '../auth-state'
+import { connectSiteStep, getHostedAccount, resolveAuthentication, siteManagerOf } from '../auth-state'
 import { doctorCommandMeta } from '../command-meta'
 import { loadConfig } from '../config'
 import { createCommandContext, formatSiteResolution } from '../context'
@@ -263,7 +263,7 @@ async function checkHostedConnection(authentication: HostedAuthentication): Prom
   const count = account.value.sites.length
   const sitesChecks: Check[] = [count > 0
     ? { name: 'hosted.sites', status: 'pass', detail: `${count} hosted Site(s)` }
-    : { name: 'hosted.sites', status: 'warn', detail: 'no hosted Sites. Connect a Site at https://gscdump.com/app/onboarding?step=connect-sites' }]
+    : { name: 'hosted.sites', status: 'warn', detail: `no hosted Sites. ${connectSiteStep(siteManagerOf(authentication))}` }]
   return [
     { name: 'auth', status: 'pass', detail: `Hosted mode via ${authentication.apiRoot}` },
     { name: 'auth.account', status: 'pass', detail: account.value.user.email },

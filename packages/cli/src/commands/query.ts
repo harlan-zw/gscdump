@@ -28,7 +28,7 @@ import { terminalOutputOptions } from '../render/terminal'
 import { decideRoute, describeStop, liveNote, readRouteState, readSiteStates, resolveReadSite, stopAtRoute } from '../route'
 import { useCliRuntime } from '../runtime'
 import { openSqlViews, referencedTables } from '../sql-views'
-import { ALL_SEARCH_TYPES, logger, parseSearchType, toCSV } from '../utils'
+import { ALL_SEARCH_TYPES, logger, parseSearchType, setJsonOutput, toCSV } from '../utils'
 import { checkWindowFlags, DEFAULT_WINDOW, newestDoneDate, parseWindowFlags } from '../window'
 
 const DIMENSIONS = ['page', 'query', 'date', 'hour', 'country', 'device', 'searchAppearance'] as const
@@ -238,6 +238,7 @@ export const queryCommand = defineCommand({
       logger.error('Invalid --format. Use table, json, or csv.')
       process.exit(1)
     }
+    setJsonOutput(format === 'json')
     if (args.sql || args.schema) {
       await runSqlMode({
         mode: args.schema ? { kind: 'schema' } : { kind: 'sql', sql: String(args.sql) },
@@ -334,7 +335,6 @@ export const queryCommand = defineCommand({
     const needs: RouteNeed[] = table ? [{ kind: 'window', period: 'current', table, searchType: localSearchType, window: { start: startDate, end: endDate } }] : []
     const routeState = await readRouteState({ store, site, needs, states, auth })
     const route = decideRoute(req, routeState)
-    const json = format === 'json'
 
     if (route.kind === 'live') {
       const live = await connect()
@@ -396,7 +396,7 @@ export const queryCommand = defineCommand({
       return
     }
     if (route.kind === 'syncing' || route.kind === 'prompt')
-      stopAtRoute(route, req, routeState.auth, { json })
+      stopAtRoute(route, req, routeState.auth)
 
     if (dataState || aggregationType) {
       logger.warn('--data-state / --aggregation-type are ignored without --live')
@@ -616,7 +616,7 @@ async function runSqlMode(opts: {
       const route = decideRoute(req, { ...routeState, coverage: [{ kind: 'any', tables, stored }] })
       if (route.kind === 'syncing' || route.kind === 'prompt') {
         views.close()
-        stopAtRoute(route, req, routeState.auth, { json: opts.format === 'json' })
+        stopAtRoute(route, req, routeState.auth)
       }
     }
   }

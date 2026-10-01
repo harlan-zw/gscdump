@@ -68,8 +68,10 @@ describe('hosted indexing urls and sitemap commands', () => {
       { siteId: 's_other', siteUrl: 'https://other.dev/' },
     ]
     vi.spyOn(console, 'log').mockImplementation((...args) => stdout.push(args.join(' ')))
-    // citty prints an uncaught command error here before its exit.
-    vi.spyOn(console, 'error').mockImplementation(() => {})
+    // The CLI shell prints a failed command here.
+    vi.spyOn(console, 'error').mockImplementation((...args) => {
+      stderr += `${args.join(' ')}\n`
+    })
     vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
       throw new Error(`process.exit(${code})`)
     }) as never)

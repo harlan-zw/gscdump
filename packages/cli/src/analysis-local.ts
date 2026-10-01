@@ -159,7 +159,6 @@ export function analyzerSources(types: readonly string[]): { local: boolean, liv
 export interface ResolveAnalysisSourceArgs {
   site?: unknown
   live?: boolean
-  json?: boolean
   /** The command, for messages: `analyze movers`, `report triage`. */
   label: string
   /** Analyzer ids the run executes. They decide which sources can answer. */
@@ -221,7 +220,7 @@ export async function resolveAnalysisSource(args: ResolveAnalysisSourceArgs): Pr
   const route = decideRoute(req, state)
 
   if (route.kind === 'syncing' || route.kind === 'prompt')
-    stopAtRoute(route, req, state.auth, { json: Boolean(args.json) })
+    stopAtRoute(route, req, state.auth)
 
   if (route.kind === 'local') {
     const source = createEngineQuerySource({ engine: store.engine, ctx: { userId: store.userId, siteId: store.siteIdFor(site!) } })

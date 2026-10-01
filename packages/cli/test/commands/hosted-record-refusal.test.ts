@@ -76,6 +76,20 @@ describe('hosted query when the Site\'s record cannot serve the read', () => {
     expect(stdout.join('\n')).not.toContain('No results')
   })
 
+  it('prints the refusal as a JSON stop with a code in the default JSON format', async () => {
+    refusal = { reason: 'range_not_synced', missingStart: '2026-09-03', missingEnd: '2026-09-12', syncStatus: 'syncing', oldestDateSynced: '2026-09-13', newestDateSynced: '2026-09-29' }
+
+    await expect(query()).resolves.toBe(1)
+
+    expect(JSON.parse(stdout.join('\n'))).toEqual({
+      error: {
+        code: 'RANGE_NOT_SYNCED',
+        message: 'The Site\'s record does not hold 2026-09-03 to 2026-09-12. Sync covers 2026-09-13 to 2026-09-29. Sync is still running. Try again when it finishes.',
+        nextCommand: null,
+      },
+    })
+  })
+
   it('names the missing days and waits for a running Sync', async () => {
     refusal = { reason: 'range_not_synced', missingStart: '2026-09-03', missingEnd: '2026-09-12', syncStatus: 'syncing', oldestDateSynced: '2026-09-13', newestDateSynced: '2026-09-29' }
 

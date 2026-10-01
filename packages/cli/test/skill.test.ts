@@ -1,12 +1,16 @@
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import process from 'node:process'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { runCli } from '../src/cli'
+import { createCliRuntime } from '../src/runtime'
 import { installSkill, skillDestination, skillSourceDirectory } from '../src/skill'
 
 const scratch: string[] = []
 
 afterEach(async () => {
+  vi.restoreAllMocks()
   await Promise.all(scratch.splice(0).map(dir => rm(dir, { recursive: true, force: true })))
 })
 
@@ -44,5 +48,31 @@ describe('installSkill', () => {
 
   it('resolves the skill next to the built module', () => {
     expect(skillSourceDirectory('file:///pkg/dist/cli.mjs')).toBe(path.join('/pkg', 'skills', 'gscdump'))
+  })
+})
+
+describe('gscdump skill install', () => {
+  // 2026-10-01 UX replay: run from the home directory, the command printed
+  // `.claude/skills/gscdump`, so an agent could not tell where the skill was.
+  it('prints a skill path that works from any directory', async () => {
+    const home = await tmpDir()
+    vi.spyOn(os, 'homedir').mockReturnValue(home)
+    vi.spyOn(process, 'cwd').mockReturnValue(home)
+    let stderr = ''
+    const runtime = createCliRuntime({
+      configDir: path.join(home, 'config'),
+      environment: {},
+      stderr: {
+        write: (chunk: string) => {
+          stderr += chunk
+          return true
+        },
+      } as unknown as NodeJS.WriteStream,
+    })
+    runtime.logger.level = 3
+
+    await expect(runCli({ rawArgs: ['skill', 'install', '--agent', 'claude'], runtime })).resolves.toBe(0)
+
+    expect(stderr).toContain('Installed the gscdump skill for claude at ~/.claude/skills/gscdump')
   })
 })

@@ -13,7 +13,7 @@ import { analysisNeeds, analyzerSources, analyzerTables, resolveAnalysisSource }
 import { reportCommandMeta } from '../command-meta'
 import { renderCliReport } from '../render/report'
 import { terminalOutputOptions } from '../render/terminal'
-import { logger, parseFetchBudget } from '../utils'
+import { logger, parseFetchBudget, setJsonOutput } from '../utils'
 import { COMPARISON_FLAGS, parseWindowFlags, PERIOD_FLAGS, windowFlagErrorToException } from '../window'
 
 const REPORT_IDS = defaultReportRegistry.listReportIds()
@@ -113,6 +113,7 @@ function makeReportCommand(report: DefinedReport): CommandDef<any> {
       ...reportArgs,
     },
     async run({ args }) {
+      setJsonOutput(Boolean(args.json))
       const flags = windowFlags(args)
       const params = buildReportParams(report, args)
       const fetchBudget = parseFetchBudget(args['fetch-budget'])
@@ -131,7 +132,6 @@ function makeReportCommand(report: DefinedReport): CommandDef<any> {
       const { source, siteUrl, anchor, isLive } = await resolveAnalysisSource({
         site: args.site,
         live: !!args.live,
-        json: !!args.json,
         label: `report ${report.id}`,
         types: provisional.map(step => step.type),
         sources: reportSources(provisional),

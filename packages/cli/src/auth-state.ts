@@ -2,10 +2,12 @@ import { randomUUID } from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { z } from 'zod'
-import { HOSTED_KEY_REJECTED } from './error-handler'
 import { useCliRuntime } from './runtime'
+import { stopError } from './stop'
 
 export const HOSTED_SESSION_REJECTED = 'gscdump.com rejected the CLI session. Run `gscdump auth login --mode hosted` again.'
+/** A hosted 401: the gscdump.com API key failed, not a Google credential. */
+export const HOSTED_KEY_REJECTED = 'gscdump.com rejected the API key. Run `gscdump auth login --mode hosted --api-key KEY` with a valid key.'
 
 /** A command that calls Google ran in Hosted mode. */
 export const LOCAL_MODE_REQUIRED = [
@@ -13,6 +15,15 @@ export const LOCAL_MODE_REQUIRED = [
   'Hosted mode reads your gscdump.com record and never calls Google.',
   'If you want Local mode, run `gscdump auth login --mode local`.',
 ].join('\n')
+
+/** Stop a command that calls Google in Hosted mode. `detail` names a narrower cause. */
+export function localModeRequired(detail?: string): Error {
+  return stopError({
+    code: 'LOCAL_MODE_REQUIRED',
+    message: detail ? `${detail}\n${LOCAL_MODE_REQUIRED}` : LOCAL_MODE_REQUIRED,
+    nextCommand: 'gscdump auth login --mode local',
+  })
+}
 
 /** Hosted mode is selected, but no CLI session or API key exists. */
 export const HOSTED_NOT_SET_UP = 'Hosted credentials are missing. Run `gscdump auth login --mode hosted`, or set GSCDUMP_API_KEY.'
@@ -136,7 +147,7 @@ export async function resolveAuthentication(): Promise<Authentication> {
       throw new Error('The API root changed. Run `gscdump auth login --mode hosted` for the new API root.')
     return state
   }
-  throw new Error(HOSTED_NOT_SET_UP)
+  throw stopError({ code: 'HOSTED_CREDENTIALS_MISSING', message: HOSTED_NOT_SET_UP, nextCommand: 'gscdump auth login --mode hosted' })
 }
 
 const hostedSiteSchema = z.object({
@@ -164,20 +175,53 @@ export async function hostedRequest(state: HostedAuthentication, route: string, 
     redirect: 'error',
   })
   if (!response.ok) {
-    const message = response.status === 401
-      ? 'sessionId' in state ? HOSTED_SESSION_REJECTED : HOSTED_KEY_REJECTED
-      : `Hosted request failed (${response.status}) for ${route.split('?')[0]}. Check \`gscdump auth status\`.`
-    throw Object.assign(new Error(message), {
-      statusCode: response.status,
-      retryAfter: response.headers.get('retry-after'),
-      response,
-    })
+    const details = { statusCode: response.status, retryAfter: response.headers.get('retry-after'), response }
+    if (response.status === 401) {
+      const session = 'sessionId' in state
+      throw Object.assign(stopError({
+        code: 'HOSTED_CREDENTIALS_REJECTED',
+        message: session ? HOSTED_SESSION_REJECTED : HOSTED_KEY_REJECTED,
+        // A rejected API key needs a new key. Only its issuer can make one.
+        nextCommand: session ? 'gscdump auth login --mode hosted' : null,
+      }), details)
+    }
+    throw Object.assign(new Error(`Hosted request failed (${response.status}) for ${route.split('?')[0]}. Check \`gscdump auth status\`.`), details)
   }
   return response.status === 204 ? undefined : response.json()
 }
 
 export function hostedCredential(state: HostedAuthentication): string {
   return 'sessionId' in state ? state.sessionId : state.apiKey
+}
+
+/**
+ * Where the holder of a Hosted credential manages Sites. A CLI session comes
+ * from the gscdump.com browser login. An API key can come from gscdump.com or
+ * from a partner app, and `/cli/me` does not say which. So the CLI names no
+ * product for an API key: it never sends a partner's user to gscdump.com.
+ */
+export type SiteManager
+  = | { _tag: 'gscdump' }
+    | { _tag: 'key_issuer' }
+
+export function siteManagerOf(state: HostedAuthentication): SiteManager {
+  return 'sessionId' in state ? { _tag: 'gscdump' } : { _tag: 'key_issuer' }
+}
+
+/** The step that adds a Site to the hosted record, for example `Connect a Site at …`. */
+export function connectSiteStep(manager: SiteManager): string {
+  switch (manager._tag) {
+    case 'gscdump': return 'Connect a Site at https://gscdump.com/app/onboarding?step=connect-sites.'
+    case 'key_issuer': return 'Connect a Site in the app that issued this API key.'
+  }
+}
+
+/** Where a Site's settings live, for example `in the Site settings on gscdump.com`. */
+export function siteSettingsPlace(manager: SiteManager): string {
+  switch (manager._tag) {
+    case 'gscdump': return 'in the Site settings on gscdump.com'
+    case 'key_issuer': return 'in the Site settings of the app that issued this API key'
+  }
 }
 
 export async function getHostedAccount(state: HostedAuthentication): Promise<z.infer<typeof accountSchema>> {
