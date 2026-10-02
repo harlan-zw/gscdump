@@ -1848,7 +1848,7 @@ export function createGscdumpV1Protocol() {
         lifecycle: { introduced: '1.0.0' },
         docs: {
           summary: 'Get sitemap snapshot',
-          description: 'Returns registered sitemaps and their aggregate and per-sitemap history.',
+          description: 'Returns registered sitemaps and their aggregate and per-sitemap history. Each Sitemap\'s `feed` says whether it counts toward the next Generation. A Sitemap that answered 404 or 410 for 3 UTC days is `dropped`.',
           tags: ['Sitemaps'],
           examples: {
             request: { params: { siteId: 's_01' } },
@@ -3320,11 +3320,11 @@ export function createGscdumpV1Protocol() {
         lifecycle: { introduced: '1.3.0' },
         docs: {
           summary: 'Delete a partner user',
-          description: 'Queues cascade deletion of a partner-linked user and their sites.',
+          description: 'Queues removal of the calling partner\'s part of a linked user: its Sites, Usage pool, credential, and issued API keys. gscdump deletes the user only when nothing outside the partner holds them. `searchConsoleGrant` reports what happened to the Search Console grant that the partner\'s own OAuth client issued.',
           tags: ['Users'],
           examples: {
             request: { params: { userId: 'u_01' } },
-            response: { data: { ok: true, queued: true, userId: 1, publicId: 'u_01' }, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } },
+            response: { data: { ok: true, queued: true, userId: 1, publicId: 'u_01', searchConsoleGrant: { _tag: 'revoked' } }, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } },
           },
         },
       }),
