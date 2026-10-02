@@ -293,6 +293,10 @@ _Avoid_: normalized URL hashes, unversioned digests, using membership equality t
 An immutable, complete site observation containing feed base references, exact event references, previous-manifest ancestry, completeness, and history-floor evidence. The mutable site manifest points to the current immutable generation. Orphan staged data and crashed immutable manifests are intentionally invisible.
 _Avoid_: listing storage prefixes to infer published generations or events.
 
+**Inspection base manifest** (`base-manifest.json`; `resolveInspectionReadPlan`):
+The mutable pointer to one site's current immutable inspection base. Compaction writes each base under a new key and publishes the manifest last. The manifest also lists superseded bases and folded event files. Those stay readable for a grace period, so a read that resolved the previous manifest can finish. A read resolves the manifest once, then lists event files.
+_Avoid_: rewriting `base.parquet` in place, or listing `bases/` to find the current base.
+
 **Canonical Query** (`query_canonical`; `normalizeQuery` in `@gscdump/analysis`):
 The grouping key for near-duplicate search queries — unicode-folded, lowercased, singularized, bag-of-words sorted (except asymmetric `X to Y` conversions), versioned by `NORMALIZER_VERSION`. Fact-table reads derive it by joining the **Query Dimension** and falling back to raw `query`; canonical rollups may materialize the derived `query_canonical` output. See ADR-0018/0019.
 _Avoid_: slug, hash. Don't bake brand into it (brand is per-tenant + mutable).
@@ -390,6 +394,7 @@ _Avoid_: recreating an app-local direct Google client or importing the removed `
 - The **Manifest authority** is the single source of truth for which parquet files belong to a `(siteId, table, searchType)` shard
 - `sitemapd` reads documents; the hosted **Sitemap generation authority** persists and serves their exact membership
 - A **Sitemap generation manifest** is published only after all referenced feed bases and events are durable
+- An **Inspection base manifest** is published only after the base it names is durable, and compaction never rewrites a base in place
 
 ## Flagged ambiguities
 
