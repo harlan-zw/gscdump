@@ -636,7 +636,14 @@ export interface GscdumpSitemap {
   lastError: string | null
   isPending: boolean
   fetchedAt: number
+  /** Whether the Sitemap counts toward the next Generation. Absent from hosts before gscdump.com#590. */
+  feed?: GscdumpSitemapFeed
 }
+
+/** A Dropped Sitemap answered 404 or 410 for 3 UTC days; `since` is the epoch ms its run started (gscdump.com ADR-0015). */
+export type GscdumpSitemapFeed
+  = | { _tag: 'counted' }
+    | { _tag: 'dropped', status: 404 | 410, since: number }
 
 export interface GscdumpSitemapHistory {
   date: string
@@ -1031,7 +1038,16 @@ export interface DeletePartnerUserResponse {
   queued: true
   userId: number
   publicId: string
+  /** Absent from hosts older than contracts 5.3.0. */
+  searchConsoleGrant?: SearchConsoleGrantOutcome
 }
+
+/** What a partner delete did to the Search Console grant that the partner's own OAuth client issued. */
+export type SearchConsoleGrantOutcome
+  = | { _tag: 'revoked' }
+    | { _tag: 'already-invalid' }
+    | { _tag: 'not-revoked', reason: 'no-token' | 'other-client' | 'unknown-cloud-project' | 'shared-cloud-project' }
+    | { _tag: 'revoke-failed', reason: string }
 
 export type GscdumpAnalysisSourcesResponse = FileResolutionResponse
 

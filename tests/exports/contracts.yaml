@@ -73,9 +73,11 @@
   gscdumpPermissionRecoverySchema: object
   gscdumpQueryTrendParamsSchema: object
   gscdumpQueryTrendResponseSchema: object
+  gscdumpSearchConsoleGrantOutcomeSchema: object
   gscdumpSitemapChangesResponseSchema: object
   gscdumpSitemapExportQuerySchema: object
   gscdumpSitemapExportResponseSchema: object
+  gscdumpSitemapFeedSchema: object
   gscdumpSitemapGenerationSchema: object
   gscdumpSitemapMembershipEvidenceSchema: object
   gscdumpSitemapMembershipParamsSchema: object
