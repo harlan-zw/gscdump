@@ -24,6 +24,7 @@ import {
   inspectionIndexKey,
   inspectionParquetKey,
   inspectionTransitionsMonthKey,
+  resolveInspectionReadPlan,
 } from '../src/entities'
 
 function makeFakeDataSource(): {
@@ -49,6 +50,16 @@ function makeFakeDataSource(): {
     },
   }
   return { ds, store }
+}
+
+async function currentBaseRows(ds: DataSource, ctx: { userId: string, siteId: string }) {
+  const plan = await resolveInspectionReadPlan(ds, ctx)
+  return decodeParquetToRows(await ds.read(plan.base.key))
+}
+
+async function liveEventKeys(ds: DataSource, ctx: { userId: string, siteId: string }) {
+  const plan = await resolveInspectionReadPlan(ds, ctx)
+  return (await ds.list(`${inspectionEventsPrefix(ctx)}/`)).filter(key => !plan.foldedEventKeys.has(key))
 }
 
 function rec(url: string, partial: Partial<InspectionRecord> = {}): InspectionRecord {
@@ -559,7 +570,7 @@ describe('createInspectionStore: appendInspectionEvents + compactInspections', (
     const inspector = createInspectionStore({ dataSource: ds })
     const res = await inspector.compactInspections(ctx)
     expect(res).toEqual({ baseRowCount: 0, eventsFolded: 0, eventFilesDeleted: 0, transitionsWritten: 0 })
-    expect(store.has(inspectionBaseKey(ctx))).toBe(false)
+    expect(store.size).toBe(0)
   })
 
   it('backfills canonical kinds into a legacy base without waiting for reinspection', async () => {
@@ -593,7 +604,7 @@ describe('createInspectionStore: appendInspectionEvents + compactInspections', (
     const result = await inspector.backfillCanonicalMismatchKinds(ctx)
 
     expect(result).toEqual({ baseRowCount: 2, rowsBackfilled: 2, rewritten: true })
-    const rows = await decodeParquetToRows(store.get(baseKey)!)
+    const rows = await currentBaseRows(ds, ctx)
     const kinds = Object.fromEntries(rows.map(row => [row.url, row.canonicalMismatchKind]))
     expect(kinds).toEqual({
       'https://e.com/formatting': 'formatting',
@@ -601,8 +612,8 @@ describe('createInspectionStore: appendInspectionEvents + compactInspections', (
     })
   })
 
-  it('folds events into base (newest-wins by inspectedAt) and deletes consumed events', async () => {
-    const { ds, store } = makeFakeDataSource()
+  it('folds events into a new base (newest-wins by inspectedAt) and hides consumed events from new reads', async () => {
+    const { ds } = makeFakeDataSource()
     const inspector = createInspectionStore({ dataSource: ds })
     // Two observations of /a (older PASS, newer FAIL) + one of /b.
     await inspector.appendInspectionEvents(ctx, [
@@ -616,12 +627,11 @@ describe('createInspectionStore: appendInspectionEvents + compactInspections', (
     const res = await inspector.compactInspections(ctx)
     expect(res.baseRowCount).toBe(2)
     expect(res.eventsFolded).toBe(3)
-    expect(res.eventFilesDeleted).toBe(2)
-    // Events gone, base present.
-    expect(Array.from(store.keys()).filter(k => k.includes('/events/'))).toHaveLength(0)
-    expect(store.has(inspectionBaseKey(ctx))).toBe(true)
+    // Consumed events stay for reads that resolved the old manifest.
+    expect(res.eventFilesDeleted).toBe(0)
+    expect(await liveEventKeys(ds, ctx)).toEqual([])
 
-    const rows = await decodeParquetToRows(store.get(inspectionBaseKey(ctx))!)
+    const rows = await currentBaseRows(ds, ctx)
     const byUrl = new Map(rows.map(r => [r.url, r]))
     expect(byUrl.get('https://e.com/a')!.indexStatus).toBe('FAIL') // newest wins
     expect(byUrl.get('https://e.com/b')!.indexStatus).toBe('PASS')
@@ -631,7 +641,7 @@ describe('createInspectionStore: appendInspectionEvents + compactInspections', (
   })
 
   it('preserves the earliest firstCheckedAt across the fold', async () => {
-    const { ds, store } = makeFakeDataSource()
+    const { ds } = makeFakeDataSource()
     const inspector = createInspectionStore({ dataSource: ds })
     await inspector.appendInspectionEvents(ctx, [
       event({ url: 'https://e.com/a', inspectedAt: '2026-04-01T00:00:00Z', firstCheckedAt: '2026-01-15T00:00:00Z' }),
@@ -642,12 +652,12 @@ describe('createInspectionStore: appendInspectionEvents + compactInspections', (
     ], { batchId: 'b2' })
 
     await inspector.compactInspections(ctx)
-    const rows = await decodeParquetToRows(store.get(inspectionBaseKey(ctx))!)
+    const rows = await currentBaseRows(ds, ctx)
     expect(rows[0].firstCheckedAt).toBe('2026-01-15T00:00:00Z')
   })
 
   it('merges fresh events into an existing base + is idempotent on re-run', async () => {
-    const { ds, store } = makeFakeDataSource()
+    const { ds } = makeFakeDataSource()
     const inspector = createInspectionStore({ dataSource: ds })
     await inspector.appendInspectionEvents(ctx, [event({ url: 'https://e.com/a', inspectedAt: '2026-04-01T00:00:00Z', indexStatus: 'PASS' })], { batchId: 'b1' })
     await inspector.compactInspections(ctx)
@@ -660,16 +670,16 @@ describe('createInspectionStore: appendInspectionEvents + compactInspections', (
     const res = await inspector.compactInspections(ctx)
     expect(res.baseRowCount).toBe(2)
 
-    const rows = await decodeParquetToRows(store.get(inspectionBaseKey(ctx))!)
+    const rows = await currentBaseRows(ds, ctx)
     const byUrl = new Map(rows.map(r => [r.url, r.indexStatus]))
     expect(byUrl.get('https://e.com/a')).toBe('FAIL')
     expect(byUrl.get('https://e.com/c')).toBe('PASS')
 
-    // Re-running with no new events leaves the base unchanged.
-    const before = store.get(inspectionBaseKey(ctx))!
+    // Re-running with no new events publishes nothing.
+    const before = await resolveInspectionReadPlan(ds, ctx)
     const res2 = await inspector.compactInspections(ctx)
     expect(res2).toEqual({ baseRowCount: 0, eventsFolded: 0, eventFilesDeleted: 0, transitionsWritten: 0 })
-    expect(store.get(inspectionBaseKey(ctx))).toBe(before)
+    expect((await resolveInspectionReadPlan(ds, ctx)).base).toEqual(before.base)
   })
 
   it('propagates a real read failure on the existing base (never rebuilds from events alone)', async () => {
@@ -679,16 +689,17 @@ describe('createInspectionStore: appendInspectionEvents + compactInspections', (
     await inspector.compactInspections(ctx)
     await inspector.appendInspectionEvents(ctx, [event({ url: 'https://e.com/b', inspectedAt: '2026-05-01T00:00:00Z' })], { batchId: 'b2' })
 
-    const baseKey = inspectionBaseKey(ctx)
+    const before = await resolveInspectionReadPlan(ds, ctx)
     const failing = createInspectionStore({ dataSource: { ...ds, async read(k) {
-      if (k === baseKey)
+      if (k === before.base.key)
         throw new Error('R2 GET 503: transient backend failure')
       return ds.read(k)
     } } })
     await expect(failing.compactInspections(ctx)).rejects.toThrow(/503/)
-    // Base left intact; events not deleted.
-    expect(store.has(baseKey)).toBe(true)
-    expect(Array.from(store.keys()).some(k => k.includes('/events/2026-05/'))).toBe(true)
+    // The manifest still names the same base, and the new event is still live.
+    expect((await resolveInspectionReadPlan(ds, ctx)).base).toEqual(before.base)
+    expect(store.has(before.base.key)).toBe(true)
+    expect((await liveEventKeys(ds, ctx)).some(k => k.includes('/events/2026-05/'))).toBe(true)
   })
 })
 
@@ -869,9 +880,9 @@ describe('createInspectionStore: transition capture', () => {
     } })
     await expect(failing.compactInspections(ctx, { transitions: true })).rejects.toThrow(/transition failure/)
 
-    const rowsAfterFailure = await decodeParquetToRows(store.get(inspectionBaseKey(ctx))!)
+    const rowsAfterFailure = await currentBaseRows(ds, ctx)
     expect(rowsAfterFailure[0]?.indexStatus).toBe('PASS')
-    expect(Array.from(store.keys()).some(k => k.includes('/events/2026-04/b2.parquet'))).toBe(true)
+    expect((await liveEventKeys(ds, ctx)).some(k => k.includes('/events/2026-04/b2.parquet'))).toBe(true)
 
     const retry = await inspector.compactInspections(ctx, { transitions: true })
     expect(retry.transitionsWritten).toBe(1)
@@ -889,7 +900,7 @@ describe('createInspectionStore: transition capture', () => {
     await inspector.appendInspectionEvents(ctx, [ev('https://e.com/b', '2026-04-21T00:00:00Z', { indexStatus: 'PASS' })], { batchId: 'b3' })
     await inspector.compactInspections(ctx, { transitions: true })
     // The whole point: events are disposable, transitions are not.
-    expect(Array.from(store.keys()).filter(k => k.includes('/events/'))).toHaveLength(0)
+    expect(await liveEventKeys(ds, ctx)).toHaveLength(0)
     expect(await transitionsFor(store, '2026-04')).toHaveLength(1)
   })
 })

@@ -57,7 +57,7 @@ export function isMissingKeyError(e: unknown): boolean {
  * delete race between the two operations.
  */
 export async function readOptional(
-  ds: DataSource,
+  ds: Pick<DataSource, 'read'>,
   key: string,
   signal?: AbortSignal,
 ): Promise<Uint8Array | undefined> {

@@ -17,6 +17,8 @@ import { decodeParquetToRows, encodeRowsToParquetFlex } from '../adapters/hyparq
 import { readOptional } from '../adapters/read-optional'
 import {
   inspectionBaseKey,
+  inspectionBaseManifestKey,
+  inspectionBasesPrefix,
   inspectionEventKey,
   inspectionEventsPrefix,
   inspectionHistoryPrefix,
@@ -89,12 +91,12 @@ const YEAR_MONTH_RE = /^(\d{4})-(\d{2})-/
 // --- Append-only inspection-event store (the source-of-truth replacing the
 // D1-fed `materialize` sidecar). Writes are immutable per-batch parquet under
 // `events/<YYYY-MM>/<batchId>.parquet` carrying the FULL fidelity column set;
-// `compactInspections` folds them into a `base.parquet` (latest-per-url,
-// newest-wins by `inspectedAt`). Reads merge base + uncompacted events and
-// dedup newest-wins at query time — mirrors the sitemap-urls delta/compaction
-// shape, just keyed by `urlHash` instead of feedpath. ---
-
-const INSPECTION_EVENT_KEY_RE = /\/inspections\/events\/\d{4}-\d{2}\/[^/]+\.parquet$/
+// `compactInspections` folds them into a new immutable base under `bases/`
+// (latest-per-url, newest-wins by `inspectedAt`) and then publishes it through
+// `base-manifest.json`. Reads resolve that manifest once, then merge its base +
+// uncompacted events and dedup newest-wins at query time. No object a read can
+// resolve is ever rewritten in place: a range read that overlapped an in-place
+// rewrite decoded the old footer against the new bytes (gscdump.com #334). ---
 
 /**
  * Directory prefix for a month's history shards. Each shard is a UUID-keyed
@@ -236,16 +238,25 @@ export interface InspectionStore {
     opts?: { batchId?: string },
   ) => Promise<{ keys: string[], rowCount: number }>
   /**
-   * Fold every outstanding event file into the `base.parquet`: latest-per-url
-   * by max `inspectedAt` (newest-wins), preserving the earliest non-null
-   * `firstCheckedAt` per url. Writes the new base then deletes the consumed
-   * event files — file-level only, never row-level (ADR-0002). Idempotent +
-   * re-runnable: a crash after the base write but before the delete just
-   * re-folds the same events (newest-wins makes that a no-op). A real read
-   * failure on the existing base propagates rather than rebuilding from events
-   * alone (which would drop URLs only the base held).
+   * Fold every outstanding event file into a new base: latest-per-url by max
+   * `inspectedAt` (newest-wins), preserving the earliest non-null
+   * `firstCheckedAt` per url. The first fold reads the legacy in-place
+   * `base.parquet`; later folds read the base the manifest names.
    *
-   * No-op (no base rewrite) when there are zero outstanding events.
+   * Writes the new base under a new immutable key, then publishes the inspection
+   * base manifest that names it. The superseded base and the folded event files
+   * are retired, not deleted: reads that resolved the previous manifest keep
+   * scanning them. A later compaction deletes each retired object once the
+   * grace has passed. It also deletes a base that an interrupted compaction
+   * wrote but never published. File-level only, never row-level (ADR-0002).
+   *
+   * Callers serialize compaction per site. Re-runnable: a crash before the
+   * manifest write leaves the previous manifest current, and the retry
+   * re-folds the same events. A real read failure on the current base
+   * propagates rather than rebuilding from events alone.
+   *
+   * `eventFilesDeleted` counts event files this run deleted, which an earlier
+   * run folded. No-op when no event file exists.
    */
   compactInspections: (
     ctx: TenantCtx,
@@ -258,8 +269,9 @@ export interface InspectionStore {
     },
   ) => Promise<{ baseRowCount: number, eventsFolded: number, eventFilesDeleted: number, transitionsWritten: number }>
   /**
-   * Rewrite a legacy latest-only base with the canonical kind derived from the
-   * canonical pair it already retains. Outstanding events must be compacted first.
+   * Publish a copy of the current base with the canonical kind derived from the
+   * canonical pair it already retains. Outstanding events must be compacted
+   * first. Like compaction, it writes a new immutable base and retires the old one.
    */
   backfillCanonicalMismatchKinds: (
     ctx: TenantCtx,
@@ -279,6 +291,162 @@ export interface InspectionStore {
 
 export interface CreateInspectionStoreOptions {
   dataSource: DataSource
+  /** Clock for retirement times and the grace check. Defaults to `Date.now`. */
+  now?: () => number
+  /** How long a retired object stays readable. Defaults to {@link INSPECTION_RETIRED_GRACE_MS}. */
+  graceMs?: number
+}
+
+/**
+ * How long compaction keeps a superseded base or a folded event file after it
+ * retires it. Every read must finish within this window after it resolves its
+ * {@link InspectionReadPlan}.
+ *
+ * The longest hosted reader is a queue job that holds one plan across several
+ * DuckDB queries. The Workers queue wall clock caps that job at 15 minutes, so
+ * one hour leaves a wide margin.
+ */
+export const INSPECTION_RETIRED_GRACE_MS = 60 * 60 * 1000
+
+/**
+ * The base one read scans.
+ *
+ * - `legacy`: no manifest exists yet. The key is the in-place base an older
+ *   engine wrote, which may be absent. It stays readable until the first
+ *   compaction under the manifest retires it.
+ * - `published`: an immutable base the manifest names. It never changes, and it
+ *   exists for at least the grace after a later manifest supersedes it.
+ */
+export type InspectionBaseRef
+  = | { _tag: 'legacy', key: string }
+    | { _tag: 'published', key: string }
+
+/**
+ * What one read scans. Resolve it once per read, then list event files, then
+ * scan. Skip each listed event key in `foldedEventKeys`: the base already holds
+ * its rows, and the file remains only for reads that resolved an older plan.
+ */
+export interface InspectionReadPlan {
+  base: InspectionBaseRef
+  foldedEventKeys: ReadonlySet<string>
+}
+
+interface RetiredObject {
+  key: string
+  retiredAt: number
+}
+
+/** Wire shape of the inspection base manifest. */
+interface InspectionBaseManifest {
+  version: 1
+  /** Immutable base that every new read resolves to. */
+  baseKey: string
+  /** Superseded bases and folded event files, kept until `retiredAt` plus the grace. */
+  retired: RetiredObject[]
+}
+
+type InspectionBaseState
+  = | { _tag: 'legacy', key: string }
+    | { _tag: 'published', manifest: InspectionBaseManifest }
+
+const EVENT_FILE_RE = /^\d{4}-\d{2}\/[^/]+\.parquet$/
+const IMMUTABLE_BASE_FILE_RE = /^(\d{13,})__[\w-]+\.parquet$/
+
+function isInspectionEventKey(ctx: TenantCtx, key: string): boolean {
+  const prefix = `${inspectionEventsPrefix(ctx)}/`
+  return key.startsWith(prefix) && EVENT_FILE_RE.test(key.slice(prefix.length))
+}
+
+function immutableBaseKey(ctx: TenantCtx, writtenAt: number, id: string): string {
+  return `${inspectionBasesPrefix(ctx)}/${String(writtenAt).padStart(13, '0')}__${id}.parquet`
+}
+
+/** Write time encoded in an immutable base key, or `undefined` for any other key. */
+function immutableBaseWrittenAt(ctx: TenantCtx, key: string): number | undefined {
+  const prefix = `${inspectionBasesPrefix(ctx)}/`
+  if (!key.startsWith(prefix))
+    return undefined
+  const match = IMMUTABLE_BASE_FILE_RE.exec(key.slice(prefix.length))
+  return match ? Number(match[1]) : undefined
+}
+
+function invalidManifest(key: string, reason: string): never {
+  throw new Error(`invalid inspection base manifest ${key}: ${reason}`)
+}
+
+/**
+ * Parse the manifest at the storage boundary. Compaction deletes the keys it
+ * retires, so a manifest that names anything but this tenant's own inspection
+ * files is corruption and must stop every reader and writer.
+ */
+function parseBaseManifest(ctx: TenantCtx, key: string, bytes: Uint8Array): InspectionBaseManifest {
+  let input: unknown
+  try {
+    input = JSON.parse(new TextDecoder().decode(bytes))
+  }
+  catch {
+    return invalidManifest(key, 'not JSON')
+  }
+  if (!input || typeof input !== 'object' || Array.isArray(input))
+    return invalidManifest(key, 'not an object')
+  const manifest = input as Record<string, unknown>
+  if (manifest.version !== 1)
+    return invalidManifest(key, `unknown version ${String(manifest.version)}`)
+  const baseKey = manifest.baseKey
+  if (typeof baseKey !== 'string' || immutableBaseWrittenAt(ctx, baseKey) === undefined)
+    return invalidManifest(key, 'base key is not an immutable base of this tenant')
+  if (!Array.isArray(manifest.retired))
+    return invalidManifest(key, 'retired is not an array')
+  const retired = manifest.retired.map((entry: unknown): RetiredObject => {
+    if (!entry || typeof entry !== 'object')
+      return invalidManifest(key, 'retired entry is not an object')
+    const { key: retiredKey, retiredAt } = entry as Record<string, unknown>
+    if (
+      typeof retiredKey !== 'string'
+      || retiredKey === baseKey
+      || !(
+        retiredKey === inspectionBaseKey(ctx)
+        || immutableBaseWrittenAt(ctx, retiredKey) !== undefined
+        || isInspectionEventKey(ctx, retiredKey)
+      )
+    ) {
+      return invalidManifest(key, `retired key ${String(retiredKey)} is not a superseded inspection file`)
+    }
+    if (typeof retiredAt !== 'number' || !Number.isSafeInteger(retiredAt) || retiredAt < 0)
+      return invalidManifest(key, `retired time for ${retiredKey} is invalid`)
+    return { key: retiredKey, retiredAt }
+  })
+  return { version: 1, baseKey, retired }
+}
+
+async function readBaseState(source: Pick<DataSource, 'read'>, ctx: TenantCtx): Promise<InspectionBaseState> {
+  const key = inspectionBaseManifestKey(ctx)
+  // Whole-object GET: R2 returns one complete version, so the manifest itself
+  // cannot tear. Never read it by range.
+  const bytes = await readOptional(source, key)
+  return bytes
+    ? { _tag: 'published', manifest: parseBaseManifest(ctx, key, bytes) }
+    : { _tag: 'legacy', key: inspectionBaseKey(ctx) }
+}
+
+/**
+ * Resolve the base a read scans and the event files it must skip. Reads one
+ * small manifest object; never the base itself. Throws when the manifest is
+ * corrupt, because no base choice is safe then.
+ */
+export async function resolveInspectionReadPlan(
+  source: Pick<DataSource, 'read'>,
+  ctx: TenantCtx,
+): Promise<InspectionReadPlan> {
+  const state = await readBaseState(source, ctx)
+  if (state._tag === 'legacy')
+    return { base: { _tag: 'legacy', key: state.key }, foldedEventKeys: new Set() }
+  return {
+    base: { _tag: 'published', key: state.manifest.baseKey },
+    foldedEventKeys: new Set(state.manifest.retired
+      .map(entry => entry.key)
+      .filter(key => isInspectionEventKey(ctx, key))),
+  }
 }
 
 /**
@@ -458,8 +626,58 @@ function transitionMonth(row: Row): string {
   return String(row.changedBefore ?? '').slice(0, 7) || 'unknown'
 }
 
+const EMPTY_COMPACTION = { baseRowCount: 0, eventsFolded: 0, eventFilesDeleted: 0, transitionsWritten: 0 }
+
 export function createInspectionStore(opts: CreateInspectionStoreOptions): InspectionStore {
   const ds = opts.dataSource
+  const now = (): number => Math.floor((opts.now ?? Date.now)())
+  const graceMs = opts.graceMs ?? INSPECTION_RETIRED_GRACE_MS
+
+  /** Write `bytes` under a key no earlier base used. Invisible until a manifest names it. */
+  async function writeImmutableBase(ctx: TenantCtx, bytes: Uint8Array): Promise<string> {
+    const key = immutableBaseKey(ctx, now(), randomBatchId())
+    await ds.write(key, bytes)
+    return key
+  }
+
+  /** The single publication point. Everything the manifest names is already durable. */
+  async function publishManifest(ctx: TenantCtx, manifest: InspectionBaseManifest): Promise<void> {
+    await ds.write(inspectionBaseManifestKey(ctx), encodeJsonBigintSafe(manifest))
+  }
+
+  /**
+   * Delete retired objects whose grace has passed, plus immutable bases that no
+   * manifest ever published (an interrupted compaction) once their write time
+   * is a grace old. Never touches a key in `live`.
+   */
+  async function sweepRetired(
+    ctx: TenantCtx,
+    retired: readonly RetiredObject[],
+    live: ReadonlySet<string>,
+    at: number,
+  ): Promise<Set<string>> {
+    const retiredKeys = new Set(retired.map(entry => entry.key))
+    const expired = retired
+      .filter(entry => entry.retiredAt + graceMs <= at)
+      .map(entry => entry.key)
+    const unpublished = (await ds.list(`${inspectionBasesPrefix(ctx)}/`)).filter((key) => {
+      const writtenAt = immutableBaseWrittenAt(ctx, key)
+      return writtenAt !== undefined && !retiredKeys.has(key) && writtenAt + graceMs <= at
+    })
+    const doomed = [...expired, ...unpublished].filter(key => !live.has(key))
+    if (doomed.length > 0)
+      await ds.delete(doomed)
+    return new Set(doomed)
+  }
+
+  function countEventKeys(ctx: TenantCtx, keys: Iterable<string>): number {
+    let count = 0
+    for (const key of keys) {
+      if (isInspectionEventKey(ctx, key))
+        count++
+    }
+    return count
+  }
 
   function shardFor(record: InspectionRecord): string {
     // YYYY-MM derived from inspectedAt. Falls back to "unknown" if the
@@ -582,18 +800,40 @@ export function createInspectionStore(opts: CreateInspectionStoreOptions): Inspe
     },
 
     async compactInspections(ctx, opts) {
-      const eventKeys = (await ds.list(`${inspectionEventsPrefix(ctx)}/`))
-        .filter(k => INSPECTION_EVENT_KEY_RE.test(k))
-      // Nothing outstanding → leave the base untouched (no needless rewrite).
-      if (eventKeys.length === 0)
-        return { baseRowCount: 0, eventsFolded: 0, eventFilesDeleted: 0, transitionsWritten: 0 }
+      const listed = (await ds.list(`${inspectionEventsPrefix(ctx)}/`))
+        .filter(key => isInspectionEventKey(ctx, key))
+      // No event files at all: nothing to fold and nothing retired to sweep.
+      if (listed.length === 0)
+        return EMPTY_COMPACTION
 
-      const baseKey = inspectionBaseKey(ctx)
+      const startedAt = now()
+      const state = await readBaseState(ds, ctx)
+      const retired = state._tag === 'published' ? state.manifest.retired : []
+      const retiredKeys = new Set(retired.map(entry => entry.key))
+      const eventKeys = listed.filter(key => !retiredKeys.has(key))
+      const baseKey = state._tag === 'published' ? state.manifest.baseKey : state.key
+
+      if (eventKeys.length === 0) {
+        // Only folded files remain. Delete those past the grace and drop them
+        // from the manifest; the base itself does not change.
+        const deleted = await sweepRetired(ctx, retired, new Set([baseKey]), startedAt)
+        if (state._tag === 'published' && retired.some(entry => deleted.has(entry.key))) {
+          await publishManifest(ctx, {
+            version: 1,
+            baseKey,
+            retired: retired.filter(entry => !deleted.has(entry.key)),
+          })
+        }
+        return { ...EMPTY_COMPACTION, eventFilesDeleted: countEventKeys(ctx, deleted) }
+      }
+
       // Highest-risk swallow: a real read failure on an existing base must NOT
       // read as absent — that would rebuild the base from events alone and drop
       // every URL only the base held. readOptional keeps a genuinely-absent base
       // as `undefined` (first compaction) but propagates a real failure.
       const baseBytes = await readOptional(ds, baseKey)
+      if (!baseBytes && state._tag === 'published')
+        throw new Error(`published inspection base missing: ${baseKey}`)
       const baseRows = baseBytes ? await decodeParquetToRows(baseBytes) : []
 
       // Newest-wins per urlHash by inspectedAt (ISO strings sort chronologically),
@@ -671,18 +911,41 @@ export function createInspectionStore(opts: CreateInspectionStoreOptions): Inspe
         ? await appendTransitions(ds, ctx, transitions)
         : 0
 
-      await ds.write(baseKey, bytes)
-
-      if (consumed.length > 0)
-        await ds.delete(consumed)
-      return { baseRowCount: merged.length, eventsFolded, eventFilesDeleted: consumed.length, transitionsWritten }
+      // Never overwrite a base a reader may be scanning. The new base gets its
+      // own key and stays invisible until the manifest below names it.
+      const nextBaseKey = await writeImmutableBase(ctx, bytes)
+      // Sweep before publishing, so the manifest never drops an entry whose
+      // object a failed delete left behind.
+      const deleted = await sweepRetired(ctx, retired, new Set([baseKey, nextBaseKey]), startedAt)
+      // Readers that resolved the previous manifest keep reading its base and
+      // these event files, so both stay for the grace.
+      const retiredAt = now()
+      await publishManifest(ctx, {
+        version: 1,
+        baseKey: nextBaseKey,
+        retired: [
+          ...retired.filter(entry => !deleted.has(entry.key)),
+          ...(baseBytes ? [{ key: baseKey, retiredAt }] : []),
+          ...consumed.map(key => ({ key, retiredAt })),
+        ],
+      })
+      return {
+        baseRowCount: merged.length,
+        eventsFolded,
+        eventFilesDeleted: countEventKeys(ctx, deleted),
+        transitionsWritten,
+      }
     },
 
     async backfillCanonicalMismatchKinds(ctx) {
-      const baseKey = inspectionBaseKey(ctx)
+      const state = await readBaseState(ds, ctx)
+      const baseKey = state._tag === 'published' ? state.manifest.baseKey : state.key
       const baseBytes = await readOptional(ds, baseKey)
-      if (!baseBytes)
+      if (!baseBytes) {
+        if (state._tag === 'published')
+          throw new Error(`published inspection base missing: ${baseKey}`)
         return { baseRowCount: 0, rowsBackfilled: 0, rewritten: false }
+      }
 
       const rows = await decodeParquetToRows(baseBytes)
       let rowsBackfilled = 0
@@ -693,10 +956,18 @@ export function createInspectionStore(opts: CreateInspectionStoreOptions): Inspe
       if (rowsBackfilled === 0)
         return { baseRowCount: rows.length, rowsBackfilled: 0, rewritten: false }
 
-      await ds.write(baseKey, encodeRowsToParquetFlex(rows, {
+      const nextBaseKey = await writeImmutableBase(ctx, encodeRowsToParquetFlex(rows, {
         columns: INSPECTION_EVENT_COLUMNS,
         sortKey: ['urlHash'],
       }))
+      await publishManifest(ctx, {
+        version: 1,
+        baseKey: nextBaseKey,
+        retired: [
+          ...(state._tag === 'published' ? state.manifest.retired : []),
+          { key: baseKey, retiredAt: now() },
+        ],
+      })
       return { baseRowCount: rows.length, rowsBackfilled, rewritten: true }
     },
 
