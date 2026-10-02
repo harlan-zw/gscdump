@@ -374,8 +374,9 @@ _Avoid_: Bing connection for the grant; `BingConnectionV1` names one Site's bind
 One Google OAuth grant that carries `auth/indexing`, stored per partner and user (`IndexingApiGrantV1`: `missing`, `granted`, `reauthorization-required`). The partner's dedicated Cloud project issues it, and it never shares a row with the Search Console connection. `partner.users.indexing.google.grant.update` hands it over. Ratified by gscdump.com ADR-0016.
 _Avoid_: indexing connection, indexing account, indexing token, or Google grant alone.
 
-**Search Console grant** (proposed, awaiting confirmation):
+**Search Console grant**:
 The Google OAuth grant that gives gscdump Search Console access for one user. gscdump stores one Google connection per user, and the OAuth client of one partner may have issued its tokens (gscdump.com ADR-0009). `partner.users.delete` reports what it did to the deleting partner's grant as `searchConsoleGrant`: `revoked`, `already-invalid`, `not-revoked` with a reason, or `revoke-failed` with a reason.
+Harlan approved the term by merging [#175](https://github.com/harlan-zw/gscdump/pull/175).
 _Avoid_: Google grant alone, because the Indexing API grant is also a Google grant.
 
 **Google Submission refusal**:
