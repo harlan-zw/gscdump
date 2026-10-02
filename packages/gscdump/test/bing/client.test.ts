@@ -120,8 +120,24 @@ describe('bingWebmaster', () => {
 
     expect(result).toEqual({ ok: false, error: {
       _tag: 'Throttled',
+      errorCode: 4,
       retryAfterMs: 7000,
     } })
+  })
+
+  it.each([
+    ['without Retry-After', undefined],
+    ['with Retry-After', { 'retry-after': '7' }],
+  ])('maps an IP refusal to Throttled with no retry delay, %s', async (_, headers) => {
+    const client = bingWebmaster({
+      accessToken: 'access-token',
+      clock,
+      fetch: queuedFetch(json({ ErrorCode: 17, Message: 'ERROR!!! ThrottleIP' }, 400, headers)),
+    })
+
+    const result = await client.getUserSites()
+
+    expect(result).toEqual({ ok: false, error: { _tag: 'Throttled', errorCode: 17 } })
   })
 
   it('maps HTTP 503 to provider unavailability', async () => {
@@ -855,7 +871,7 @@ describe('bingWebmaster', () => {
     ],
     [
       json({ ErrorCode: 4, Message: 'slow down' }, 429, { 'retry-after': '7' }),
-      { _tag: 'Throttled', retryAfterMs: 7000 },
+      { _tag: 'Throttled', errorCode: 4, retryAfterMs: 7000 },
     ],
   ])('maps a failed feed submission to a provider error', async (response, error) => {
     const client = bingWebmaster({

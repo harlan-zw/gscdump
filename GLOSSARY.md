@@ -285,6 +285,10 @@ _Avoid_: `urlMatchKey`; it is an analytics grouping key and must never identify 
 Parser-free helpers for canonical same-site feed identity, duplicate evidence selection, and exact membership digests. This is a product policy seam distinct from `sitemapd` document authorization.
 _Avoid_: moving XML parsing back into `gscdump` or using analytics URL normalization for identity.
 
+**Dropped Sitemap**:
+A Sitemap that answered HTTP 404 or 410 on every Sync for 3 consecutive UTC days. It no longer blocks its Site's next Generation. Sync still fetches it, and one good fetch counts it again. The partner sitemap read marks it with `feed: { _tag: 'dropped', status, since }` (`gscdumpSitemapFeedSchema`). Ratified by gscdump.com ADR-0015.
+_Avoid_: removed, retired, excluded, skipped, or dead for this state.
+
 **Sitemap membership hash** / **payload hash**:
 Versioned exact hashes over a feed's effective records. Membership hashes include exact `loc` values. Payload hashes also include `lastmod`, so lastmod-only changes remain observable.
 _Avoid_: normalized URL hashes, unversioned digests, using membership equality to infer payload equality.
@@ -369,6 +373,10 @@ _Avoid_: Bing connection for the grant; `BingConnectionV1` names one Site's bind
 **Indexing API grant**:
 One Google OAuth grant that carries `auth/indexing`, stored per partner and user (`IndexingApiGrantV1`: `missing`, `granted`, `reauthorization-required`). The partner's dedicated Cloud project issues it, and it never shares a row with the Search Console connection. `partner.users.indexing.google.grant.update` hands it over. Ratified by gscdump.com ADR-0016.
 _Avoid_: indexing connection, indexing account, indexing token, or Google grant alone.
+
+**Search Console grant** (proposed, awaiting confirmation):
+The Google OAuth grant that gives gscdump Search Console access for one user. gscdump stores one Google connection per user, and the OAuth client of one partner may have issued its tokens (gscdump.com ADR-0009). `partner.users.delete` reports what it did to the deleting partner's grant as `searchConsoleGrant`: `revoked`, `already-invalid`, `not-revoked` with a reason, or `revoke-failed` with a reason.
+_Avoid_: Google grant alone, because the Indexing API grant is also a Google grant.
 
 **Google Submission refusal**:
 The `details` of a v1 error envelope when gscdump refuses a Google Submission before it sends anything. `details.reason` is one of `GOOGLE_SUBMISSION_REFUSAL_REASONS`. Read it with `parseGoogleSubmissionRefusal`.

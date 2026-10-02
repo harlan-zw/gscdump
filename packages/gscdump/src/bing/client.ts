@@ -31,6 +31,13 @@ import {
 export const DEFAULT_BING_WEBMASTER_API_URL = 'https://www.bing.com/webmaster/api.svc/json'
 const DEFAULT_BING_API_KEY_URL = 'https://ssl.bing.com/webmaster/api.svc/json'
 export const DEFAULT_BING_CHILD_PAGE_LIMIT = 100
+/**
+ * Bing's `ErrorCode` 17, `ThrottleIP`. Bing refuses every call from the caller's
+ * IP and answers with HTTP 400. Waiting does not lift the block, so a
+ * `Throttled` error with this code has no retry delay.
+ */
+export const BING_THROTTLE_IP_ERROR_CODE = 17
+const BING_THROTTLE_ERROR_CODES: ReadonlySet<number> = new Set([4, 5, BING_THROTTLE_IP_ERROR_CODE])
 const BING_MAX_CHILD_PAGE_COUNT = 65_536
 
 interface BingApiErrorPayload {
@@ -81,10 +88,11 @@ function mapResponseError(response: Response, payload: unknown, now: Date): Bing
     return { _tag: 'UserBlocked' }
   if (response.status === 403 || apiError.ErrorCode === 14)
     return { _tag: 'PermissionDenied' }
-  if (response.status === 429 || apiError.ErrorCode === 4 || apiError.ErrorCode === 5) {
-    const delay = retryAfterMs(response, now)
+  if (response.status === 429 || (apiError.ErrorCode !== undefined && BING_THROTTLE_ERROR_CODES.has(apiError.ErrorCode))) {
+    const delay = apiError.ErrorCode === BING_THROTTLE_IP_ERROR_CODE ? undefined : retryAfterMs(response, now)
     return {
       _tag: 'Throttled',
+      ...(apiError.ErrorCode === undefined ? {} : { errorCode: apiError.ErrorCode }),
       ...(delay === undefined ? {} : { retryAfterMs: delay }),
     }
   }

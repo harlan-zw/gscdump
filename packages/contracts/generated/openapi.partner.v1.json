@@ -21599,7 +21599,7 @@
     },
     "/api/partner/v1/sites/{siteId}/sitemaps": {
       "get": {
-        "description": "Returns registered sitemaps and their aggregate and per-sitemap history.",
+        "description": "Returns registered sitemaps and their aggregate and per-sitemap history. Each Sitemap's `feed` says whether it counts toward the next Generation. A Sitemap that answered 404 or 410 for 3 UTC days is `dropped`.",
         "operationId": "partner.sites.sitemaps.get",
         "parameters": [
           {
@@ -21857,6 +21857,55 @@
                               },
                               "errors": {
                                 "type": "number"
+                              },
+                              "feed": {
+                                "oneOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "_tag": {
+                                        "const": "counted",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "_tag"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "_tag": {
+                                        "const": "dropped",
+                                        "type": "string"
+                                      },
+                                      "since": {
+                                        "maximum": 9007199254740991,
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "status": {
+                                        "anyOf": [
+                                          {
+                                            "const": 404,
+                                            "type": "number"
+                                          },
+                                          {
+                                            "const": 410,
+                                            "type": "number"
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "_tag",
+                                      "status",
+                                      "since"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
                               },
                               "fetchedAt": {
                                 "type": [
@@ -27627,7 +27676,7 @@
     },
     "/api/partner/v1/users/{userId}": {
       "delete": {
-        "description": "Queues cascade deletion of a partner-linked user and their sites.",
+        "description": "Queues removal of the calling partner's part of a linked user: its Sites, Usage pool, credential, and issued API keys. gscdump deletes the user only when nothing outside the partner holds them. `searchConsoleGrant` reports what happened to the Search Console grant that the partner's own OAuth client issued.",
         "operationId": "partner.users.delete",
         "parameters": [
           {
@@ -27669,6 +27718,77 @@
                         "queued": {
                           "const": true,
                           "type": "boolean"
+                        },
+                        "searchConsoleGrant": {
+                          "oneOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "_tag": {
+                                  "const": "revoked",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "_tag"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "_tag": {
+                                  "const": "already-invalid",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "_tag"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "_tag": {
+                                  "const": "not-revoked",
+                                  "type": "string"
+                                },
+                                "reason": {
+                                  "enum": [
+                                    "no-token",
+                                    "other-client",
+                                    "unknown-cloud-project",
+                                    "shared-cloud-project"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "_tag",
+                                "reason"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "_tag": {
+                                  "const": "revoke-failed",
+                                  "type": "string"
+                                },
+                                "reason": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "_tag",
+                                "reason"
+                              ],
+                              "type": "object"
+                            }
+                          ]
                         },
                         "userId": {
                           "type": "number"
@@ -27776,6 +27896,9 @@
               "ok": true,
               "publicId": "u_01",
               "queued": true,
+              "searchConsoleGrant": {
+                "_tag": "revoked"
+              },
               "userId": 1
             },
             "meta": {

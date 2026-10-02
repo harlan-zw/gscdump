@@ -802,6 +802,20 @@ export const gscdumpSitemapGenerationSchema = z.object({
   ]),
 }).strict()
 
+// Whether a Sitemap counts toward its Site's next Generation (gscdump.com
+// ADR-0015). A Dropped Sitemap answered HTTP 404 or 410 on every Sync for 3
+// consecutive UTC days, so the Site's other Sitemaps publish without it. `since`
+// is the epoch ms of the first 404 or 410 in that run. One good fetch counts the
+// Sitemap again.
+export const gscdumpSitemapFeedSchema = z.discriminatedUnion('_tag', [
+  z.object({ _tag: z.literal('counted') }).strict(),
+  z.object({
+    _tag: z.literal('dropped'),
+    status: z.union([z.literal(404), z.literal(410)]),
+    since: z.number().int().nonnegative(),
+  }).strict(),
+])
+
 export const gscdumpSitemapsResponseSchema = z.object({
   sitemaps: z.array(z.object({
     path: z.string(),
@@ -814,6 +828,9 @@ export const gscdumpSitemapsResponseSchema = z.object({
     lastError: z.string().nullable().optional(),
     isPending: z.boolean().optional(),
     fetchedAt: z.number().nullable().optional(),
+    // Declared in contracts 5.3.0. A host before gscdump.com#590 sends no
+    // `feed`, and its absence says nothing about whether the Sitemap counts.
+    feed: gscdumpSitemapFeedSchema.optional(),
   }).loose()),
   history: z.array(z.object({
     date: z.string(),
@@ -1299,11 +1316,30 @@ export const gscdumpIndexPercentResponseSchema = z.object({
   }).loose(),
 }).loose()
 
+// What a partner delete did to the Search Console grant that the partner's own
+// OAuth client issued. Google revokes per Cloud project, so gscdump keeps a grant
+// whose project another client uses (gscdump.com ADR-0009). `not-revoked` names
+// why the grant stayed at Google. `revoke-failed` carries the host's diagnostic.
+export const gscdumpSearchConsoleGrantOutcomeSchema = z.discriminatedUnion('_tag', [
+  z.object({ _tag: z.literal('revoked') }).strict(),
+  z.object({ _tag: z.literal('already-invalid') }).strict(),
+  z.object({
+    _tag: z.literal('not-revoked'),
+    reason: z.enum(['no-token', 'other-client', 'unknown-cloud-project', 'shared-cloud-project']),
+  }).strict(),
+  z.object({
+    _tag: z.literal('revoke-failed'),
+    reason: z.string().min(1),
+  }).strict(),
+])
+
 export const gscdumpDeletePartnerUserResponseSchema = z.object({
   ok: z.literal(true),
   queued: z.literal(true),
   userId: z.number(),
   publicId: z.string(),
+  // A host older than contracts 5.3.0 sends no `searchConsoleGrant`.
+  searchConsoleGrant: gscdumpSearchConsoleGrantOutcomeSchema.optional(),
 }).loose()
 
 export const gscdumpTeamRoleSchema = z.enum(['admin', 'editor', 'viewer'])

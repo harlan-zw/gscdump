@@ -103,6 +103,11 @@ describe('bing commands', () => {
     expect(await Promise.all(summary.files.map((file: { path: string }) => fs.readFile(file.path, 'utf8')))).toEqual(previous)
   })
 
+  it('tells the user that waiting does not lift a Bing IP refusal', async () => {
+    replies.GetUserSites = Response.json({ ErrorCode: 17, Message: 'ERROR!!! ThrottleIP' }, { status: 400 })
+    await expect(run(['sites', '--json'])).rejects.toThrow('Bing request failed: Throttled. Bing refused requests from this IP address.')
+  })
+
   it.each([
     ['--datasets', 'unknown'],
     ['--format', 'xlsx'],
