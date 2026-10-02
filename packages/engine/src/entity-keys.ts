@@ -26,8 +26,26 @@ export function inspectionEventKey(ctx: TenantCtx, yearMonth: string, batchId: s
   return `${inspectionEventsPrefix(ctx)}/${yearMonth}/${batchId}.parquet`
 }
 
+/**
+ * @deprecated Names only the legacy base that compaction rewrote in place.
+ * Compaction now publishes immutable bases through the inspection base
+ * manifest. Resolve the current base with `resolveInspectionReadPlan`.
+ */
 export function inspectionBaseKey(ctx: TenantCtx): string {
   return `${tenantEntityPrefix(ctx)}/inspections/base.parquet`
+}
+
+/**
+ * The inspection base manifest: the mutable pointer to the current immutable
+ * base. Compaction writes it last, so it is the only publication point.
+ */
+export function inspectionBaseManifestKey(ctx: TenantCtx): string {
+  return `${tenantEntityPrefix(ctx)}/inspections/base-manifest.json`
+}
+
+/** Directory of immutable inspection bases. Each compaction writes one new key. */
+export function inspectionBasesPrefix(ctx: TenantCtx): string {
+  return `${tenantEntityPrefix(ctx)}/inspections/bases`
 }
 
 /**

@@ -58,7 +58,10 @@
   hashUrl: function
   indexingMetadataIndexKey: function
   INSPECTION_HISTORY_MAX_BYTES: number
+  INSPECTION_RETIRED_GRACE_MS: number
   inspectionBaseKey: function
+  inspectionBaseManifestKey: function
+  inspectionBasesPrefix: function
   inspectionEventKey: function
   inspectionEventsPrefix: function
   inspectionHistoryPrefix: function
@@ -70,6 +73,7 @@
   parseSitemapFeedIdentity: function
   queryDimMetaKey: function
   queryDimParquetKey: function
+  resolveInspectionReadPlan: function
   sitemapImmutableBaseKey: function
   sitemapLegacyImportKey: function
   sitemapListKey: function
@@ -87,6 +91,8 @@
   hashUrl: function
   indexingMetadataIndexKey: function
   inspectionBaseKey: function
+  inspectionBaseManifestKey: function
+  inspectionBasesPrefix: function
   inspectionEventKey: function
   inspectionEventsPrefix: function
   inspectionHistoryPrefix: function
