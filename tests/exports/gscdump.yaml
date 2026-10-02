@@ -133,6 +133,7 @@
   verificationMethodsFor: function
   verifySite: function
 ./bing:
+  BING_THROTTLE_IP_ERROR_CODE: number
   bingWebmaster: function
   DEFAULT_BING_CHILD_PAGE_LIMIT: number
   DEFAULT_BING_WEBMASTER_API_URL: string

@@ -227,7 +227,7 @@ export type BingProviderError
     | { _tag: 'UserBlocked' }
     | { _tag: 'UnverifiedSite', siteUrl: string }
     | { _tag: 'SiteUnavailable', siteUrl: string }
-    | { _tag: 'Throttled', retryAfterMs?: number }
+    | { _tag: 'Throttled', errorCode?: number, retryAfterMs?: number }
     | { _tag: 'ProviderUnavailable', status: number }
     | { _tag: 'RequestRejected', errorCode?: number, message?: string, status: number }
     | { _tag: 'MalformedResponse', operation: BingOperation, reason: 'invalid-json' | 'invalid-payload' }
