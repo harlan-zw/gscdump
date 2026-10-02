@@ -2,6 +2,7 @@ import type { BingEvidenceError, BingProviderError, BingWebmasterClient } from '
 import type { Result } from 'gscdump/result'
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import { BING_THROTTLE_IP_ERROR_CODE } from 'gscdump/bing'
 import { z } from 'zod'
 import { toCSV } from './utils'
 
@@ -42,9 +43,11 @@ export function unwrapBing<T>(result: Result<T, BingProviderError | BingEvidence
   const error = result.error
   const help = error._tag === 'AuthenticationRequired'
     ? ' Run `gscdump bing login` again.'
-    : error._tag === 'Throttled' && error.retryAfterMs !== undefined
-      ? ` Retry after ${Math.ceil(error.retryAfterMs / 1000)} seconds.`
-      : ''
+    : error._tag === 'Throttled' && error.errorCode === BING_THROTTLE_IP_ERROR_CODE
+      ? ' Bing refused requests from this IP address. Waiting does not lift the block. Retry from another network.'
+      : error._tag === 'Throttled' && error.retryAfterMs !== undefined
+        ? ` Retry after ${Math.ceil(error.retryAfterMs / 1000)} seconds.`
+        : ''
   throw new Error(`Bing request failed: ${error._tag}.${help}`)
 }
 
