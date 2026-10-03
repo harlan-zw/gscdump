@@ -37,7 +37,8 @@ export function indexNow(options: { fetch?: typeof globalThis.fetch, clock?: () 
       const parsed = parseInput(input)
       if (!parsed.ok)
         return parsed
-      const response = await fetch(input.keyLocation, { redirect: 'error', signal: AbortSignal.timeout(timeoutMs) })
+      // Workers supports manual redirects. The status check rejects redirects without following them.
+      const response = await fetch(input.keyLocation, { redirect: 'manual', signal: AbortSignal.timeout(timeoutMs) })
       if (response.status !== 200)
         return ok({ _tag: 'verification-required', reason: 'key-file-unavailable' })
       const reader = response.body?.getReader()
@@ -78,7 +79,7 @@ export function indexNow(options: { fetch?: typeof globalThis.fetch, clock?: () 
       }
       const response = await fetch('https://api.indexnow.org/indexnow', {
         method: 'POST',
-        redirect: 'error',
+        redirect: 'manual',
         signal: AbortSignal.timeout(timeoutMs),
         headers: { 'content-type': 'application/json; charset=utf-8' },
         body: JSON.stringify({ host: input.host, key: input.key, keyLocation: input.keyLocation, urlList: input.urls }),

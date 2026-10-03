@@ -27,7 +27,6 @@ describe('indexNow client', () => {
   it('verifies only a bounded matching key file', async () => {
     const fetch = vi.fn<typeof globalThis.fetch>(async () => new Response(`${key}\n`))
     expect(await indexNow({ fetch }).verify(input)).toEqual({ ok: true, value: { _tag: 'verified' } })
-    expect(fetch).toHaveBeenCalledWith(input.keyLocation, expect.objectContaining({ redirect: 'error' }))
   })
   it.each([key.repeat(200), 'different'])('rejects oversized or mismatched key content', async (content) => {
     expect(await indexNow({ fetch: async () => new Response(content) }).verify(input)).toMatchObject({ ok: true, value: { _tag: 'verification-required' } })
@@ -36,13 +35,25 @@ describe('indexNow client', () => {
     const result = await indexNow({ fetch: async () => new Response(null, { status: 429, headers: { 'retry-after': 'Wed, 30 Sep 2026 00:00:30 GMT' } }), clock: () => new Date('2026-09-30T00:00:00.000Z') }).submit(input)
     expect(result).toMatchObject({ ok: true, value: { _tag: 'retrying', retryAfterMs: 30_000 } })
   })
-  it('does not follow key file redirects', async () => {
+  it.each(['verify', 'submit'] as const)('runs %s on an edge fetch that refuses redirect error mode', async (operation) => {
     const fetch = vi.fn<typeof globalThis.fetch>(async (_url, init) => {
       if (init?.redirect === 'error')
-        throw new Error('redirect')
+        throw new TypeError('Invalid redirect value, must be follow or manual')
       return new Response(key)
     })
-    await expect(indexNow({ fetch }).verify(input)).rejects.toThrow('redirect')
+    expect(await indexNow({ fetch })[operation](input)).toMatchObject({ ok: true, value: { _tag: operation === 'verify' ? 'verified' : 'accepted' } })
+  })
+  it.each([301, 302, 303, 307, 308])('refuses HTTP %s redirects for key files and provider submissions', async (status) => {
+    const fetch = vi.fn<typeof globalThis.fetch>(async (_url, init) => {
+      if (init?.redirect === 'error')
+        throw new TypeError('Invalid redirect value, must be follow or manual')
+      if (init?.redirect === 'manual')
+        return new Response(null, { status, headers: { location: 'https://other.example.com/key.txt' } })
+      return new Response(key)
+    })
+    expect(await indexNow({ fetch }).verify(input)).toEqual({ ok: true, value: { _tag: 'verification-required', reason: 'key-file-unavailable' } })
+    expect(await indexNow({ fetch }).submit(input)).toEqual({ ok: true, value: { _tag: 'failed', httpStatus: status, reason: 'unexpected-response', retryAfterMs: null } })
+    expect(fetch).toHaveBeenCalledTimes(2)
   })
   it('bounds a hanging key body with the request signal', async () => {
     const fetch: typeof globalThis.fetch = async (_url, init) => new Response(new ReadableStream({
