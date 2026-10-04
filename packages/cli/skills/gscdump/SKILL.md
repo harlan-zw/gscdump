@@ -484,10 +484,10 @@ Read the 4 ladder states in `counts`, lowest rung first. Name each state with th
 
 | Key | Name | Meaning |
 | --- | --- | --- |
-| `unknown_to_google` | unknown | Google has no record of the URL |
-| `discovered_not_indexed` | discovered | Google queued the URL and has not crawled it |
-| `crawled_not_indexed` | crawled | Google crawled the URL and left it out of the index |
-| `indexed` | indexed | Google indexed the URL |
+| `unknown_to_google` | unknown | URL Inspection reported the URL as unknown at its check time |
+| `discovered_not_indexed` | discovered | URL Inspection reported discovery without a crawl at its check time |
+| `crawled_not_indexed` | crawled | URL Inspection reported a crawl without indexing at its check time |
+| `indexed` | indexed | URL Inspection reported the URL as indexed at its check time |
 
 The other keys in `counts` are exclusions, such as `noindex`, `not_found`, and `redirect`.
 `unrecognized` counts coverage text gscdump cannot map yet. `not_reported` counts results with no coverage text.
@@ -502,11 +502,15 @@ Rules for every answer:
   They are also not the Search Console Page indexing report. The two can differ a lot, and the Page indexing report can list many more URLs.
 - `olderThan7d` and `olderThan30d` count verdicts inspected more than 7 times 24 hours and 30 times 24 hours before `capturedAt`. They are not calendar days.
 - A verdict can be months older than its capture. Unchanged URLs are rechecked less often over time. Say when most verdicts are old.
+- Unknown and discovered verdicts do not show Google's current crawl queue. They do not prove noindex or content rejection.
+- An accepted indexing request does not confirm crawling or indexing. Compare its receipt date with the saved inspection date.
+- If the saved inspection predates a request, it cannot show that request's outcome. A live indexability test also cannot confirm indexing.
 - A move between rungs shows in the trend. Compare two `counted` days and name the dates.
 - `capture.scope` says which URLs the counts cover. `sitemap_members` means every counted URL is in a live sitemap.
   `inspected_urls` means sitemap membership was not available, so the counts can include URLs outside every sitemap.
 - If `unknown_to_google` URLs are already in a sitemap, the sitemap is not the gap. Do not tell the owner to add them to it.
-  Read the sitemap's last download with `gscdump sitemaps current --site SITE --json`. If Google downloaded it, say that Google read the sitemap and did not take the URLs.
+  Read the sitemap's last download with `gscdump sitemaps current --site SITE --json`. Compare that date with each saved inspection date.
+  A sitemap download confirms that Google read the feed. It does not confirm discovery, crawling, or indexing of every URL.
   Check one URL's membership with `gscdump sitemaps membership`.
 - Name no cause beyond what the evidence shows.
 - Cite the command behind each number.

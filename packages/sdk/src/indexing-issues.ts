@@ -25,8 +25,8 @@ export const issueDetails: Record<string, IndexingIssueDetail> = {
     fix: 'Improve content quality and uniqueness. Add internal links pointing to these pages. Ensure they have clear, distinct value compared to other pages on your site.',
   },
   discovered_not_indexed: {
-    description: 'Google knows these URLs exist but hasn\'t crawled them yet. This is usually a crawl-budget or priority signal — Google deemed other pages more important.',
-    fix: 'Add strong internal links from indexed pages. Submit the URL via Search Console\'s URL Inspection > Request Indexing. Improve site authority and crawl-budget signals; check no resource constraints (slow server, large response sizes) are deterring the crawl.',
+    description: 'Saved URL Inspection results report these URLs as discovered but not crawled at their check times. They do not show current crawl queue status or identify a cause.',
+    fix: 'For URLs intended for Search, check crawl access, sitemap entries, and links from indexed pages. Review current URL Inspection before requesting indexing. Request acceptance does not confirm crawling or indexing.',
   },
   server_error: {
     description: 'Google encountered 5xx server errors when trying to crawl these URLs. The pages were unreachable at crawl time.',
@@ -73,8 +73,8 @@ export const issueDetails: Record<string, IndexingIssueDetail> = {
     fix: 'If the removal was intentional, back it with a real signal: a noindex tag, a 404/410, or authentication. The removal tool alone does not keep a page out of Search permanently.',
   },
   unknown_to_google: {
-    description: 'Google has no record of these URLs. It has not crawled them and has not queued them for a crawl. A URL can stay unknown even when it is in a sitemap that Google already read.',
-    fix: 'Check that each URL is in a sitemap Google reads. If it already is, the sitemap is not the gap: link to these URLs from pages Google already indexed, and earn links from other sites.',
+    description: 'Saved URL Inspection results report these URLs as unknown to Google at their check times. They do not show current crawl queue status. A later indexing request does not update an earlier inspection.',
+    fix: 'Check sitemap membership and links from indexed pages. Compare the saved check date with later indexing requests. Request acceptance does not confirm crawling or indexing.',
   },
   stale_crawl: {
     description: 'Google hasn\'t re-crawled these pages in over 30 days. They may have low perceived value or your crawl budget may be exhausted.',
@@ -174,7 +174,7 @@ export const issueGroups: IssueGroup[] = [
     description: 'Help Google find and value your pages',
     effort: 'involved',
     controlLevel: 'partial',
-    education: 'Google found these pages but either didn\'t think they were worth indexing, or hasn\'t discovered them yet. For crawled-but-not-indexed pages, improving content quality and internal linking helps — but Google ultimately decides what to index. For pages unknown to Google, check the sitemap first. If they are already in it, link to them from indexed pages.',
+    education: 'These saved results describe discovery, indexing, and crawl age at their check times. Read each coverage state and check date before choosing a fix. For unknown or discovered URLs, check sitemap membership, crawl access, and links from indexed pages. Crawled-but-not-indexed results can need distinct content, but they do not identify the reason by themselves.',
     issueTypes: ['crawled_not_indexed', 'discovered_not_indexed', 'unknown_to_google', 'stale_crawl', 'very_stale_crawl'],
   },
   {
