@@ -51,6 +51,7 @@ export const HOSTED_COMMANDS = [
   'sitemaps lastmod',
   'sitemaps export',
   'indexing urls',
+  'indexing inspect',
   'indexing summary',
   'indexing watch',
   'bing login',

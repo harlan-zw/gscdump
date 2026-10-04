@@ -5,6 +5,7 @@ import { createCommandContext } from '../context'
 import { loadSitemapUrls } from '../sitemap'
 import { commandLineError } from '../stop'
 import { applyOutputMode, logger, OUTPUT_ARGS, parseIntegerOption, readUrlList } from '../utils'
+import { indexingInspectCommand } from './indexing-inspect'
 import { indexingSummaryCommand } from './indexing-summary'
 import { indexingUrlsCommand } from './indexing-urls'
 import { indexingWatchCommand } from './indexing-watch'
@@ -256,6 +257,7 @@ export const indexingCommand = defineCommand({
     'quota': quotaCommand,
     'urls': indexingUrlsCommand,
     'summary': indexingSummaryCommand,
+    'inspect': indexingInspectCommand,
     'watch': indexingWatchCommand,
   },
 })

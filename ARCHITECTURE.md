@@ -67,7 +67,8 @@ flowchart LR
 ```
 
 Local mode calls Google with the user's own service account or OAuth client. It never uses gscdump.com for Google login or token refresh.
-Hosted mode reads the hosted record and never calls Google, so no CLI traffic spends gscdump.com's Google quota.
+Hosted reads use the hosted record. `indexing inspect --yes` requests new Google URL Inspections through the platform.
+The platform reserves the shared daily quota before calling Google. The CLI sends one request and never retries it automatically.
 `context.ts` builds the Google client in Local mode only. In Hosted mode, `needsAuth` throws `LOCAL_MODE_REQUIRED`.
 `hosted-query.ts` reads hosted rows through the public v1 `analytics.rows.query` operation.
 `bing-hosted.ts` and `hosted-site.ts` use `@gscdump/sdk/v1` for hosted Bing, sitemap, and URL Inspection reads.
