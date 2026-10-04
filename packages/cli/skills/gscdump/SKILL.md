@@ -38,7 +38,7 @@ gscdump has 2 access modes. Check `gscdump auth status --json` before queries. R
 | Mode | Credentials | What it reads |
 | --- | --- | --- |
 | `local` | The user's own Google credentials: a service account (recommended) or an OAuth client. Bing API key or OAuth | Calls Google and Bing directly. Keeps a local Store |
-| `hosted` | A browser-approved gscdump.com CLI session, or a gscdump user API key (`GSCDUMP_API_KEY`) | Reads the hosted record on gscdump.com. Never calls Google |
+| `hosted` | A browser-approved gscdump.com CLI session, or a gscdump user API key (`GSCDUMP_API_KEY`) | Reads the hosted record on gscdump.com. Explicit `indexing inspect --yes` requests spend URL Inspections |
 
 In Local mode, `googleAuthenticated: true` means Google accepted the credentials. When it is false, `googleError` says why.
 In Hosted mode, `hostedSync` lists each hosted Site with `syncStatus` and `syncProgress`, and `commands` lists what Hosted mode can run.
@@ -72,9 +72,9 @@ gscdump query --site example.com -d page -f json
 ```
 
 Hosted mode can run only these commands: `sites`, `query`, `sitemaps current`, `sitemaps history`, `sitemaps membership`,
-`sitemaps lastmod`, `sitemaps export`, `indexing urls`, `indexing summary`, `indexing watch list|add|remove`,
+`sitemaps lastmod`, `sitemaps export`, `indexing urls`, `indexing inspect --yes`, `indexing summary`, `indexing watch list|add|remove`,
 and the `bing` commands `login --site`, `sites`, `status`, `dump`, `inspect`, and `verify`.
-Every other command calls Google, so it needs Local mode: `sync`, `inspect`, `query --live`, `analyze --live`, `report --live`,
+Direct Google commands need Local mode: `sync`, `inspect`, `query --live`, `analyze --live`, `report --live`,
 `sites add|get|delete|verify*`, `sitemaps list|get|submit|delete`, `indexing submit|remove|status|batch`, `entities`, and `mcp`.
 In Hosted mode these commands stop with this error: `This command calls Google, so it needs Local mode.`
 Tell the user. Do not switch modes for them.
@@ -247,7 +247,7 @@ A routing stop also has `siteUrl`. `STORE_RANGE_NOT_COVERED` adds `missingDates`
 | `LIVE_ONLY` | Only `--live` can answer the read |
 | `LOGIN_CANCELLED` | The user selected Cancel on the gscdump.com login page. Ask before you run `nextCommand` |
 | `LOCAL_MODE_REQUIRED` | The command calls Google, and Hosted mode is selected |
-| `HOSTED_MODE_REQUIRED` | The command reads the hosted record, and Local mode is selected |
+| `HOSTED_MODE_REQUIRED` | The command needs Hosted mode, and Local mode is selected |
 | `HOSTED_CREDENTIALS_MISSING` | Hosted mode has no CLI session and no API key |
 | `HOSTED_CREDENTIALS_REJECTED` | gscdump.com rejected the CLI session or API key. For an API key, `nextCommand` is null: the user needs a new key from the app that issued it |
 | `NO_SITES` | The hosted record has no Sites. The message says where the user connects one |
@@ -276,6 +276,7 @@ A routing stop also has `siteUrl`. `STORE_RANGE_NOT_COVERED` adds `missingDates`
 | `gscdump inspect <url...>` | URL Inspection with Indexing Evidence, saved to the Store |
 | `gscdump sitemaps` | List, submit, delete, and probe sitemaps |
 | `gscdump indexing` | Indexing API notifications and quota; hosted URL Inspection results |
+| `gscdump indexing inspect <url...> --yes` | Hosted: refresh up to 10 URLs through the platform, spending shared URL Inspections. Never retry automatically |
 | `gscdump indexing summary` | Hosted: the coverage ladder per day, with the time gscdump counted the verdicts |
 | `gscdump indexing watch` | Hosted: list, add, and remove Watched URLs and read their Checkpoints |
 | `gscdump dump` | Export Store tables, inspections, sitemaps, and Bing data as Parquet, CSV, JSON, NDJSON, SQLite, or DuckDB |
@@ -590,3 +591,16 @@ Include that JSON in your final response. Tool output alone is not a final answe
 Include every returned row. Do not refer the user to results "above".
 
 For a deletion explanation, read metadata only if needed. Explain the scope and ask for consent, then stop.
+
+## Refresh hosted Google URL Inspection results
+
+```sh
+gscdump indexing inspect https://example.com/page --site example.com --yes --json
+```
+
+This asks Google for its current indexed-page verdict. It does not run a live-page test or request indexing.
+Pass 1 to 10 unique URLs, or use `--file` or stdin. The platform enforces its shared daily quota.
+The command sends one request. It never splits batches or retries automatically.
+If the API returns 429, wait for the reported reset before another request.
+If `errors` or `skipped` contains URLs, the command exits 1 and preserves its result on stdout.
+Read `rateLimit.remaining` before deciding whether to inspect more URLs.

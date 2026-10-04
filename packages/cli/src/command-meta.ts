@@ -40,7 +40,7 @@ export const inspectCommandMeta = {
 
 export const indexingCommandMeta = {
   name: 'indexing',
-  description: 'Notify Google about URL changes (Indexing API); list hosted URL Inspection results',
+  description: 'Notify Google about URL changes (Indexing API); read and refresh hosted URL Inspection results',
 }
 
 export const entitiesCommandMeta = {
