@@ -1,3 +1,4 @@
+export * from './analytics-coverage'
 export { bingCnameVerificationV1Schema, bingConnectionV1Schema } from './bing'
 export type { BingCnameVerificationV1, BingConnectionV1 } from './bing'
 export { bingDataQueryV1Schema, bingDataV1Schemas } from './bing-data'

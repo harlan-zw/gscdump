@@ -264,6 +264,8 @@
 ./search-types:
   GSC_SEARCH_TYPES: object
 ./v1:
+  analyticsCoverageQueryV1Schema: object
+  analyticsCoverageV1Schemas: object
   bingAuthorizationRequestV1Schema: object
   bingAuthorizationV1Schemas: object
   bingCnameVerificationV1Schema: object
@@ -348,6 +350,8 @@
   createGscdumpV1BrowserSchemas: function
   GSCDUMP_V1_ANALYTICS_DIMENSIONS: object
 ./v1/http:
+  analyticsCoverageQueryV1Schema: object
+  analyticsCoverageV1Schemas: object
   bingAuthorizationRequestV1Schema: object
   bingAuthorizationV1Schemas: object
   bingCnameVerificationV1Schema: object
