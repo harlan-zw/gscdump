@@ -35,6 +35,7 @@ export { hostPagePattern, requestAggregation, runGscSearchAppearanceContextSlice
 export type {
   GscAggregation,
   GscApiRow,
+  GscCommittedPage,
   RunGscSearchAppearanceContextSliceOptions,
   RunGscSearchAppearanceContextSliceResult,
   RunGscSyncSliceOptions,

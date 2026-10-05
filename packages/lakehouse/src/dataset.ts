@@ -273,6 +273,10 @@ export interface IcebergDataset {
    * across source batches.
    */
   appendBatches: (conn: IcebergConnection, source: AppendBatchSource, opts: AppendBatchesOptions) => Promise<AppendBatchesResult>
+  /** Fresh, exact snapshot membership. Missing evidence never falls back to current files. */
+  resolveAppendFiles: (conn: IcebergConnection, appendId: string, identity: string | number, dims?: Record<string, string>) => Promise<
+    { _tag: 'Ok', snapshotId: string, files: IcebergListedDataFile[] } | { _tag: 'Err', reason: 'append-unavailable' }
+  >
   /**
    * PURE row processing — the identity INT32 guard, dedupe (identity+dims+
    * naturalKey, last-wins) and cluster pre-sort `appendRows`/`appendSink`
@@ -499,6 +503,13 @@ export function defineIcebergDataset(def: IcebergDatasetDef): IcebergDataset {
     return buildManifestPartitionFilter(def.partition, readerPredicate(identity, dims), months)
   }
 
+  async function resolveAppendFiles(conn: IcebergConnection, appendId: string, identity: string | number, dims?: Record<string, string>): Promise<
+    { _tag: 'Ok', snapshotId: string, files: IcebergListedDataFile[] } | { _tag: 'Err', reason: 'append-unavailable' }
+  > {
+    const { resolveDatasetAppendFiles } = await import('./dataset-runtime')
+    return resolveDatasetAppendFiles(conn, def.table, appendId, readerPredicate(identity, dims))
+  }
+
   async function resolveDataFiles(
     conn: IcebergConnection,
     identity: string | number,
@@ -529,6 +540,7 @@ export function defineIcebergDataset(def: IcebergDatasetDef): IcebergDataset {
     verifyTable,
     appendRows,
     appendBatches,
+    resolveAppendFiles,
     prepareRows: process,
     appendSink,
     readerPredicate,

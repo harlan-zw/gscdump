@@ -1014,6 +1014,7 @@ async function loadSnapshotIdUnshared(
 /** Minimal shape of one manifest entry, as accessed while turning it into a listed data file. */
 interface ManifestWalkEntry {
   status?: number
+  snapshot_id?: number | bigint | string
   data_file: {
     content?: number
     file_path: string
@@ -1023,6 +1024,39 @@ interface ManifestWalkEntry {
     lower_bounds?: unknown
     upper_bounds?: unknown
   }
+}
+
+/** Resolve only added files from one authoritative append snapshot. */
+export async function resolveIcebergAppendFiles(
+  conn: IcebergConnection,
+  table: string,
+  appendId: string,
+  matches: readonly PartitionValueMatch[],
+): Promise<{ _tag: 'Ok', snapshotId: string, files: IcebergListedDataFile[] } | { _tag: 'Err', reason: 'append-unavailable' }> {
+  const { metadata } = await restCatalogLoadTable(conn.catalog, { namespace: conn.namespace, table })
+  const snapshots = metadata.snapshots?.filter(snapshot =>
+    (snapshot.summary as Record<string, string> | undefined)?.[APPEND_ID_SUMMARY_KEY] === appendId) ?? []
+  if (!appendId || snapshots.length !== 1)
+    return { _tag: 'Err', reason: 'append-unavailable' }
+  if (snapshots[0].summary?.operation !== 'append')
+    return { _tag: 'Err', reason: 'append-unavailable' }
+  const snapshotId = snapshots[0]['snapshot-id']
+  const manifests: WalkedManifest[] = await icebergManifests({ metadata, resolver: conn.resolver, snapshotId })
+  const files: IcebergListedDataFile[] = []
+  for (const manifest of manifests) {
+    for (const entry of manifest.entries) {
+      if (entry.status === 2 || entry.data_file.content !== 0)
+        return { _tag: 'Err', reason: 'append-unavailable' }
+      if (entry.status !== 1 || entry.snapshot_id == null || String(entry.snapshot_id) !== String(snapshotId))
+        continue
+      const file = toListedFile(entry, matches, undefined, new Set(), null)
+      if (file)
+        files.push(file)
+    }
+  }
+  if (files.length === 0)
+    return { _tag: 'Err', reason: 'append-unavailable' }
+  return { _tag: 'Ok', snapshotId: String(snapshotId), files }
 }
 
 /** One manifest's walked result — `icebergManifests`'s return element. */

@@ -25,6 +25,8 @@ import {
   resolveIcebergDataFiles,
 } from './catalog'
 
+export { resolveIcebergAppendFiles as resolveDatasetAppendFiles } from './catalog'
+
 interface PreparedRows {
   records: Record<string, unknown>[]
   skipped: number
