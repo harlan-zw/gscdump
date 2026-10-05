@@ -22,6 +22,22 @@ describe('parquet date decoding', () => {
       .toEqual([{ date: null }, { date: '2026-04-02' }])
   })
 
+  it('decodes a file with no date columns without touching any cell', async () => {
+    const rows = [
+      { url: '/a', clicks: 1n },
+      { url: '/b', clicks: 2n },
+      { url: '/c', clicks: 3n },
+    ]
+    const bytes = encodeRowsToParquetFlex(rows, {
+      columns: [
+        { name: 'url', type: 'VARCHAR', nullable: false },
+        { name: 'clicks', type: 'BIGINT', nullable: false },
+      ],
+      rowGroupSize: 2,
+    })
+    expect(await decodeParquetToRows(bytes)).toEqual(rows)
+  })
+
   it('preserves dates when a file exceeds the date cache capacity', async () => {
     const rows = Array.from({ length: 1030 }, (_, i) => ({ date: new Date(i * 86_400_000).toISOString().slice(0, 10) }))
     rows.push(rows[0]!)

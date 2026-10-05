@@ -381,8 +381,8 @@ export async function decodeParquetToRows(
 ): Promise<Row[]> {
   const rows: Row[] = []
   for await (const group of decodeParquetGroups(bytes, opts)) {
-    for (const row of group)
-      rows.push(row)
+    for (let i = 0; i < group.length; i++)
+      rows.push(group[i])
   }
   return rows
 }
@@ -398,9 +398,26 @@ async function* decodeParquetGroups(
     return
   const file = asyncBufferFromBytes(bytes)
   const metadata = await parquetMetadataAsync(file)
-  const present = new Set(parquetSchema(metadata).children.map(child => child.element.name))
+  const tree = parquetSchema(metadata)
+  // Columns the reader can decode into `Date` values. This adapter passes no
+  // custom parsers, so the set is closed: DATE and TIMESTAMP logical types
+  // plus legacy INT96. Resolving it once per decode lets the normalizer scan
+  // those cells only, instead of every key of every row.
+  const present = new Set<string>()
+  const dateColumns: string[] = []
+  let nested = false
+  for (const child of tree.children) {
+    present.add(child.element.name)
+    if (child.children.length > 0)
+      nested = true
+    else if (isDateCapableElement(child.element))
+      dateColumns.push(child.element.name)
+  }
   // Missing projected columns remain absent for older files.
   const columns = opts.columns?.filter(name => present.has(name))
+  // A nested schema can surface decoded values under keys the top-level
+  // elements don't name; fall back to scanning every key there.
+  const normalizeColumns: readonly string[] | null = nested ? null : dateColumns
   let groupStart = 0
   for (const group of metadata.row_groups) {
     const groupEnd = groupStart + Number(group.num_rows)
@@ -419,10 +436,25 @@ async function* decodeParquetGroups(
         // Preserve bloom and page-index pruning for filtered reads.
         ...(opts.filter ? { filter: opts.filter, useBloomFilters: true, usePageIndex: true } : {}),
       })
-      yield normalizeDecodedDates(rows as Row[])
+      yield normalizeDecodedDates(rows as Row[], normalizeColumns)
     }
     groupStart = groupEnd
   }
+}
+
+/**
+ * Schema elements whose decoded cells can be `Date` instances under the
+ * reader's default parsers: legacy INT96 timestamps, the `converted_type`
+ * DATE/TIMESTAMP encodings, and the `logicalType` TIMESTAMP superset (any
+ * unit). Everything else decodes to numbers, strings, or bytes.
+ */
+function isDateCapableElement(element: SchemaElement): boolean {
+  if (element.type === 'INT96')
+    return true
+  const converted = element.converted_type
+  if (converted === 'DATE' || converted === 'TIMESTAMP_MILLIS' || converted === 'TIMESTAMP_MICROS')
+    return true
+  return element.logical_type?.type === 'TIMESTAMP'
 }
 
 /**
@@ -432,12 +464,17 @@ async function* decodeParquetGroups(
  * `dateFromDays`); legacy string-`date` files already hold strings and pass
  * through. Share repeated date strings within this decode. Bound the cache
  * so files with many distinct dates cannot retain a second copy of every day.
+ * `dateColumns` narrows the scan to the schema's Date-capable columns; `null`
+ * scans every key (nested schemas).
  */
-function normalizeDecodedDates(rows: Row[]): Row[] {
+function normalizeDecodedDates(rows: Row[], dateColumns: readonly string[] | null): Row[] {
+  // No Date-capable column means no cell can hold a Date; skip the scan.
+  if (dateColumns !== null && dateColumns.length === 0)
+    return rows
   const dates = new Map<number, string>()
   for (const row of rows) {
     const r = row as Record<string, unknown>
-    for (const k in r) {
+    for (const k of dateColumns ?? Object.keys(r)) {
       const v = r[k]
       if (v instanceof Date) {
         const day = Math.floor(v.getTime() / EPOCH_DAY_MS)
