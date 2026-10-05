@@ -130,11 +130,13 @@ it('bounds a request resolver and refreshes metadata in the next request', async
     expect(await resolve(`day-${day}`, 17)).toMatchObject({ _tag: 'Ok' })
   expect(fetcher).toHaveBeenCalledTimes(1)
   expect(reads).toBeLessThan(200)
+  expect(await resolve.confirmCurrent()).toBe(true)
   const historical = [...metadata.snapshots]
   metadata.snapshots = []
   delete metadata['current-snapshot-id']
   await dataset.appendBatches(conn, () => [[{ site_id: 17, url: '/replacement' }]], { appendId: 'replacement' })
   metadata.snapshots.unshift(...historical)
+  expect(await resolve.confirmCurrent()).toBe(false)
   const next = await dataset.createAppendFileResolver(conn)
   expect(await next('day-0', 17)).toEqual({ _tag: 'Err', reason: 'append-unavailable' })
 })

@@ -1053,9 +1053,10 @@ export async function createIcebergAppendFileResolver(conn: IcebergConnection, t
   ((appendId: string, matches: readonly PartitionValueMatch[]) => ReturnType<typeof resolveIcebergAppendFiles>) & {
     currentFiles: (matches: readonly PartitionValueMatch[]) =>
       { _tag: 'Ok', files: IcebergListedDataFile[] } | { _tag: 'Err', reason: 'append-unavailable' }
+    confirmCurrent: () => Promise<boolean>
   }
 > {
-  const { metadata } = await restCatalogLoadTable(conn.catalog, { namespace: conn.namespace, table })
+  const { metadata, metadataLocation } = await restCatalogLoadTable(conn.catalog, { namespace: conn.namespace, table })
   const manifestCache: ManifestReadCache = { lists: new Map(), entries: new Map() }
   const immutableBytes = new Map<string, Promise<ArrayBuffer>>()
   const resolver = {
@@ -1112,6 +1113,12 @@ export async function createIcebergAppendFileResolver(conn: IcebergConnection, t
     return { _tag: 'Ok', snapshotId: String(snapshotId), files }
   }
   return Object.assign(resolve, {
+    confirmCurrent: async () => {
+      const fresh = await restCatalogLoadTable(conn.catalog, { namespace: conn.namespace, table })
+      return fresh.metadataLocation === metadataLocation
+        && fresh.metadata['table-uuid'] === metadata['table-uuid']
+        && String(fresh.metadata['current-snapshot-id']) === String(metadata['current-snapshot-id'])
+    },
     currentFiles: (matches: readonly PartitionValueMatch[]) => {
       const files: IcebergListedDataFile[] = []
       for (const manifest of current) {

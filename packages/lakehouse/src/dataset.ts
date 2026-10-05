@@ -282,6 +282,7 @@ export interface IcebergDataset {
     ((appendId: string, identity: string | number, dims?: Record<string, string>) => ReturnType<IcebergDataset['resolveAppendFiles']>) & {
       currentFiles: (identity: string | number, dims?: Record<string, string>) =>
         { _tag: 'Ok', files: IcebergListedDataFile[] } | { _tag: 'Err', reason: 'append-unavailable' }
+      confirmCurrent: () => Promise<boolean>
     }
   >
   /**
@@ -522,7 +523,10 @@ export function defineIcebergDataset(def: IcebergDatasetDef): IcebergDataset {
     const resolve = await createDatasetAppendFileResolver(conn, def.table)
     return Object.assign(
       (appendId: string, identity: string | number, dims?: Record<string, string>) => resolve(appendId, readerPredicate(identity, dims)),
-      { currentFiles: (identity: string | number, dims?: Record<string, string>) => resolve.currentFiles(readerPredicate(identity, dims)) },
+      {
+        currentFiles: (identity: string | number, dims?: Record<string, string>) => resolve.currentFiles(readerPredicate(identity, dims)),
+        confirmCurrent: resolve.confirmCurrent,
+      },
     )
   }
 
