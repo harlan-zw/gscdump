@@ -74,6 +74,27 @@ function fixture() {
 
 afterEach(() => vi.unstubAllGlobals())
 
+it('refuses an oversized immutable manifest before reading its full bytes', async () => {
+  const { conn } = fixture()
+  await dataset.appendBatches(conn, () => [[{ site_id: 17, url: '/bounded' }]], { appendId: 'bounded' })
+  let buffered = false
+  const reader = conn.resolver.reader
+  conn.resolver.reader = async (...args) => {
+    const original = await reader(...args)
+    return {
+      byteLength: 4 * 1024 * 1024 + 1,
+      slice: async (start: number, end: number) => {
+        buffered = true
+        return original.slice(start, Math.min(end, original.byteLength))
+      },
+    }
+  }
+  const resolve = await dataset.createAppendFileResolver(conn)
+  expect(resolve.currentFiles(17)).toEqual({ _tag: 'Err', reason: 'append-unavailable' })
+  expect(await resolve('bounded', 17)).toEqual({ _tag: 'Err', reason: 'append-unavailable' })
+  expect(buffered).toBe(false)
+})
+
 it('resolves only files from the captured append and Site partition after later commits', async () => {
   const { conn } = fixture()
   await dataset.appendBatches(conn, () => [[{ site_id: 17, url: '/first' }]], { appendId: 'wave-first' })

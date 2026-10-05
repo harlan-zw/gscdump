@@ -1060,21 +1060,44 @@ export async function createIcebergAppendFileResolver(conn: IcebergConnection, t
   const dateFieldId = dateColumnFieldId(metadata, dateColumn)
   const manifestCache: ManifestReadCache = { lists: new Map(), entries: new Map() }
   const immutableBytes = new Map<string, Promise<ArrayBuffer>>()
+  // This request-local table session retains at most 4 MiB of immutable metadata.
+  const maxRetainedBytes = 4 * 1024 * 1024
+  const budgetFailure = { _tag: 'ManifestBudgetExceeded' } as const
+  let retainedBytes = 0
+  let unavailable = false
   const resolver = {
     ...conn.resolver,
     reader: async (url: string) => {
       let bytes = immutableBytes.get(url)
       if (!bytes) {
-        bytes = Promise.resolve(conn.resolver.reader(url)).then(buffer => buffer.slice(0, buffer.byteLength))
+        bytes = Promise.resolve(conn.resolver.reader(url)).then(async (buffer) => {
+          if (!Number.isSafeInteger(buffer.byteLength) || buffer.byteLength < 0
+            || retainedBytes + buffer.byteLength > maxRetainedBytes) {
+            unavailable = true
+            throw budgetFailure
+          }
+          retainedBytes += buffer.byteLength
+          const content = await buffer.slice(0, buffer.byteLength)
+          if (content.byteLength !== buffer.byteLength) {
+            unavailable = true
+            throw budgetFailure
+          }
+          return content
+        })
         immutableBytes.set(url, bytes)
       }
       const buffer = await bytes
       return { byteLength: buffer.byteLength, slice: async (start: number, end: number) => buffer.slice(start, end) }
     },
   }
+  const budgetUnavailable = (error: unknown): WalkedManifest[] => {
+    if (error !== budgetFailure)
+      throw error
+    return [] // Every public operation below refuses this session.
+  }
   const current: WalkedManifest[] = metadata['current-snapshot-id'] == null
     ? []
-    : await icebergManifests({ metadata, resolver, manifestCache })
+    : await icebergManifests({ metadata, resolver, manifestCache }).catch(budgetUnavailable)
   const currentFiles = new Map<string, ManifestWalkEntry['data_file']>()
   for (const manifest of current) {
     for (const entry of manifest.entries) {
@@ -1085,6 +1108,8 @@ export async function createIcebergAppendFileResolver(conn: IcebergConnection, t
   const resolve = async (appendId: string, matches: readonly PartitionValueMatch[]): Promise<
     { _tag: 'Ok', snapshotId: string, files: IcebergListedDataFile[] } | { _tag: 'Err', reason: 'append-unavailable' }
   > => {
+    if (unavailable)
+      return { _tag: 'Err', reason: 'append-unavailable' }
     const snapshots = metadata.snapshots?.filter(snapshot =>
       (snapshot.summary as Record<string, string> | undefined)?.[APPEND_ID_SUMMARY_KEY] === appendId) ?? []
     if (!appendId || snapshots.length !== 1)
@@ -1092,7 +1117,9 @@ export async function createIcebergAppendFileResolver(conn: IcebergConnection, t
     if (snapshots[0].summary?.operation !== 'append')
       return { _tag: 'Err', reason: 'append-unavailable' }
     const snapshotId = snapshots[0]['snapshot-id']
-    const manifests: WalkedManifest[] = await icebergManifests({ metadata, resolver, snapshotId, manifestCache })
+    const manifests: WalkedManifest[] = await icebergManifests({ metadata, resolver, snapshotId, manifestCache }).catch(budgetUnavailable)
+    if (unavailable)
+      return { _tag: 'Err', reason: 'append-unavailable' }
     const files: IcebergListedDataFile[] = []
     for (const manifest of manifests) {
       for (const entry of manifest.entries) {
@@ -1115,12 +1142,16 @@ export async function createIcebergAppendFileResolver(conn: IcebergConnection, t
   }
   return Object.assign(resolve, {
     confirmCurrent: async () => {
+      if (unavailable)
+        return false
       const fresh = await restCatalogLoadTable(conn.catalog, { namespace: conn.namespace, table })
       return fresh.metadataLocation === metadataLocation
         && fresh.metadata['table-uuid'] === metadata['table-uuid']
         && String(fresh.metadata['current-snapshot-id']) === String(metadata['current-snapshot-id'])
     },
     currentFiles: (matches: readonly PartitionValueMatch[]) => {
+      if (unavailable)
+        return { _tag: 'Err' as const, reason: 'append-unavailable' as const }
       const files: IcebergListedDataFile[] = []
       for (const manifest of current) {
         for (const entry of manifest.entries) {
