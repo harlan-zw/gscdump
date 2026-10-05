@@ -3609,7 +3609,7 @@ export function createGscdumpV1Protocol() {
         errors: siteVersionErrors,
         errorResponse: errorEnvelopeSchemas(siteVersionErrors, realtimeSchemas.publicRequestId),
         resources: { reads: [{ type: 'site.registration', idFrom: 'params.siteId' }], changes: [] },
-        lifecycle: { introduced: '5.4.0' },
+        lifecycle: { introduced: '5.6.0' },
         docs: { summary: 'Get registered host identity', description: 'Returns the authorized Site version and its effective Team Catalog binding.', tags: ['Sites'], examples: {
           request: { params: { siteId: 's_01' } },
           response: { data: { identity: siteVersionExampleIdentity, coverage: { _tag: 'legacy' } }, meta: siteVersionExampleMeta },
@@ -3625,7 +3625,7 @@ export function createGscdumpV1Protocol() {
         errors: siteVersionErrors,
         errorResponse: errorEnvelopeSchemas(siteVersionErrors, realtimeSchemas.publicRequestId),
         resources: { reads: [{ type: 'site.registration', idFrom: 'params.siteId' }], changes: [] },
-        lifecycle: { introduced: '5.4.0' },
+        lifecycle: { introduced: '5.6.0' },
         docs: { summary: 'Preview registered host correction', description: 'Checks exact-host correction eligibility without creating resources or changing the Site.', tags: ['Sites'], examples: {
           request: { params: { siteId: 's_01' }, body: { requestedUrl: siteVersionExamplePreview.requestedUrl, catalogSiteId: 17, window: siteVersionExamplePreview.window } },
           response: { data: siteVersionExamplePreview, meta: siteVersionExampleMeta },
@@ -3641,7 +3641,7 @@ export function createGscdumpV1Protocol() {
         errors: siteVersionErrors,
         errorResponse: errorEnvelopeSchemas(siteVersionErrors, realtimeSchemas.publicRequestId),
         resources: { reads: [{ type: 'site.registration', idFrom: 'params.siteId' }], changes: [{ type: 'site.lifecycle', idFrom: 'params.siteId' }] },
-        lifecycle: { introduced: '5.4.0' },
+        lifecycle: { introduced: '5.6.0' },
         docs: { summary: 'Begin registered host correction', description: 'Reserves an isolated candidate. Current registration and current reads keep their existing version.', tags: ['Sites'], examples: {
           request: { params: { siteId: 's_01' }, body: { preview: siteVersionExamplePreview } },
           response: { data: { ...siteVersionExampleCandidate, state: 'collecting' }, meta: siteVersionExampleMeta },
@@ -3657,7 +3657,7 @@ export function createGscdumpV1Protocol() {
         errors: siteVersionErrors,
         errorResponse: errorEnvelopeSchemas(siteVersionErrors, realtimeSchemas.publicRequestId),
         resources: { reads: [{ type: 'site.analytics', idFrom: 'params.siteId' }], changes: [{ type: 'site.lifecycle', idFrom: 'params.siteId' }] },
-        lifecycle: { introduced: '5.4.0' },
+        lifecycle: { introduced: '5.6.0' },
         docs: { summary: 'Verify registered host correction', description: 'Requires completed Google collection and matching physical coverage for every required slice.', tags: ['Sites'], examples: {
           request: { params: { siteId: 's_01' }, body: { version: 1, identity: siteVersionExampleIdentity } },
           response: { data: { ...siteVersionExampleCandidate, state: 'verified' }, meta: siteVersionExampleMeta },
@@ -3673,7 +3673,7 @@ export function createGscdumpV1Protocol() {
         errors: siteVersionErrors,
         errorResponse: errorEnvelopeSchemas(siteVersionErrors, realtimeSchemas.publicRequestId),
         resources: { reads: [{ type: 'site.registration', idFrom: 'params.siteId' }], changes: [{ type: 'site.registration', idFrom: 'params.siteId' }, { type: 'site.analytics', idFrom: 'params.siteId' }] },
-        lifecycle: { introduced: '5.4.0' },
+        lifecycle: { introduced: '5.6.0' },
         docs: { summary: 'Promote registered host correction', description: 'Atomically promotes a verified candidate while preserving Source and Catalog identities.', tags: ['Sites'], examples: {
           request: { params: { siteId: 's_01' }, body: { version: 1, identity: siteVersionExampleIdentity } },
           response: { data: { ...siteVersionExampleCandidate, state: 'active' }, meta: siteVersionExampleMeta },
@@ -3689,7 +3689,7 @@ export function createGscdumpV1Protocol() {
         errors: siteVersionErrors,
         errorResponse: errorEnvelopeSchemas(siteVersionErrors, realtimeSchemas.publicRequestId),
         resources: { reads: [{ type: 'site.registration', idFrom: 'params.siteId' }], changes: [{ type: 'site.lifecycle', idFrom: 'params.siteId' }] },
-        lifecycle: { introduced: '5.4.0' },
+        lifecycle: { introduced: '5.6.0' },
         docs: { summary: 'Abort registered host correction', description: 'Excludes the candidate. Historical tables and the active Site version remain preserved.', tags: ['Sites'], examples: {
           request: { params: { siteId: 's_01' }, body: { version: 1, identity: siteVersionExampleIdentity } },
           response: { data: { ...siteVersionExampleCandidate, state: 'aborted' }, meta: siteVersionExampleMeta },
@@ -3705,7 +3705,7 @@ export function createGscdumpV1Protocol() {
         errors: siteVersionErrors,
         errorResponse: errorEnvelopeSchemas(siteVersionErrors, realtimeSchemas.publicRequestId),
         resources: { reads: [{ type: 'site.registration', idFrom: 'params.siteId' }], changes: [{ type: 'site.lifecycle', idFrom: 'params.siteId' }, { type: 'site.analytics', idFrom: 'params.siteId' }] },
-        lifecycle: { introduced: '5.4.0' },
+        lifecycle: { introduced: '5.6.0' },
         docs: { summary: 'Roll back registered host correction', description: 'Suspends current analytics for the promoted version. The registered host and collected history remain preserved.', tags: ['Sites'], examples: {
           request: { params: { siteId: 's_01' }, body: { version: 1, identity: {
             ...siteVersionExampleIdentity,
