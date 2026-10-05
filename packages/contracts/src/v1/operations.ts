@@ -936,6 +936,7 @@ export function createGscdumpV1Protocol() {
     version: 0,
     revision: 1,
     catalogRevision: 1,
+    dataVersion: 1,
   }
   const siteVersionExamplePreview = {
     _tag: 'eligible',

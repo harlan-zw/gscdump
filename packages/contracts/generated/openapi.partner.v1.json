@@ -22304,6 +22304,11 @@
                               "maximum": 9007199254740991,
                               "type": "integer"
                             },
+                            "dataVersion": {
+                              "maximum": 9007199254740991,
+                              "minimum": 0,
+                              "type": "integer"
+                            },
                             "namespace": {
                               "pattern": "^[a-z][a-z0-9_]*$",
                               "type": "string"
@@ -22358,7 +22363,8 @@
                             "namespace",
                             "version",
                             "revision",
-                            "catalogRevision"
+                            "catalogRevision",
+                            "dataVersion"
                           ],
                           "type": "object"
                         }
@@ -22468,6 +22474,7 @@
               "identity": {
                 "catalogRevision": 1,
                 "catalogSiteId": 17,
+                "dataVersion": 1,
                 "namespace": "gsc",
                 "requestedUrl": "https://example.com/",
                 "revision": 1,
@@ -22559,6 +22566,11 @@
                         "maximum": 9007199254740991,
                         "type": "integer"
                       },
+                      "dataVersion": {
+                        "maximum": 9007199254740991,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
                       "namespace": {
                         "pattern": "^[a-z][a-z0-9_]*$",
                         "type": "string"
@@ -22613,7 +22625,8 @@
                       "namespace",
                       "version",
                       "revision",
-                      "catalogRevision"
+                      "catalogRevision",
+                      "dataVersion"
                     ],
                     "type": "object"
                   },
@@ -23206,6 +23219,7 @@
               "identity": {
                 "catalogRevision": 1,
                 "catalogSiteId": 17,
+                "dataVersion": 1,
                 "namespace": "gsc",
                 "requestedUrl": "https://example.com/",
                 "revision": 1,
@@ -23340,6 +23354,11 @@
                             "maximum": 9007199254740991,
                             "type": "integer"
                           },
+                          "dataVersion": {
+                            "maximum": 9007199254740991,
+                            "minimum": 0,
+                            "type": "integer"
+                          },
                           "namespace": {
                             "pattern": "^[a-z][a-z0-9_]*$",
                             "type": "string"
@@ -23394,7 +23413,8 @@
                           "namespace",
                           "version",
                           "revision",
-                          "catalogRevision"
+                          "catalogRevision",
+                          "dataVersion"
                         ],
                         "type": "object"
                       },
@@ -24061,6 +24081,7 @@
                 "identity": {
                   "catalogRevision": 1,
                   "catalogSiteId": 17,
+                  "dataVersion": 1,
                   "namespace": "gsc",
                   "requestedUrl": "https://example.com/",
                   "revision": 1,
@@ -24256,6 +24277,11 @@
                                   "maximum": 9007199254740991,
                                   "type": "integer"
                                 },
+                                "dataVersion": {
+                                  "maximum": 9007199254740991,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
                                 "namespace": {
                                   "pattern": "^[a-z][a-z0-9_]*$",
                                   "type": "string"
@@ -24310,7 +24336,8 @@
                                 "namespace",
                                 "version",
                                 "revision",
-                                "catalogRevision"
+                                "catalogRevision",
+                                "dataVersion"
                               ],
                               "type": "object"
                             },
@@ -24528,6 +24555,7 @@
               "identity": {
                 "catalogRevision": 1,
                 "catalogSiteId": 17,
+                "dataVersion": 1,
                 "namespace": "gsc",
                 "requestedUrl": "https://example.com/",
                 "revision": 1,
@@ -24630,6 +24658,11 @@
                         "maximum": 9007199254740991,
                         "type": "integer"
                       },
+                      "dataVersion": {
+                        "maximum": 9007199254740991,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
                       "namespace": {
                         "pattern": "^[a-z][a-z0-9_]*$",
                         "type": "string"
@@ -24684,7 +24717,8 @@
                       "namespace",
                       "version",
                       "revision",
-                      "catalogRevision"
+                      "catalogRevision",
+                      "dataVersion"
                     ],
                     "type": "object"
                   },
@@ -25277,6 +25311,7 @@
               "identity": {
                 "catalogRevision": 1,
                 "catalogSiteId": 17,
+                "dataVersion": 1,
                 "namespace": "gsc",
                 "requestedUrl": "https://example.com/",
                 "revision": 1,
@@ -25399,6 +25434,11 @@
                         "maximum": 9007199254740991,
                         "type": "integer"
                       },
+                      "dataVersion": {
+                        "maximum": 9007199254740991,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
                       "namespace": {
                         "pattern": "^[a-z][a-z0-9_]*$",
                         "type": "string"
@@ -25453,7 +25493,8 @@
                       "namespace",
                       "version",
                       "revision",
-                      "catalogRevision"
+                      "catalogRevision",
+                      "dataVersion"
                     ],
                     "type": "object"
                   },
@@ -26046,6 +26087,7 @@
               "identity": {
                 "catalogRevision": 1,
                 "catalogSiteId": 17,
+                "dataVersion": 1,
                 "namespace": "gsc_v1",
                 "requestedUrl": "https://www.example.com/",
                 "revision": 2,
@@ -26168,6 +26210,11 @@
                         "maximum": 9007199254740991,
                         "type": "integer"
                       },
+                      "dataVersion": {
+                        "maximum": 9007199254740991,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
                       "namespace": {
                         "pattern": "^[a-z][a-z0-9_]*$",
                         "type": "string"
@@ -26222,7 +26269,8 @@
                       "namespace",
                       "version",
                       "revision",
-                      "catalogRevision"
+                      "catalogRevision",
+                      "dataVersion"
                     ],
                     "type": "object"
                   },
@@ -26815,6 +26863,7 @@
               "identity": {
                 "catalogRevision": 1,
                 "catalogSiteId": 17,
+                "dataVersion": 1,
                 "namespace": "gsc",
                 "requestedUrl": "https://example.com/",
                 "revision": 1,

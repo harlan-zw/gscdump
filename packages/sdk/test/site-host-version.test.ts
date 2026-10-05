@@ -14,6 +14,7 @@ it('admits ongoing verified coverage without broadening a correction plan', () =
     version: 1,
     revision: 1,
     catalogRevision: 1,
+    dataVersion: 1,
   }
   const window = { startDate: '2026-07-01', endDate: '2026-10-02' }
   expect(siteVersionIdentityResponseSchema.safeParse({ identity, coverage: { _tag: 'verified', window } }).success)
@@ -41,6 +42,7 @@ it('previews exact-host correction through the partner protocol without writing'
     version: 0,
     revision: 1,
     catalogRevision: 1,
+    dataVersion: 1,
   }
   const result = {
     _tag: 'eligible',
@@ -78,3 +80,31 @@ it.each(['https://www.example.test/path', 'https://www.example.test/#scope', 'ft
     expect(fetch).not.toHaveBeenCalled()
   },
 )
+
+it('preserves the data cache clock independently of the registered binding', async () => {
+  const identity = {
+    siteId: 's_fixture',
+    userId: 'u_fixture',
+    teamId: 't_fixture',
+    requestedUrl: 'https://www.example.test/',
+    catalogSiteId: 17,
+    warehouse: 'fixture_catalog',
+    namespace: 'gsc_v1',
+    version: 1,
+    revision: 3,
+    catalogRevision: 4,
+    dataVersion: 7,
+  }
+  const fetch = vi.fn<typeof globalThis.fetch>(async () => new Response(JSON.stringify({
+    data: { identity, coverage: { _tag: 'verified', window: { startDate: '2026-09-05', endDate: '2026-10-02' } } },
+    meta: { requestId: 'req_fixture', surface: 'partner', version: '1.0' },
+  }), { headers: { 'content-type': 'application/json' } }))
+  const client = createGscdumpV1Client({ credential: 'fixture_partner_key', fetch })
+  await expect(client.execute('partner.sites.registered_host.identity.get', { params: { siteId: 's_fixture' } }))
+    .resolves
+    .toMatchObject({ data: { identity: { version: 1, revision: 3, catalogRevision: 4, dataVersion: 7 } } })
+  identity.dataVersion = 8
+  await expect(client.execute('partner.sites.registered_host.identity.get', { params: { siteId: 's_fixture' } }))
+    .resolves
+    .toMatchObject({ data: { identity: { version: 1, revision: 3, catalogRevision: 4, dataVersion: 8 } } })
+})

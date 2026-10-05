@@ -19,6 +19,7 @@ export const siteVersionIdentitySchema = z.strictObject({
   version: z.number().int().nonnegative(),
   revision: z.number().int().nonnegative(),
   catalogRevision: z.number().int().nonnegative(),
+  dataVersion: z.number().int().nonnegative(),
 })
 
 export const siteVersionWindowSchema = z.strictObject({
