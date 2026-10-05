@@ -33,6 +33,7 @@ export type {
 } from './catalog'
 export {
   assertIcebergTable,
+  gscDataset,
   ICEBERG_FIELD_ID_BASE,
   ICEBERG_PARTITION_COLUMNS,
   ICEBERG_PARTITION_SPEC,

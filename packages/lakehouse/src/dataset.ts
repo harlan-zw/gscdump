@@ -254,6 +254,10 @@ export interface IcebergDataset {
   icebergPartitionSpec: () => IcebergPartitionSpec
   icebergSortOrder: () => IcebergSortOrder | undefined
   createTable: (conn: IcebergConnection) => Promise<IcebergTableOpResult[]>
+  /** Inspect current metadata without caches before admitting a provisioned table. */
+  verifyTable: (conn: IcebergConnection) => Promise<
+    { _tag: 'Ok' } | { _tag: 'Err', reason: 'schema-mismatch' | 'partition-mismatch' }
+  >
   /**
    * One-shot append over an EXISTING connection: identity INT32 guard, dedupe
    * by identity+dims+naturalKey (last-wins), cluster pre-sort (if
@@ -397,6 +401,13 @@ export function defineIcebergDataset(def: IcebergDatasetDef): IcebergDataset {
     return createDatasetTable(conn, def.table, schema, partitionSpecIcebird, sortOrder)
   }
 
+  async function verifyTable(conn: IcebergConnection): Promise<
+    { _tag: 'Ok' } | { _tag: 'Err', reason: 'schema-mismatch' | 'partition-mismatch' }
+  > {
+    const { verifyDatasetTable } = await import('./dataset-runtime')
+    return verifyDatasetTable(conn, def.table, schema, partitionSpecIcebird)
+  }
+
   function process(rows: readonly Record<string, unknown>[]): { records: Record<string, unknown>[], skipped: number } {
     const guarded: Record<string, unknown>[] = []
     let skipped = 0
@@ -515,6 +526,7 @@ export function defineIcebergDataset(def: IcebergDatasetDef): IcebergDataset {
     icebergPartitionSpec: () => partitionSpecIcebird,
     icebergSortOrder: () => sortOrder,
     createTable,
+    verifyTable,
     appendRows,
     appendBatches,
     prepareRows: process,

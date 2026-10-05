@@ -134,6 +134,7 @@
   createIcebergAppendSink: function
   createIcebergTables: function
   dropIcebergTables: function
+  gscDataset: function
   ICEBERG_FIELD_ID_BASE: number
   ICEBERG_PARTITION_COLUMNS: object
   ICEBERG_PARTITION_SPEC: object
