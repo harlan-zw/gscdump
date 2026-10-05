@@ -51,6 +51,12 @@ const sitemapsListSpy = vi.fn()
 const inspectSpy = vi.fn()
 const loadSitemapUrlsSpy = vi.fn()
 
+// These workflows exercise the local Store and mocked Google boundary.
+vi.mock('../../src/auth-state', async importOriginal => ({
+  ...await importOriginal<typeof import('../../src/auth-state')>(),
+  resolveAuthentication: vi.fn(async () => ({ _tag: 'Local' as const })),
+}))
+
 vi.mock('../../src/sitemap', () => ({
   loadSitemapUrls: (...args: unknown[]) => loadSitemapUrlsSpy(...args),
 }))

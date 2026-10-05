@@ -14,6 +14,7 @@ interface HttpV1RouteDefinition {
 export const GSCDUMP_V1_ROUTE_CATALOG = {
   surfaces: GSCDUMP_V1_ROUTE_SURFACES,
   operations: {
+    'partner.sites.analytics.coverage.get': { surface: 'partner', method: 'GET', template: '/sites/{siteId}/analytics/coverage' },
     'partner.users.lifecycle.get': { surface: 'partner', method: 'GET', template: '/users/{userId}/lifecycle' },
     'partner.users.entitlements.get': { surface: 'partner', method: 'GET', template: '/users/{userId}/entitlements' },
     'partner.users.sites.available.list': { surface: 'partner', method: 'GET', template: '/users/{userId}/available-sites' },

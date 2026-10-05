@@ -12,6 +12,12 @@ import { logger } from '../../src/utils'
 
 const state = vi.hoisted(() => ({ store: undefined as LocalStore | undefined }))
 
+// These workflows exercise the local Store and mocked Google boundary.
+vi.mock('../../src/auth-state', async importOriginal => ({
+  ...await importOriginal<typeof import('../../src/auth-state')>(),
+  resolveAuthentication: vi.fn(async () => ({ _tag: 'Local' as const })),
+}))
+
 vi.mock('../../src/config', () => ({
   loadConfig: vi.fn(async () => ({})),
 }))
