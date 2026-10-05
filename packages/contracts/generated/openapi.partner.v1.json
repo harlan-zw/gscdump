@@ -22892,7 +22892,7 @@
           }
         },
         "x-gscdump-lifecycle": {
-          "introduced": "5.4.0"
+          "introduced": "5.6.0"
         },
         "x-gscdump-ownership": [
           {
@@ -23659,7 +23659,7 @@
           }
         },
         "x-gscdump-lifecycle": {
-          "introduced": "5.4.0"
+          "introduced": "5.6.0"
         },
         "x-gscdump-ownership": [
           {
@@ -24532,7 +24532,7 @@
           }
         },
         "x-gscdump-lifecycle": {
-          "introduced": "5.4.0"
+          "introduced": "5.6.0"
         },
         "x-gscdump-ownership": [
           {
@@ -24984,7 +24984,7 @@
           }
         },
         "x-gscdump-lifecycle": {
-          "introduced": "5.4.0"
+          "introduced": "5.6.0"
         },
         "x-gscdump-ownership": [
           {
@@ -25751,7 +25751,7 @@
           }
         },
         "x-gscdump-lifecycle": {
-          "introduced": "5.4.0"
+          "introduced": "5.6.0"
         },
         "x-gscdump-ownership": [
           {
@@ -26527,7 +26527,7 @@
           }
         },
         "x-gscdump-lifecycle": {
-          "introduced": "5.4.0"
+          "introduced": "5.6.0"
         },
         "x-gscdump-ownership": [
           {
@@ -27303,7 +27303,7 @@
           }
         },
         "x-gscdump-lifecycle": {
-          "introduced": "5.4.0"
+          "introduced": "5.6.0"
         },
         "x-gscdump-ownership": [
           {

@@ -1049,7 +1049,7 @@ export async function resolveIcebergAppendFiles(
 }
 
 /** A fresh table view and immutable manifest cache owned by one bounded request. */
-export async function createIcebergAppendFileResolver(conn: IcebergConnection, table: string): Promise<
+export async function createIcebergAppendFileResolver(conn: IcebergConnection, table: string, dateColumn?: string): Promise<
   ((appendId: string, matches: readonly PartitionValueMatch[]) => ReturnType<typeof resolveIcebergAppendFiles>) & {
     currentFiles: (matches: readonly PartitionValueMatch[]) =>
       { _tag: 'Ok', files: IcebergListedDataFile[] } | { _tag: 'Err', reason: 'append-unavailable' }
@@ -1057,6 +1057,7 @@ export async function createIcebergAppendFileResolver(conn: IcebergConnection, t
   }
 > {
   const { metadata, metadataLocation } = await restCatalogLoadTable(conn.catalog, { namespace: conn.namespace, table })
+  const dateFieldId = dateColumnFieldId(metadata, dateColumn)
   const manifestCache: ManifestReadCache = { lists: new Map(), entries: new Map() }
   const immutableBytes = new Map<string, Promise<ArrayBuffer>>()
   const resolver = {
@@ -1125,7 +1126,7 @@ export async function createIcebergAppendFileResolver(conn: IcebergConnection, t
         for (const entry of manifest.entries) {
           if (entry.status !== 2 && entry.data_file.content !== 0)
             return { _tag: 'Err' as const, reason: 'append-unavailable' as const }
-          const file = toListedFile(entry, matches, undefined, new Set(), null)
+          const file = toListedFile(entry, matches, undefined, new Set(), dateFieldId)
           if (file)
             files.push(file)
         }

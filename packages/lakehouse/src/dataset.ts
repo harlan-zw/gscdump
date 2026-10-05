@@ -520,7 +520,10 @@ export function defineIcebergDataset(def: IcebergDatasetDef): IcebergDataset {
 
   async function createAppendFileResolver(conn: IcebergConnection): ReturnType<IcebergDataset['createAppendFileResolver']> {
     const { createDatasetAppendFileResolver } = await import('./dataset-runtime')
-    const resolve = await createDatasetAppendFileResolver(conn, def.table)
+    const dates = def.columns.filter(column => column.type === 'DATE')
+    const dateColumn = def.partition.find(field => field.transform === 'month')?.sourceColumn
+      ?? (dates.length === 1 ? dates[0]?.name : undefined)
+    const resolve = await createDatasetAppendFileResolver(conn, def.table, dateColumn)
     return Object.assign(
       (appendId: string, identity: string | number, dims?: Record<string, string>) => resolve(appendId, readerPredicate(identity, dims)),
       {
