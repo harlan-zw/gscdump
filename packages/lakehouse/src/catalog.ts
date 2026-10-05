@@ -1044,30 +1044,88 @@ export async function resolveIcebergAppendFiles(
   appendId: string,
   matches: readonly PartitionValueMatch[],
 ): Promise<{ _tag: 'Ok', snapshotId: string, files: IcebergListedDataFile[] } | { _tag: 'Err', reason: 'append-unavailable' }> {
+  const resolve = await createIcebergAppendFileResolver(conn, table)
+  return resolve(appendId, matches)
+}
+
+/** A fresh table view and immutable manifest cache owned by one bounded request. */
+export async function createIcebergAppendFileResolver(conn: IcebergConnection, table: string): Promise<
+  ((appendId: string, matches: readonly PartitionValueMatch[]) => ReturnType<typeof resolveIcebergAppendFiles>) & {
+    currentFiles: (matches: readonly PartitionValueMatch[]) =>
+      { _tag: 'Ok', files: IcebergListedDataFile[] } | { _tag: 'Err', reason: 'append-unavailable' }
+  }
+> {
   const { metadata } = await restCatalogLoadTable(conn.catalog, { namespace: conn.namespace, table })
-  const snapshots = metadata.snapshots?.filter(snapshot =>
-    (snapshot.summary as Record<string, string> | undefined)?.[APPEND_ID_SUMMARY_KEY] === appendId) ?? []
-  if (!appendId || snapshots.length !== 1)
-    return { _tag: 'Err', reason: 'append-unavailable' }
-  if (snapshots[0].summary?.operation !== 'append')
-    return { _tag: 'Err', reason: 'append-unavailable' }
-  const snapshotId = snapshots[0]['snapshot-id']
-  const manifests: WalkedManifest[] = await icebergManifests({ metadata, resolver: conn.resolver, snapshotId })
-  const files: IcebergListedDataFile[] = []
-  for (const manifest of manifests) {
+  const manifestCache: ManifestReadCache = { lists: new Map(), entries: new Map() }
+  const immutableBytes = new Map<string, Promise<ArrayBuffer>>()
+  const resolver = {
+    ...conn.resolver,
+    reader: async (url: string) => {
+      let bytes = immutableBytes.get(url)
+      if (!bytes) {
+        bytes = Promise.resolve(conn.resolver.reader(url)).then(buffer => buffer.slice(0, buffer.byteLength))
+        immutableBytes.set(url, bytes)
+      }
+      const buffer = await bytes
+      return { byteLength: buffer.byteLength, slice: async (start: number, end: number) => buffer.slice(start, end) }
+    },
+  }
+  const current: WalkedManifest[] = metadata['current-snapshot-id'] == null
+    ? []
+    : await icebergManifests({ metadata, resolver, manifestCache })
+  const currentFiles = new Map<string, ManifestWalkEntry['data_file']>()
+  for (const manifest of current) {
     for (const entry of manifest.entries) {
-      if (entry.status === 2 || entry.data_file.content !== 0)
-        return { _tag: 'Err', reason: 'append-unavailable' }
-      if (entry.status !== 1 || entry.snapshot_id == null || String(entry.snapshot_id) !== String(snapshotId))
-        continue
-      const file = toListedFile(entry, matches, undefined, new Set(), null)
-      if (file)
-        files.push(file)
+      if (entry.status !== 2 && entry.data_file.content === 0)
+        currentFiles.set(entry.data_file.file_path, entry.data_file)
     }
   }
-  if (files.length === 0)
-    return { _tag: 'Err', reason: 'append-unavailable' }
-  return { _tag: 'Ok', snapshotId: String(snapshotId), files }
+  const resolve = async (appendId: string, matches: readonly PartitionValueMatch[]): Promise<
+    { _tag: 'Ok', snapshotId: string, files: IcebergListedDataFile[] } | { _tag: 'Err', reason: 'append-unavailable' }
+  > => {
+    const snapshots = metadata.snapshots?.filter(snapshot =>
+      (snapshot.summary as Record<string, string> | undefined)?.[APPEND_ID_SUMMARY_KEY] === appendId) ?? []
+    if (!appendId || snapshots.length !== 1)
+      return { _tag: 'Err', reason: 'append-unavailable' }
+    if (snapshots[0].summary?.operation !== 'append')
+      return { _tag: 'Err', reason: 'append-unavailable' }
+    const snapshotId = snapshots[0]['snapshot-id']
+    const manifests: WalkedManifest[] = await icebergManifests({ metadata, resolver, snapshotId, manifestCache })
+    const files: IcebergListedDataFile[] = []
+    for (const manifest of manifests) {
+      for (const entry of manifest.entries) {
+        if (entry.status === 2 || entry.data_file.content !== 0)
+          return { _tag: 'Err', reason: 'append-unavailable' }
+        if (entry.status !== 1 || entry.snapshot_id == null || String(entry.snapshot_id) !== String(snapshotId))
+          continue
+        const file = toListedFile(entry, matches, undefined, new Set(), null)
+        if (file) {
+          const member = currentFiles.get(file.filePath)
+          if (!member || Number(member.record_count) !== file.rowCount || Number(member.file_size_in_bytes) !== file.bytes)
+            return { _tag: 'Err', reason: 'append-unavailable' }
+          files.push(file)
+        }
+      }
+    }
+    if (files.length === 0)
+      return { _tag: 'Err', reason: 'append-unavailable' }
+    return { _tag: 'Ok', snapshotId: String(snapshotId), files }
+  }
+  return Object.assign(resolve, {
+    currentFiles: (matches: readonly PartitionValueMatch[]) => {
+      const files: IcebergListedDataFile[] = []
+      for (const manifest of current) {
+        for (const entry of manifest.entries) {
+          if (entry.status !== 2 && entry.data_file.content !== 0)
+            return { _tag: 'Err' as const, reason: 'append-unavailable' as const }
+          const file = toListedFile(entry, matches, undefined, new Set(), null)
+          if (file)
+            files.push(file)
+        }
+      }
+      return { _tag: 'Ok' as const, files }
+    },
+  })
 }
 
 /** One manifest's walked result — `icebergManifests`'s return element. */

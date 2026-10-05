@@ -26,6 +26,7 @@ import {
 } from './catalog'
 
 export { resolveIcebergAppendFiles as resolveDatasetAppendFiles } from './catalog'
+export { createIcebergAppendFileResolver as createDatasetAppendFileResolver } from './catalog'
 
 interface PreparedRows {
   records: Record<string, unknown>[]

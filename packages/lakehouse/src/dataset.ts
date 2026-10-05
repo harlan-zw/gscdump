@@ -277,6 +277,13 @@ export interface IcebergDataset {
   resolveAppendFiles: (conn: IcebergConnection, appendId: string, identity: string | number, dims?: Record<string, string>) => Promise<
     { _tag: 'Ok', snapshotId: string, files: IcebergListedDataFile[] } | { _tag: 'Err', reason: 'append-unavailable' }
   >
+  /** Create once per request. The next request must create a fresh resolver. */
+  createAppendFileResolver: (conn: IcebergConnection) => Promise<
+    ((appendId: string, identity: string | number, dims?: Record<string, string>) => ReturnType<IcebergDataset['resolveAppendFiles']>) & {
+      currentFiles: (identity: string | number, dims?: Record<string, string>) =>
+        { _tag: 'Ok', files: IcebergListedDataFile[] } | { _tag: 'Err', reason: 'append-unavailable' }
+    }
+  >
   /**
    * PURE row processing — the identity INT32 guard, dedupe (identity+dims+
    * naturalKey, last-wins) and cluster pre-sort `appendRows`/`appendSink`
@@ -510,6 +517,15 @@ export function defineIcebergDataset(def: IcebergDatasetDef): IcebergDataset {
     return resolveDatasetAppendFiles(conn, def.table, appendId, readerPredicate(identity, dims))
   }
 
+  async function createAppendFileResolver(conn: IcebergConnection): ReturnType<IcebergDataset['createAppendFileResolver']> {
+    const { createDatasetAppendFileResolver } = await import('./dataset-runtime')
+    const resolve = await createDatasetAppendFileResolver(conn, def.table)
+    return Object.assign(
+      (appendId: string, identity: string | number, dims?: Record<string, string>) => resolve(appendId, readerPredicate(identity, dims)),
+      { currentFiles: (identity: string | number, dims?: Record<string, string>) => resolve.currentFiles(readerPredicate(identity, dims)) },
+    )
+  }
+
   async function resolveDataFiles(
     conn: IcebergConnection,
     identity: string | number,
@@ -541,6 +557,7 @@ export function defineIcebergDataset(def: IcebergDatasetDef): IcebergDataset {
     appendRows,
     appendBatches,
     resolveAppendFiles,
+    createAppendFileResolver,
     prepareRows: process,
     appendSink,
     readerPredicate,

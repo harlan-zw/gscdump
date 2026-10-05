@@ -101,3 +101,55 @@ it('refuses missing or ambiguous commit membership and propagates catalog failur
   }))
   await expect(dataset.resolveAppendFiles(conn, 'wave-first', 17)).rejects.toThrow('Catalog unavailable')
 })
+
+it('refuses a retained historical append after current replacement', async () => {
+  const { conn, metadata } = fixture()
+  await dataset.appendBatches(conn, () => [[{ site_id: 17, url: '/old' }]], { appendId: 'old' })
+  const historical = [...metadata.snapshots]
+  metadata.snapshots = []
+  delete metadata['current-snapshot-id']
+  await dataset.appendBatches(conn, () => [[{ site_id: 17, url: '/new' }]], { appendId: 'new' })
+  metadata.snapshots.unshift(...historical)
+  expect(await dataset.resolveAppendFiles(conn, 'old', 17)).toEqual({ _tag: 'Err', reason: 'append-unavailable' })
+})
+
+it('bounds a request resolver and refreshes metadata in the next request', async () => {
+  const { conn, metadata } = fixture()
+  for (let day = 0; day < 56; day++)
+    await dataset.appendBatches(conn, () => [[{ site_id: 17, url: `/day-${day}` }]], { appendId: `day-${day}` })
+  const fetcher = vi.mocked(globalThis.fetch)
+  fetcher.mockClear()
+  let reads = 0
+  const reader = conn.resolver.reader
+  conn.resolver.reader = async (...args) => {
+    reads++
+    return reader(...args)
+  }
+  const resolve = await dataset.createAppendFileResolver(conn)
+  for (let day = 0; day < 56; day++)
+    expect(await resolve(`day-${day}`, 17)).toMatchObject({ _tag: 'Ok' })
+  expect(fetcher).toHaveBeenCalledTimes(1)
+  expect(reads).toBeLessThan(200)
+  const historical = [...metadata.snapshots]
+  metadata.snapshots = []
+  delete metadata['current-snapshot-id']
+  await dataset.appendBatches(conn, () => [[{ site_id: 17, url: '/replacement' }]], { appendId: 'replacement' })
+  metadata.snapshots.unshift(...historical)
+  const next = await dataset.createAppendFileResolver(conn)
+  expect(await next('day-0', 17)).toEqual({ _tag: 'Err', reason: 'append-unavailable' })
+})
+
+it('exposes unknown current files without attributing them to the selected append', async () => {
+  const { conn } = fixture()
+  await dataset.appendBatches(conn, () => [[{ site_id: 17, url: '/selected' }]], { appendId: 'selected' })
+  await dataset.appendBatches(conn, () => [[{ site_id: 17, url: '/unrecorded' }]], { appendId: 'unrecorded' })
+  const resolve = await dataset.createAppendFileResolver(conn)
+  const selected = await resolve('selected', 17)
+  const current = resolve.currentFiles(17)
+  expect(selected).toMatchObject({ _tag: 'Ok', files: [{ rowCount: 1 }] })
+  expect(current).toMatchObject({ _tag: 'Ok' })
+  if (selected._tag === 'Ok' && current._tag === 'Ok') {
+    expect(current.files).toHaveLength(2)
+    expect(current.files.filter(file => !selected.files.some(known => known.objectKey === file.objectKey))).toHaveLength(1)
+  }
+})
