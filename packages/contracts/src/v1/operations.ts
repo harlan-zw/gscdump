@@ -62,6 +62,7 @@ import {
   teamCatalogRefSchema,
   updatePartnerUserTokensSchema,
 } from '../schemas'
+import { analyticsCoverageQueryV1Schema, analyticsCoverageV1Schemas } from './analytics-coverage'
 import { bingConnectionV1Schemas } from './bing'
 import { bingDataQueryV1Schema, bingDataV1Schemas } from './bing-data'
 import {
@@ -1181,6 +1182,39 @@ export function createGscdumpV1Protocol() {
           examples: {
             request: { params: { userId: 'u_01' }, body: { accessToken: 'token', refreshToken: 'refresh' } },
             response: { data: { userId: 'u_01', updated: true, sites: [] }, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } },
+          },
+        },
+      }),
+      getSiteAnalyticsCoverage: defineHttpOperation({
+        ...gscdumpV1OperationRoute('partner.sites.analytics.coverage.get'),
+        visibility: 'public',
+        semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
+        auth: {
+          credentials: ['user_key', 'partner_key'],
+          scopes: ['analytics:read'],
+          ownership: [
+            { credential: 'user_key', rule: 'authorized_site' },
+            { credential: 'partner_key', rule: 'authorized_site' },
+          ],
+        },
+        request: {
+          params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }),
+          query: analyticsCoverageQueryV1Schema,
+          headers: requestHeaders,
+          body: null,
+        },
+        responses: { 200: defineSuccessResponse(analyticsCoverageV1Schemas, partnerResponseMeta) },
+        errors: partnerSiteErrors,
+        errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [{ type: 'site.analytics', idFrom: 'params.siteId' }], changes: [] },
+        lifecycle: { introduced: '5.5.0' },
+        docs: {
+          summary: 'Get recorded analytics coverage',
+          description: 'Checks continuous recorded coverage for the current and comparison windows. Successful zero-row days count. Missing days prevent completeness.',
+          tags: ['Analytics'],
+          examples: {
+            request: { params: { siteId: 's_01' }, query: { startDate: '2026-10-01', endDate: '2026-10-02', searchType: 'web' } },
+            response: { data: { searchType: 'web', current: { startDate: '2026-10-01', endDate: '2026-10-02', complete: true }, comparison: null }, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } },
           },
         },
       }),
