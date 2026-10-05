@@ -10,7 +10,7 @@
 // everything else, including `includeTotal`/`compareRange` breakdowns → R2 SQL).
 
 export type { ArchetypeSqlPlan, BuildArchetypeSqlOptions } from './archetype-sql'
-export { buildArchetypeSql, TABLE_PLACEHOLDER } from './archetype-sql'
+export { buildArchetypeSql, COMPARISON_TABLE_PLACEHOLDER, TABLE_PLACEHOLDER } from './archetype-sql'
 
 export type {
   ServerTailDispatcher,

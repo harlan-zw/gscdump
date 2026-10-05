@@ -12,10 +12,11 @@ import type {
 } from '@gscdump/contracts/archetypes'
 
 export const TABLE_PLACEHOLDER = '{{TABLE}}'
+export const COMPARISON_TABLE_PLACEHOLDER = '{{TABLE_PREVIOUS}}'
 const FACT_ALIAS = 'fact'
 
-function factTableRef(): string {
-  return `${TABLE_PLACEHOLDER} AS ${FACT_ALIAS}`
+function factTableRef(placeholder = TABLE_PLACEHOLDER): string {
+  return `${placeholder} AS ${FACT_ALIAS}`
 }
 
 export type ArchetypeFactTable = 'pages' | 'queries' | 'countries' | 'page_queries' | 'dates'
@@ -30,6 +31,8 @@ export type PartitionPredicateMode = 'bare' | 'r2-sql-concat'
 export type PartitionKeyEncoding = 'int' | 'string'
 
 export interface BuildArchetypeSqlOptions {
+  /** Resolve comparison files independently from the current window. */
+  separateComparisonTable?: boolean
   /**
    * Set by the DuckDB file-list executor, which reads raw Iceberg parquet
    * directly via `read_parquet([...])`, bypassing the catalog metadata layer
@@ -318,7 +321,8 @@ function buildEntityDailySparkline(q: EntityDailySparklineQuery, pruned: boolean
   }
 }
 
-function buildTopNBreakdown(q: TopNBreakdownQuery, pruned: boolean, mode: PartitionPredicateMode): ArchetypeSqlPlan {
+function buildTopNBreakdown(q: TopNBreakdownQuery, pruned: boolean, mode: PartitionPredicateMode, separateComparisonTable = false): ArchetypeSqlPlan {
+  const previousTable = separateComparisonTable ? COMPARISON_TABLE_PLACEHOLDER : TABLE_PLACEHOLDER
   const table = tableForTopNBreakdown(q)
   const w = partitionWhere(q, pruned, mode)
   // `orderBy` is mandatory for this archetype; a missing/malformed one would
@@ -350,10 +354,10 @@ function buildTopNBreakdown(q: TopNBreakdownQuery, pruned: boolean, mode: Partit
   if (q.dimension === 'device') {
     if (q.compareRange) {
       const wPrev = partitionWhere({ ...q, range: q.compareRange }, pruned, mode)
-      const deviceSelects = (clause: string, ml: readonly Metric[]): string => DEVICE_SUFFIXES.map((suffix) => {
+      const deviceSelects = (clause: string, ml: readonly Metric[], placeholder = TABLE_PLACEHOLDER): string => DEVICE_SUFFIXES.map((suffix) => {
         const source = deviceSource(suffix)
         const metrics = ml.map(m => metricExprForSource(m, source)).join(', ')
-        return `SELECT '${suffix.toUpperCase()}' AS device, ${metrics} FROM ${factTableRef()} WHERE ${clause}`
+        return `SELECT '${suffix.toUpperCase()}' AS device, ${metrics} FROM ${factTableRef(placeholder)} WHERE ${clause}`
       }).join(' UNION ALL ')
       const curCols = metricList.map(m => coalesceMetric(m, 'c', m)).join(', ')
       const prevCols = STD_METRICS.map(m => coalesceMetric(m, 'p', prevAlias(m))).join(', ')
@@ -362,7 +366,7 @@ function buildTopNBreakdown(q: TopNBreakdownQuery, pruned: boolean, mode: Partit
       // `c.clicks` — see `order`/derived-table note above (R2 SQL 40004).
       const inner = `SELECT COALESCE(c.device, p.device) AS device, ${curCols}, ${prevCols} `
         + `FROM cur c FULL OUTER JOIN prev p ON c.device = p.device`
-      const sql = `WITH cur AS (${deviceSelects(w.clause, metricList)}), prev AS (${deviceSelects(wPrev.clause, STD_METRICS)}) `
+      const sql = `WITH cur AS (${deviceSelects(w.clause, metricList)}), prev AS (${deviceSelects(wPrev.clause, STD_METRICS, previousTable)}) `
         + `SELECT * FROM (${inner}) t ORDER BY ${order} ${limit}${offset}`
       return {
         table,
@@ -400,7 +404,7 @@ function buildTopNBreakdown(q: TopNBreakdownQuery, pruned: boolean, mode: Partit
     const inner = `SELECT COALESCE(c.k, p.k) AS ${q.dimension}, ${curCols}, ${prevCols}${variantOut}${totalCol} `
       + `FROM cur c FULL OUTER JOIN prev p ON c.k = p.k ${moverWhere}`
     const sql = `WITH cur AS (SELECT ${col} AS k, ${curMetrics}${variantSel} FROM ${factTableRef()} WHERE ${w.clause}${facet.sql} GROUP BY ${col}), `
-      + `prev AS (SELECT ${col} AS k, ${prevMetrics} FROM ${factTableRef()} WHERE ${wPrev.clause}${facet.sql} GROUP BY ${col}) `
+      + `prev AS (SELECT ${col} AS k, ${prevMetrics} FROM ${factTableRef(previousTable)} WHERE ${wPrev.clause}${facet.sql} GROUP BY ${col}) `
       + `SELECT * FROM (${inner}) t ORDER BY ${outerOrder} ${limit}${offset}`
     return { table, params: [...w.params, ...facet.params, ...wPrev.params, ...facet.params], sql }
   }
@@ -494,7 +498,7 @@ export function buildArchetypeSql(query: ArchetypeQuery, opts: BuildArchetypeSql
     case 'entity-daily-sparkline':
       return buildEntityDailySparkline(query, pruned, mode)
     case 'top-n-breakdown':
-      return buildTopNBreakdown(query, pruned, mode)
+      return buildTopNBreakdown(query, pruned, mode, opts.separateComparisonTable)
     case 'single-row-lookup':
       return buildSingleRowLookup(query, pruned, mode)
     case 'multi-series-stacked-daily':

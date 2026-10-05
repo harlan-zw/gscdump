@@ -3,6 +3,7 @@
   getHostedR2QueryKey: function
 ./server-tail:
   buildArchetypeSql: function
+  COMPARISON_TABLE_PLACEHOLDER: string
   createDuckDbIcebergExecutor: function
   createR2SqlClient: function
   createR2SqlTransport: function

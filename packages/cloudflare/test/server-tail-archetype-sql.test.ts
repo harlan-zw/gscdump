@@ -6,6 +6,8 @@ import type {
   TopNBreakdownQuery,
   TwoDimensionDetailQuery,
 } from '@gscdump/contracts/archetypes'
+import { createNodeDuckDBHandle, resetNodeDuckDB } from '@gscdump/engine/node'
+import { bindLiterals } from '@gscdump/engine/sql'
 import { describe, expect, it } from 'vitest'
 import { buildArchetypeSql, TABLE_PLACEHOLDER } from '../src/server-tail/archetype-sql'
 
@@ -472,4 +474,26 @@ describe('buildArchetypeSql', () => {
       expect(orderBySegment(plan.sql)).not.toMatch(/\b[cp]\.\w+/)
     })
   })
+})
+
+it('keeps current and previous comparison relations independently bindable', async () => {
+  const db = createNodeDuckDBHandle()
+  const query: TopNBreakdownQuery = {
+    ...base,
+    archetype: 'top-n-breakdown',
+    dimension: 'query',
+    metrics: ['clicks'],
+    compareRange: { start: '2025-01-01', end: '2025-03-31' },
+    orderBy: { metric: 'clicks', dir: 'desc' },
+    limit: 10,
+  }
+  const plan = buildArchetypeSql(query, { partitionPruned: true, separateComparisonTable: true })
+  const current = `(SELECT 'term' AS query, DATE '2026-01-01' AS date, 7 AS clicks, 70 AS impressions, 140 AS sum_position)`
+  const previous = `(SELECT 'term' AS query, DATE '2025-01-01' AS date, 3 AS clicks, 30 AS impressions, 60 AS sum_position)`
+  const sql = bindLiterals(plan.sql, plan.params)
+    .replaceAll('{{TABLE}}', current)
+    .replaceAll('{{TABLE_PREVIOUS}}', previous)
+  const rows = await db.query(sql)
+  expect(rows).toMatchObject([{ query: 'term', clicks: 7, prevClicks: 3 }])
+  await resetNodeDuckDB()
 })
