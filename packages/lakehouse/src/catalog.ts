@@ -351,6 +351,17 @@ function isNamespaceAlreadyExistsError(err: unknown): boolean {
   return msg.includes('already exists') || msg.includes('409') || msg.includes('conflict')
 }
 
+/** An existing namespace cannot prove this caller created or owns its contents. */
+export async function createIcebergNamespace(conn: IcebergConnection): Promise<{ _tag: 'Created' } | { _tag: 'Exists' }> {
+  return restCatalogCreateNamespace(conn.catalog, { namespace: conn.namespace })
+    .then(() => ({ _tag: 'Created' } as const))
+    .catch((error: unknown) => {
+      if (error && typeof error === 'object' && 'status' in error && error.status === 409)
+        return { _tag: 'Exists' } as const
+      throw error
+    })
+}
+
 /**
  * Ensure the catalog namespace exists. Idempotent — an "already exists"
  * response from the REST catalog is swallowed.

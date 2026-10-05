@@ -6,6 +6,7 @@
   catalogCacheScope: function
   coerceBigIntToNumber: function
   connectIcebergCatalog: function
+  createIcebergNamespace: function
   DEFAULT_PARTITION_KEY_ENCODING: string
   defineIcebergDataset: function
   deriveTableSpec: function
