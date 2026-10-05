@@ -14,6 +14,13 @@ interface HttpV1RouteDefinition {
 export const GSCDUMP_V1_ROUTE_CATALOG = {
   surfaces: GSCDUMP_V1_ROUTE_SURFACES,
   operations: {
+    'partner.sites.registered_host.identity.get': { surface: 'partner', method: 'GET', template: '/sites/{siteId}/registered-host' },
+    'partner.sites.registered_host.preview': { surface: 'partner', method: 'POST', template: '/sites/{siteId}/registered-host/preview' },
+    'partner.sites.registered_host.begin': { surface: 'partner', method: 'POST', template: '/sites/{siteId}/registered-host/begin' },
+    'partner.sites.registered_host.verify': { surface: 'partner', method: 'POST', template: '/sites/{siteId}/registered-host/verify' },
+    'partner.sites.registered_host.promote': { surface: 'partner', method: 'POST', template: '/sites/{siteId}/registered-host/promote' },
+    'partner.sites.registered_host.abort': { surface: 'partner', method: 'POST', template: '/sites/{siteId}/registered-host/abort' },
+    'partner.sites.registered_host.rollback': { surface: 'partner', method: 'POST', template: '/sites/{siteId}/registered-host/rollback' },
     'partner.users.lifecycle.get': { surface: 'partner', method: 'GET', template: '/users/{userId}/lifecycle' },
     'partner.users.entitlements.get': { surface: 'partner', method: 'GET', template: '/users/{userId}/entitlements' },
     'partner.users.sites.available.list': { surface: 'partner', method: 'GET', template: '/users/{userId}/available-sites' },

@@ -62,6 +62,14 @@ import {
   teamCatalogRefSchema,
   updatePartnerUserTokensSchema,
 } from '../schemas'
+import {
+  siteVersionBeginRequestSchema,
+  siteVersionCandidateRequestSchema,
+  siteVersionCandidateSchema,
+  siteVersionIdentityResponseSchema,
+  siteVersionPreviewRequestSchema,
+  siteVersionPreviewSchema,
+} from '../site-version'
 import { bingConnectionV1Schemas } from './bing'
 import { bingDataQueryV1Schema, bingDataV1Schemas } from './bing-data'
 import {
@@ -904,6 +912,48 @@ export function createGscdumpV1Protocol() {
     'internal_error',
     'contract_violation',
   ] as const
+  const siteVersionErrors = [...partnerSiteErrors, 'conflict', 'service_unavailable'] as const
+  const siteVersionIdentityResponse = defineSuccessResponse(
+    { producer: siteVersionIdentityResponseSchema, client: siteVersionIdentityResponseSchema },
+    partnerResponseMeta,
+  )
+  const siteVersionPreviewResponse = defineSuccessResponse(
+    { producer: siteVersionPreviewSchema, client: siteVersionPreviewSchema },
+    partnerResponseMeta,
+  )
+  const siteVersionCandidateResponse = defineSuccessResponse(
+    { producer: siteVersionCandidateSchema, client: siteVersionCandidateSchema },
+    partnerResponseMeta,
+  )
+  const siteVersionExampleIdentity = {
+    siteId: 's_01',
+    userId: 'u_01',
+    teamId: 't_01',
+    requestedUrl: 'https://example.com/',
+    catalogSiteId: 17,
+    warehouse: 'team_catalog',
+    namespace: 'gsc',
+    version: 0,
+    revision: 1,
+    catalogRevision: 1,
+  }
+  const siteVersionExamplePreview = {
+    _tag: 'eligible',
+    identity: siteVersionExampleIdentity,
+    requestedUrl: 'https://www.example.com/',
+    window: { startDate: '2026-09-05', endDate: '2026-10-02' },
+    requiredSlices: [{ table: 'dates', searchType: 'web' }],
+    candidateNamespace: 'gsc_v1',
+    candidateVersion: 1,
+  }
+  const siteVersionExampleCandidate = {
+    version: 1,
+    namespace: 'gsc_v1',
+    requestedUrl: 'https://www.example.com/',
+    window: siteVersionExamplePreview.window,
+    requiredSlices: siteVersionExamplePreview.requiredSlices,
+  }
+  const siteVersionExampleMeta = { requestId: 'req_01', surface: 'partner', version: '1.0' }
   const partnerUserErrors = [
     'invalid_request',
     'unauthorized',
@@ -3513,6 +3563,124 @@ export function createGscdumpV1Protocol() {
             response: { data: { ok: true, keyId: 'ak_01' }, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } },
           },
         },
+      }),
+      getRegisteredHostIdentity: defineHttpOperation({
+        ...gscdumpV1OperationRoute('partner.sites.registered_host.identity.get'),
+        visibility: 'public',
+        semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
+        auth: { credentials: ['partner_key'], scopes: ['sites:read'], ownership: [{ credential: 'partner_key', rule: 'authorized_site' }] },
+        request: { params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }), query: null, headers: requestHeaders, body: null },
+        responses: { 200: siteVersionIdentityResponse },
+        errors: siteVersionErrors,
+        errorResponse: errorEnvelopeSchemas(siteVersionErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [{ type: 'site.registration', idFrom: 'params.siteId' }], changes: [] },
+        lifecycle: { introduced: '5.4.0' },
+        docs: { summary: 'Get registered host identity', description: 'Returns the authorized Site version and its effective Team Catalog binding.', tags: ['Sites'], examples: {
+          request: { params: { siteId: 's_01' } },
+          response: { data: { identity: siteVersionExampleIdentity, coverage: { _tag: 'legacy' } }, meta: siteVersionExampleMeta },
+        } },
+      }),
+      previewRegisteredHost: defineHttpOperation({
+        ...gscdumpV1OperationRoute('partner.sites.registered_host.preview'),
+        visibility: 'public',
+        semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
+        auth: { credentials: ['partner_key'], scopes: ['sites:read'], ownership: [{ credential: 'partner_key', rule: 'authorized_site' }] },
+        request: { params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }), query: null, headers: requestHeaders, body: siteVersionPreviewRequestSchema },
+        responses: { 200: siteVersionPreviewResponse },
+        errors: siteVersionErrors,
+        errorResponse: errorEnvelopeSchemas(siteVersionErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [{ type: 'site.registration', idFrom: 'params.siteId' }], changes: [] },
+        lifecycle: { introduced: '5.4.0' },
+        docs: { summary: 'Preview registered host correction', description: 'Checks exact-host correction eligibility without creating resources or changing the Site.', tags: ['Sites'], examples: {
+          request: { params: { siteId: 's_01' }, body: { requestedUrl: siteVersionExamplePreview.requestedUrl, catalogSiteId: 17, window: siteVersionExamplePreview.window } },
+          response: { data: siteVersionExamplePreview, meta: siteVersionExampleMeta },
+        } },
+      }),
+      beginRegisteredHost: defineHttpOperation({
+        ...gscdumpV1OperationRoute('partner.sites.registered_host.begin'),
+        visibility: 'public',
+        semantics: { kind: 'mutation', sideEffects: 'state', idempotent: false, retry: 'never', readConsistency: null },
+        auth: { credentials: ['partner_key'], scopes: ['sites:write'], ownership: [{ credential: 'partner_key', rule: 'authorized_site' }] },
+        request: { params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }), query: null, headers: requestHeaders, body: siteVersionBeginRequestSchema },
+        responses: { 200: siteVersionCandidateResponse },
+        errors: siteVersionErrors,
+        errorResponse: errorEnvelopeSchemas(siteVersionErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [{ type: 'site.registration', idFrom: 'params.siteId' }], changes: [{ type: 'site.lifecycle', idFrom: 'params.siteId' }] },
+        lifecycle: { introduced: '5.4.0' },
+        docs: { summary: 'Begin registered host correction', description: 'Reserves an isolated candidate. Current registration and current reads keep their existing version.', tags: ['Sites'], examples: {
+          request: { params: { siteId: 's_01' }, body: { preview: siteVersionExamplePreview } },
+          response: { data: { ...siteVersionExampleCandidate, state: 'collecting' }, meta: siteVersionExampleMeta },
+        } },
+      }),
+      verifyRegisteredHost: defineHttpOperation({
+        ...gscdumpV1OperationRoute('partner.sites.registered_host.verify'),
+        visibility: 'public',
+        semantics: { kind: 'mutation', sideEffects: 'state', idempotent: true, retry: 'idempotent', readConsistency: null },
+        auth: { credentials: ['partner_key'], scopes: ['sites:write'], ownership: [{ credential: 'partner_key', rule: 'authorized_site' }] },
+        request: { params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }), query: null, headers: requestHeaders, body: siteVersionCandidateRequestSchema },
+        responses: { 200: siteVersionCandidateResponse },
+        errors: siteVersionErrors,
+        errorResponse: errorEnvelopeSchemas(siteVersionErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [{ type: 'site.analytics', idFrom: 'params.siteId' }], changes: [{ type: 'site.lifecycle', idFrom: 'params.siteId' }] },
+        lifecycle: { introduced: '5.4.0' },
+        docs: { summary: 'Verify registered host correction', description: 'Requires completed Google collection and matching physical coverage for every required slice.', tags: ['Sites'], examples: {
+          request: { params: { siteId: 's_01' }, body: { version: 1, identity: siteVersionExampleIdentity } },
+          response: { data: { ...siteVersionExampleCandidate, state: 'verified' }, meta: siteVersionExampleMeta },
+        } },
+      }),
+      promoteRegisteredHost: defineHttpOperation({
+        ...gscdumpV1OperationRoute('partner.sites.registered_host.promote'),
+        visibility: 'public',
+        semantics: { kind: 'mutation', sideEffects: 'state', idempotent: true, retry: 'idempotent', readConsistency: null },
+        auth: { credentials: ['partner_key'], scopes: ['sites:write'], ownership: [{ credential: 'partner_key', rule: 'authorized_site' }] },
+        request: { params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }), query: null, headers: requestHeaders, body: siteVersionCandidateRequestSchema },
+        responses: { 200: siteVersionCandidateResponse },
+        errors: siteVersionErrors,
+        errorResponse: errorEnvelopeSchemas(siteVersionErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [{ type: 'site.registration', idFrom: 'params.siteId' }], changes: [{ type: 'site.registration', idFrom: 'params.siteId' }, { type: 'site.analytics', idFrom: 'params.siteId' }] },
+        lifecycle: { introduced: '5.4.0' },
+        docs: { summary: 'Promote registered host correction', description: 'Atomically promotes a verified candidate while preserving Source and Catalog identities.', tags: ['Sites'], examples: {
+          request: { params: { siteId: 's_01' }, body: { version: 1, identity: siteVersionExampleIdentity } },
+          response: { data: { ...siteVersionExampleCandidate, state: 'active' }, meta: siteVersionExampleMeta },
+        } },
+      }),
+      abortRegisteredHost: defineHttpOperation({
+        ...gscdumpV1OperationRoute('partner.sites.registered_host.abort'),
+        visibility: 'public',
+        semantics: { kind: 'mutation', sideEffects: 'state', idempotent: true, retry: 'idempotent', readConsistency: null },
+        auth: { credentials: ['partner_key'], scopes: ['sites:write'], ownership: [{ credential: 'partner_key', rule: 'authorized_site' }] },
+        request: { params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }), query: null, headers: requestHeaders, body: siteVersionCandidateRequestSchema },
+        responses: { 200: siteVersionCandidateResponse },
+        errors: siteVersionErrors,
+        errorResponse: errorEnvelopeSchemas(siteVersionErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [{ type: 'site.registration', idFrom: 'params.siteId' }], changes: [{ type: 'site.lifecycle', idFrom: 'params.siteId' }] },
+        lifecycle: { introduced: '5.4.0' },
+        docs: { summary: 'Abort registered host correction', description: 'Excludes the candidate. Historical tables and the active Site version remain preserved.', tags: ['Sites'], examples: {
+          request: { params: { siteId: 's_01' }, body: { version: 1, identity: siteVersionExampleIdentity } },
+          response: { data: { ...siteVersionExampleCandidate, state: 'aborted' }, meta: siteVersionExampleMeta },
+        } },
+      }),
+      rollbackRegisteredHost: defineHttpOperation({
+        ...gscdumpV1OperationRoute('partner.sites.registered_host.rollback'),
+        visibility: 'public',
+        semantics: { kind: 'mutation', sideEffects: 'state', idempotent: true, retry: 'idempotent', readConsistency: null },
+        auth: { credentials: ['partner_key'], scopes: ['sites:write'], ownership: [{ credential: 'partner_key', rule: 'authorized_site' }] },
+        request: { params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }), query: null, headers: requestHeaders, body: siteVersionCandidateRequestSchema },
+        responses: { 200: siteVersionCandidateResponse },
+        errors: siteVersionErrors,
+        errorResponse: errorEnvelopeSchemas(siteVersionErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [{ type: 'site.registration', idFrom: 'params.siteId' }], changes: [{ type: 'site.lifecycle', idFrom: 'params.siteId' }, { type: 'site.analytics', idFrom: 'params.siteId' }] },
+        lifecycle: { introduced: '5.4.0' },
+        docs: { summary: 'Roll back registered host correction', description: 'Suspends current analytics for the promoted version. The registered host and collected history remain preserved.', tags: ['Sites'], examples: {
+          request: { params: { siteId: 's_01' }, body: { version: 1, identity: {
+            ...siteVersionExampleIdentity,
+            requestedUrl: siteVersionExampleCandidate.requestedUrl,
+            namespace: siteVersionExampleCandidate.namespace,
+            version: 1,
+            revision: 2,
+          } } },
+          response: { data: { ...siteVersionExampleCandidate, state: 'aborted' }, meta: siteVersionExampleMeta },
+        } },
       }),
     },
   })

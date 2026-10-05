@@ -711,6 +711,13 @@ export function createGscdumpV1Client(options: CreateGscdumpV1ClientOptions): Gs
   }
 
   const client: GscdumpV1Client = {
+    getRegisteredHostIdentity: (input, executeOptions) => execute('partner.sites.registered_host.identity.get' satisfies MethodId<'getRegisteredHostIdentity'>, input, executeOptions),
+    previewRegisteredHost: (input, executeOptions) => execute('partner.sites.registered_host.preview' satisfies MethodId<'previewRegisteredHost'>, input, executeOptions),
+    beginRegisteredHost: (input, executeOptions) => execute('partner.sites.registered_host.begin' satisfies MethodId<'beginRegisteredHost'>, input, executeOptions),
+    verifyRegisteredHost: (input, executeOptions) => execute('partner.sites.registered_host.verify' satisfies MethodId<'verifyRegisteredHost'>, input, executeOptions),
+    promoteRegisteredHost: (input, executeOptions) => execute('partner.sites.registered_host.promote' satisfies MethodId<'promoteRegisteredHost'>, input, executeOptions),
+    abortRegisteredHost: (input, executeOptions) => execute('partner.sites.registered_host.abort' satisfies MethodId<'abortRegisteredHost'>, input, executeOptions),
+    rollbackRegisteredHost: (input, executeOptions) => execute('partner.sites.registered_host.rollback' satisfies MethodId<'rollbackRegisteredHost'>, input, executeOptions),
     execute,
     getUserLifecycle: (input, executeOptions) => execute('partner.users.lifecycle.get' satisfies MethodId<'getUserLifecycle'>, input, executeOptions),
     getUserEntitlements: (input, executeOptions) => execute('partner.users.entitlements.get' satisfies MethodId<'getUserEntitlements'>, input, executeOptions),
