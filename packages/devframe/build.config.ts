@@ -9,6 +9,7 @@ export default defineBuildConfig({
       input: [
         './src/index.ts',
         './src/vite.ts',
+        './src/nuxt.ts',
       ],
     },
   ],

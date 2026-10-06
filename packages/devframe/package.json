@@ -39,7 +39,12 @@
       "import": "./dist/vite.mjs",
       "default": "./dist/vite.mjs"
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./nuxt": {
+      "types": "./dist/nuxt.d.mts",
+      "import": "./dist/nuxt.mjs",
+      "default": "./dist/nuxt.mjs"
+    }
   },
   "types": "./dist/index.d.mts",
   "files": [
@@ -66,6 +71,8 @@
   "dependencies": {
     "@gscdump/contracts": "workspace:^",
     "@gscdump/sdk": "workspace:^",
+    "@nuxt/kit": "catalog:",
+    "@nuxt/schema": "catalog:",
     "devframe": "catalog:devframe",
     "zod": "catalog:"
   },
