@@ -65,6 +65,17 @@ export const builderStateSchema = z.object({
 
 export const gscComparisonFilterSchema = z.enum(['new', 'lost', 'improving', 'declining'])
 
+/**
+ * Order for a comparison read, applied to the joined rows before the row cap.
+ * `clicksChange` is current clicks minus previous clicks, so `asc` keeps the
+ * biggest losers and `desc` the biggest gainers, whatever their current clicks.
+ * Without it, a comparison read caps rows in the current window's order.
+ */
+export const gscComparisonOrderBySchema = z.strictObject({
+  column: z.enum(['clicksChange']),
+  dir: z.enum(['asc', 'desc']),
+})
+
 export const gscApiRangeSchema = z.object({
   start: z.string(),
   end: z.string(),

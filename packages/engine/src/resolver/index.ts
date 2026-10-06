@@ -78,6 +78,7 @@ export { assertSchemaInSync } from './schema-drift'
 export type { AssertSchemaInSyncOptions } from './schema-drift'
 export type {
   ComparisonFilter,
+  ComparisonOrderBy,
   ExtraQuery,
   ResolvedComparisonSQL,
   ResolvedSQL,

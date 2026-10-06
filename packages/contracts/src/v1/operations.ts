@@ -15,6 +15,7 @@ import {
   builderStateSchema,
   createPartnerTeamSchema,
   gscComparisonFilterSchema,
+  gscComparisonOrderBySchema,
   gscdumpAnalysisBundleResponseSchema,
   gscdumpAnalysisPresetSchema,
   gscdumpAnalysisResponseSchema,
@@ -220,7 +221,11 @@ export function createGscdumpV1Protocol() {
     state: analyticsListReportState,
     comparison: analyticsListReportState.optional(),
     filter: gscComparisonFilterSchema.optional(),
-  })
+    comparisonOrderBy: gscComparisonOrderBySchema.optional(),
+  }).refine(
+    request => request.comparisonOrderBy === undefined || request.comparison !== undefined,
+    { message: 'comparisonOrderBy requires a comparison window.', path: ['comparisonOrderBy'] },
+  )
   const analyticsReportDetailRequest = z.strictObject({
     state: analyticsDetailReportState,
     comparison: analyticsDetailReportState.optional(),

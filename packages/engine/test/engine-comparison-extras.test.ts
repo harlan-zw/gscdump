@@ -6,7 +6,7 @@
 
 import type { BuilderState } from 'gscdump/query'
 import type { Row } from '../src/index'
-import type { ComparisonFilter } from '../src/resolver/types'
+import type { ComparisonFilter, ComparisonOrderBy } from '../src/resolver/types'
 import type { StorageEngine, TableName } from '../src/storage'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -51,6 +51,7 @@ async function runComparison(
   current: BuilderState,
   previous: BuilderState,
   filter?: ComparisonFilter,
+  orderBy?: ComparisonOrderBy,
 ): Promise<ComparisonRunResult> {
   const adapter = createParquetResolverAdapter()
   const currentPlan = buildLogicalPlan(current, adapter.capabilities)
@@ -61,7 +62,7 @@ async function runComparison(
     )
   }
   const table: TableName = ctx.table ?? currentPlan.dataset
-  const comparison = resolveComparisonSQL(current, previous, { adapter, siteId: undefined }, filter)
+  const comparison = resolveComparisonSQL(current, previous, { adapter, siteId: undefined }, filter, orderBy)
   const totals = buildTotalsSql(current, { adapter, siteId: undefined })
   const startDate = currentPlan.dateRange.startDate < previousPlan.dateRange.startDate
     ? currentPlan.dateRange.startDate
@@ -233,6 +234,56 @@ describe('resolveComparisonSQL (integration)', () => {
     await expect(
       runComparison(engine, { userId: 'u1', siteId: 's1' }, pagesS, keywordsS),
     ).rejects.toThrow(/must resolve to the same table/)
+  })
+
+  // /b loses the most clicks but ranks below /a by current clicks, so a row cap
+  // applied in current-click order drops the biggest loser.
+  async function seedLosers(engine: StorageEngine) {
+    for (const day of ['2026-03-01', '2026-03-02', '2026-03-03']) {
+      await engine.writeDay(
+        { userId: 'u1', siteId: 's1', table: 'pages', date: day },
+        [pageRow('/a', day, 10, 100), pageRow('/b', day, 9, 90), pageRow('/c', day, 2, 20)],
+      )
+    }
+    for (const day of ['2026-03-08', '2026-03-09', '2026-03-10']) {
+      await engine.writeDay(
+        { userId: 'u1', siteId: 's1', table: 'pages', date: day },
+        [pageRow('/a', day, 9, 90), pageRow('/b', day, 1, 10), pageRow('/c', day, 4, 40)],
+      )
+    }
+  }
+
+  it('orders declining rows by click change before the row cap', async () => {
+    const { engine } = await setup()
+    await seedLosers(engine)
+
+    const result = await runComparison(
+      engine,
+      { userId: 'u1', siteId: 's1' },
+      pagesState('2026-03-08', '2026-03-14', { orderBy: { column: 'clicks', dir: 'desc' }, rowLimit: 1 }),
+      pagesState('2026-03-01', '2026-03-07'),
+      'declining',
+      { column: 'clicksChange', dir: 'asc' },
+    )
+
+    expect(result.rows.map(r => [r.page, Number(r.clicksChange)])).toEqual([['/b', -24]])
+    expect(result.totalCount).toBe(2)
+  })
+
+  it('orders the joined rows by click change without a filter', async () => {
+    const { engine } = await setup()
+    await seedLosers(engine)
+
+    const result = await runComparison(
+      engine,
+      { userId: 'u1', siteId: 's1' },
+      pagesState('2026-03-08', '2026-03-14', { rowLimit: 3 }),
+      pagesState('2026-03-01', '2026-03-07'),
+      undefined,
+      { column: 'clicksChange', dir: 'desc' },
+    )
+
+    expect(result.rows.map(r => [r.page, Number(r.clicksChange)])).toEqual([['/c', 6], ['/a', -3], ['/b', -24]])
   })
 })
 

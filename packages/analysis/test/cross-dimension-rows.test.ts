@@ -105,6 +105,29 @@ describe('shapeDataQueryRowResults', () => {
     }, params)
     expect(out.results.map(r => (r as Record<string, unknown>).query)).toEqual(['up'])
   })
+
+  it('orders joined rows by click change when a change order is set', () => {
+    const params = { type: 'data-query', q: keywordBreakdown, qc: keywordBreakdown, comparisonOrderBy: { column: 'clicksChange', dir: 'asc' } } as AnalysisParams
+    const out = shapeDataQueryRowResults({
+      main: [
+        { query: 'up', clicks: 20, impressions: 100, ctr: 0.2, position: 2 },
+        { query: 'flat', clicks: 15, impressions: 100, ctr: 0.15, position: 4 },
+        { query: 'down', clicks: 3, impressions: 100, ctr: 0.03, position: 8 },
+      ],
+      totals: [{ clicks: 38, impressions: 300, ctr: 0.13, position: 5 }],
+      prevMain: [
+        { query: 'up', clicks: 10, impressions: 100, ctr: 0.1, position: 3 },
+        { query: 'flat', clicks: 15, impressions: 100, ctr: 0.15, position: 4 },
+        { query: 'down', clicks: 9, impressions: 100, ctr: 0.09, position: 6 },
+      ],
+      prevTotals: [{ clicks: 34, impressions: 300, ctr: 0.11, position: 4 }],
+    }, params)
+    expect(out.results.map(r => [(r as Record<string, unknown>).query, (r as Record<string, unknown>).clicksChange])).toEqual([
+      ['down', -6],
+      ['flat', 0],
+      ['up', 10],
+    ])
+  })
 })
 
 describe('buildDataDetailRows / shapeDataDetailRowResults', () => {
