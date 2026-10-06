@@ -5,7 +5,7 @@ import process from 'node:process'
 import { setTimeout as waitForPoll } from 'node:timers/promises'
 import { defineCommand } from 'citty'
 import open from 'open'
-import { ACCESS_NOT_SET_UP, clearTokens, formatAuthProvenance, getAuth, loadServiceAccount, loadTokens, resolveBYOK, saveTokens } from '../auth'
+import { ACCESS_NOT_SET_UP, clearTokens, formatAuthProvenance, getAuth, isStaleServiceAccountPointer, loadServiceAccount, loadTokens, resolveBYOK, resolveServiceAccount, saveTokens } from '../auth'
 import { missingRequiredScopes } from '../auth-scopes'
 import { clearAuthentication, formatHostedSync, getHostedAccount, noSitesNextStep, parseAuthentication, parseAuthMode, resolveAuthentication, revokeHostedSession, saveAuthentication, siteManagerOf } from '../auth-state'
 import { clearBingCredentials, getBingClient, inspectBingCredentials } from '../bing-auth'
@@ -109,6 +109,7 @@ export async function loginHosted(args: Record<string, unknown>): Promise<void> 
  * Returns null token when nothing is configured.
  */
 async function resolveLiveAuthState(): Promise<{
+  serviceAccount: Awaited<ReturnType<typeof resolveServiceAccount>> | Error
   byok: ReturnType<typeof resolveBYOK>
   tokens: Awaited<ReturnType<typeof loadTokens>>
   liveToken: string | null
@@ -120,10 +121,12 @@ async function resolveLiveAuthState(): Promise<{
   missing: string[]
 }> {
   const tokens = await loadTokens()
-  const byok = resolveBYOK()
+  // Match command credential precedence, including its stale-pointer fallback.
+  const serviceAccount = await resolveServiceAccount().catch((error: unknown) => isStaleServiceAccountPointer(error) ? null : error instanceof Error ? error : new Error(String(error)))
+  const byok = serviceAccount ? null : resolveBYOK()
   // Refresh saved credentials first: an expired saved token would fail
   // tokeninfo even though the credentials still work.
-  const source = byok ?? (tokens ? await getAuth({ interactive: false }).catch((error: unknown) => error instanceof Error ? error : new Error(String(error))) : null)
+  const source = serviceAccount ?? byok ?? (tokens ? await getAuth({ interactive: false }).catch((error: unknown) => error instanceof Error ? error : new Error(String(error))) : null)
   const current = source === null
     ? null
     : source instanceof Error
@@ -138,7 +141,7 @@ async function resolveLiveAuthState(): Promise<{
   // A refresh above may have saved new tokens; report those.
   const savedTokens = tokens && !byok ? await loadTokens() : tokens
 
-  return { byok, tokens: savedTokens, liveToken, tokenInfo, failure, scopes, missing }
+  return { serviceAccount, byok, tokens: savedTokens, liveToken, tokenInfo, failure, scopes, missing }
 }
 
 async function runStatus(args: Record<string, unknown>): Promise<void> {
@@ -188,7 +191,7 @@ async function runStatus(args: Record<string, unknown>): Promise<void> {
     }
     return
   }
-  const { byok, tokens, tokenInfo, failure, scopes, missing } = await resolveLiveAuthState()
+  const { serviceAccount, byok, tokens, tokenInfo, failure, scopes, missing } = await resolveLiveAuthState()
   const googleAuthenticated = tokenInfo !== null
   const bingCredentials = await inspectBingCredentials()
   // A failed Bing token refresh or verification is a status result, not a
@@ -211,7 +214,7 @@ async function runStatus(args: Record<string, unknown>): Promise<void> {
       googleAuthenticated,
       googleError: failure,
       bing,
-      source: byok ? 'env' : tokens ? 'saved-tokens' : null,
+      source: serviceAccount ? 'service-account' : byok ? 'env' : tokens ? 'saved-tokens' : null,
       envCredential: byokKind,
       scopes,
       tokenAccount: tokenInfo?.email ?? null,
@@ -244,6 +247,17 @@ async function runStatus(args: Record<string, unknown>): Promise<void> {
         console.log(`    \x1B[90m└─\x1B[0m ${s}`)
       console.log(`  \x1B[90mRun \`gscdump auth login --force\` to re-consent.\x1B[0m`)
     }
+  }
+
+  if (serviceAccount) {
+    if (googleAuthenticated)
+      logger.success('Authenticated (service account)')
+    else
+      logger.warn(`Service-account credentials failed verification: ${failure}`)
+    if (tokenInfo?.email)
+      console.log(`  Account:       ${tokenInfo.email}`)
+    reportScopes()
+    return
   }
 
   if (byok) {
