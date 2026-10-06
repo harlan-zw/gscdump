@@ -736,6 +736,7 @@ export function createGscdumpV1Client(options: CreateGscdumpV1ClientOptions): Gs
     verifySiteIndexNowConnection: (input, executeOptions) => execute('partner.sites.indexing.indexnow.connection.verify' satisfies MethodId<'verifySiteIndexNowConnection'>, input, executeOptions),
     submitSiteIndexNow: (input, executeOptions) => execute('partner.sites.indexing.indexnow.submissions.create' satisfies MethodId<'submitSiteIndexNow'>, input, executeOptions),
     listSiteIndexNowSubmissionReceipts: (input, executeOptions) => execute('partner.sites.indexing.indexnow.submissions.list' satisfies MethodId<'listSiteIndexNowSubmissionReceipts'>, input, executeOptions),
+    getSiteIndexingApiGrant: (input, executeOptions) => execute('partner.sites.indexing.google.grant.get' satisfies MethodId<'getSiteIndexingApiGrant'>, input, executeOptions),
     getUserIndexingApiGrant: (input, executeOptions) => execute('partner.users.indexing.google.grant.get' satisfies MethodId<'getUserIndexingApiGrant'>, input, executeOptions),
     updateUserIndexingApiGrant: (input, executeOptions) => execute('partner.users.indexing.google.grant.update' satisfies MethodId<'updateUserIndexingApiGrant'>, input, executeOptions),
     revokeUserIndexingApiGrant: (input, executeOptions) => execute('partner.users.indexing.google.grant.revoke' satisfies MethodId<'revokeUserIndexingApiGrant'>, input, executeOptions),

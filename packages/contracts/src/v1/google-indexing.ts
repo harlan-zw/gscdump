@@ -54,6 +54,27 @@ export const indexingApiGrantV1Schemas = {
 export const indexingApiGrantV1Schema = indexingApiGrantV1Schemas.producer
 export type IndexingApiGrantV1 = z.infer<typeof indexingApiGrantV1Schema>
 
+/**
+ * `partner.sites.indexing.google.grant.get`. The Indexing API grant a Google
+ * Submission for this Site uses: the Site user's grant for the calling
+ * partner. It names no Google account, because the caller may act for a Team
+ * member who is not that user.
+ *
+ * - `unavailable`: the partner has no usable Indexing API client, so every
+ *   Submission is refused as `indexing_api_unavailable`.
+ * - `missing`, `granted`, `reauthorization-required`: as for the user's grant.
+ */
+const unavailableSiteGrant = defineResponseObject({ _tag: z.literal('unavailable') })
+const grantedSiteGrant = defineResponseObject({ _tag: z.literal('granted'), grantedAt: z.iso.datetime() })
+const reauthorizationSiteGrant = defineResponseObject({ _tag: z.literal('reauthorization-required') })
+
+export const siteIndexingApiGrantV1Schemas = {
+  producer: z.discriminatedUnion('_tag', [unavailableSiteGrant.producer, missingGrant.producer, grantedSiteGrant.producer, reauthorizationSiteGrant.producer]),
+  client: z.discriminatedUnion('_tag', [unavailableSiteGrant.client, missingGrant.client, grantedSiteGrant.client, reauthorizationSiteGrant.client]),
+}
+export const siteIndexingApiGrantV1Schema = siteIndexingApiGrantV1Schemas.producer
+export type SiteIndexingApiGrantV1 = z.infer<typeof siteIndexingApiGrantV1Schema>
+
 /** `partner.sites.indexing.google.submissions.create`. One URL per request. */
 export const googleSubmitV1Schema = z.strictObject({
   url: pageUrl,
