@@ -1,0 +1,131 @@
+/* gscdump tokens (DESIGN.md in gscdump.com): ember for clicks and the one
+   action, ink blue for impressions and links, warm paper by day, indigo night. */
+:root {
+  color-scheme: light;
+  --bg: #fbf8f3;
+  --surface: #ffffff;
+  --border: #e6dfd3;
+  --grid: #ece6db;
+  --text: #1b2130;
+  --muted: #555b66;
+  --dimmed: #7a808b;
+  --primary: #c23e00;
+  --link: #345fb2;
+  --good: #1a7f37;
+  --bad: #b42318;
+  --metric-clicks: var(--primary);
+  --metric-impressions: var(--link);
+  --metric-ctr: #0f766e;
+  --metric-position: #6b5a9e;
+  --radius: 8px;
+  font-family: Geist, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--bg);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --bg: #080b14;
+    --surface: #131722;
+    --border: #262c3a;
+    --grid: #1d2230;
+    --text: #e9e5e0;
+    --muted: #a3a8b3;
+    --dimmed: #7d8390;
+    --primary: #f8894b;
+    --link: #82b5ef;
+    --good: #4ac26b;
+    --bad: #f97066;
+    --metric-ctr: #4fc1ae;
+    --metric-position: #a993f0;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+a {
+  color: var(--link);
+}
+
+.mono {
+  font-family: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.control {
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.control:focus-visible,
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--link);
+  outline-offset: 1px;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  cursor: pointer;
+  white-space: nowrap;
+  text-decoration: none;
+  color: var(--text);
+}
+
+.button:hover {
+  border-color: var(--dimmed);
+}
+
+.button[aria-pressed='true'] {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}

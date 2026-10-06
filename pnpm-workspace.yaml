@@ -126,6 +126,14 @@ catalogs:
     '@nuxt/test-utils': ^4.3.2
     '@vitest/browser': ^5.0.1
     vitest: ^5.0.1
+  devframe:
+    '@types/ws': ^8.18.2
+    '@vitejs/devtools': ^0.7.6
+    '@vitejs/devtools-kit': ^0.7.6
+    '@vitejs/plugin-vue': ^6.0.9
+    devframe: ^1.2.0
+    vite: ^8.3.2
+    ws: ^8.22.0
   workers-test:
     '@vitest/browser-playwright': ^4.1.11
     '@vitest/ui': ^4.1.11

@@ -1,0 +1,83 @@
+{
+  "name": "@gscdump/devframe",
+  "type": "module",
+  "version": "5.6.0",
+  "description": "Search Console clicks, impressions, and queries for the page you are developing, in Vite DevTools and any devframe hub.",
+  "author": {
+    "name": "Harlan Wilton",
+    "email": "harlan@harlanzw.com",
+    "url": "https://harlanzw.com/"
+  },
+  "license": "MIT",
+  "funding": "https://github.com/sponsors/harlan-zw",
+  "homepage": "https://github.com/harlan-zw/gscdump/tree/main/packages/devframe#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/harlan-zw/gscdump.git",
+    "directory": "packages/devframe"
+  },
+  "bugs": {
+    "url": "https://github.com/harlan-zw/gscdump/issues"
+  },
+  "keywords": [
+    "devframe",
+    "devframe-plugin",
+    "devtools",
+    "vite-devtools",
+    "google-search-console",
+    "seo"
+  ],
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs",
+      "default": "./dist/index.mjs"
+    },
+    "./vite": {
+      "types": "./dist/vite.d.mts",
+      "import": "./dist/vite.mjs",
+      "default": "./dist/vite.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "types": "./dist/index.d.mts",
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "build": "obuild && vite build --config app/vite.config.ts && vite build --config src/client-script/vite.config.ts",
+    "dev": "vite --config playground/vite.config.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest",
+    "prepack": "pnpm run build"
+  },
+  "peerDependencies": {
+    "@vitejs/devtools-kit": ">=0.7.6"
+  },
+  "peerDependenciesMeta": {
+    "@vitejs/devtools-kit": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "@gscdump/contracts": "workspace:^",
+    "@gscdump/sdk": "workspace:^",
+    "devframe": "catalog:devframe",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/ws": "catalog:devframe",
+    "@vitejs/devtools": "catalog:devframe",
+    "@vitejs/devtools-kit": "catalog:devframe",
+    "@vitejs/plugin-vue": "catalog:devframe",
+    "typescript": "catalog:dev-build",
+    "vite": "catalog:devframe",
+    "vitest": "catalog:dev-test",
+    "vue": "catalog:",
+    "ws": "catalog:devframe"
+  }
+}

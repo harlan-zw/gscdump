@@ -21,7 +21,8 @@ READMEs and the root `AGENTS.md` carry the operational detail.
 │   ├── sdk/                  # @gscdump/sdk: hosted API HTTP clients
 │   ├── cloudflare/           # @gscdump/cloudflare: Cloudflare Workers / R2 helper primitives
 │   ├── lakehouse/            # @gscdump/lakehouse: dataset-agnostic Iceberg catalog + registry
-│   └── cli/                  # @gscdump/cli: CLI (dump, query, sync, analyze, report) + bundled MCP server
+│   ├── cli/                  # @gscdump/cli: CLI (dump, query, sync, analyze, report) + bundled MCP server
+│   └── devframe/             # @gscdump/devframe: devtools dock with page stats from the Hosted record
 ├── examples/
 │   └── nuxt-dashboard/       # Example Nuxt dashboard app
 └── tooling & config (eslint, tsconfig, vitest, scripts)
@@ -40,6 +41,7 @@ READMEs and the root `AGENTS.md` carry the operational detail.
 - `@gscdump/cloudflare` → `gscdump`, `@gscdump/contracts`, `@gscdump/engine`, `@gscdump/engine-sqlite`
 - `@gscdump/cli` → `gscdump`, `@gscdump/engine`, `@gscdump/engine-gsc-api`, `@gscdump/analysis`, `@gscdump/sdk`
 - `@gscdump/sdk` → `gscdump`, `@gscdump/contracts`, `@gscdump/engine`, `@gscdump/analysis`
+- `@gscdump/devframe` → `@gscdump/contracts`, `@gscdump/sdk`
 
 The graph is acyclic. Contracts and Lakehouse are the lowest internal layers;
 runtime adapters build on Engine, while SDK and CLI compose public surfaces.
