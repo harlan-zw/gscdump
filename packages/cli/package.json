@@ -46,7 +46,8 @@
     "dev": "obuild --stub",
     "test": "vitest",
     "typecheck": "tsc --noEmit",
-    "prepack": "pnpm run build"
+    "prepack": "pnpm run build",
+    "prepublishOnly": "node ../../scripts/require-pnpm-publish.ts"
   },
   "dependencies": {
     "@clack/prompts": "catalog:deps",

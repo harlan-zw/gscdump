@@ -86,7 +86,8 @@
     "generate:v1-contracts": "pnpm run build && node scripts/generate-v1-contracts.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest",
-    "prepack": "pnpm run build"
+    "prepack": "pnpm run build",
+    "prepublishOnly": "node ../../scripts/require-pnpm-publish.ts"
   },
   "dependencies": {
     "zod": "catalog:"

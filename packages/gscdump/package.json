@@ -123,7 +123,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest",
     "test:run": "vitest run",
-    "prepack": "pnpm run build"
+    "prepack": "pnpm run build",
+    "prepublishOnly": "node ../../scripts/require-pnpm-publish.ts"
   },
   "dependencies": {
     "@gscdump/contracts": "workspace:^",

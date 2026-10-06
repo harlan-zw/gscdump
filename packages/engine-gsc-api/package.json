@@ -40,7 +40,8 @@
     "dev": "obuild --stub",
     "typecheck": "tsc --noEmit",
     "test": "vitest --passWithNoTests",
-    "prepack": "pnpm run build"
+    "prepack": "pnpm run build",
+    "prepublishOnly": "node ../../scripts/require-pnpm-publish.ts"
   },
   "dependencies": {
     "@gscdump/engine": "workspace:^",

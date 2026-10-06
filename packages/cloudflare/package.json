@@ -44,7 +44,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest --run",
     "test:workers": "GSCDUMP_E2E=1 vitest --run --config vitest.workers.config.ts",
-    "prepack": "pnpm run build"
+    "prepack": "pnpm run build",
+    "prepublishOnly": "node ../../scripts/require-pnpm-publish.ts"
   },
   "dependencies": {
     "@gscdump/contracts": "workspace:^",

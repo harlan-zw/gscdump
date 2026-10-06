@@ -41,7 +41,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest",
     "test:browser": "GSCDUMP_E2E=1 vitest --run --config vitest.browser.config.ts",
-    "prepack": "pnpm run build"
+    "prepack": "pnpm run build",
+    "prepublishOnly": "node ../../scripts/require-pnpm-publish.ts"
   },
   "peerDependencies": {
     "@duckdb/duckdb-wasm": "^1.33.1-dev57.0"

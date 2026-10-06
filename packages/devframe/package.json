@@ -54,6 +54,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest",
     "prepack": "pnpm run build",
+    "prepublishOnly": "node ../../scripts/require-pnpm-publish.ts",
     "build:extension": "vite build --config extension/vite.config.ts"
   },
   "peerDependencies": {

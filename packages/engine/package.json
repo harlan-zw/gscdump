@@ -188,7 +188,8 @@
     "benchmark-store": "tsx scripts/benchmark-store.mts",
     "r2-harness": "tsx scripts/r2-contention-harness.ts",
     "backfill-audit": "tsx scripts/backfill-audit.ts",
-    "prepack": "pnpm run build"
+    "prepack": "pnpm run build",
+    "prepublishOnly": "node ../../scripts/require-pnpm-publish.ts"
   },
   "peerDependencies": {
     "@duckdb/node-api": "^1.5.5-r.4"

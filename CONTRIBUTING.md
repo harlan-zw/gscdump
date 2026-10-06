@@ -57,6 +57,13 @@ pnpm test:e2e
 
 Check the example's [README](./examples/nuxt-dashboard/README.md) for its supported scope.
 
+## Publish
+
+The release workflow publishes every package when a `v*` tag reaches `main`.
+If a new package needs one manual publish first, run `pnpm publish --access public` in its directory.
+Never use `npm publish`. It keeps `workspace:` and `catalog:` versions, and the package then cannot install.
+Each package's `prepublishOnly` refuses any tool other than pnpm.
+
 ## Live Google checks
 
 Use your own credentials and a Site with recent traffic.

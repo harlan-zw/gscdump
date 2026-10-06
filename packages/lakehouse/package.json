@@ -75,7 +75,8 @@
     "build": "obuild",
     "typecheck": "tsc --noEmit",
     "test": "vitest",
-    "prepack": "pnpm run build"
+    "prepack": "pnpm run build",
+    "prepublishOnly": "node ../../scripts/require-pnpm-publish.ts"
   },
   "devDependencies": {
     "@types/node": "catalog:",
