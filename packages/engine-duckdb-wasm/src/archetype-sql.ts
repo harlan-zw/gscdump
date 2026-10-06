@@ -263,6 +263,29 @@ function facetPredicate(query: ArchetypeQuery, table: string): { sql: string, pa
   return { sql: parts.length ? ` AND ${parts.join(' AND ')}` : '', params }
 }
 
+/** Columns a daily read can filter on. `dates` stores devices pivoted and no other dimension. */
+const DAILY_FACET_COLUMNS = new Set(['page', 'query', 'queryCanonical', 'country'])
+
+/**
+ * The fact table a daily archetype reads. An unfaceted read keeps `unfaceted`,
+ * which for the site series is `dates` with its true site totals. A faceted
+ * read moves to the table that stores the series dimension and every facet
+ * column. A combination no single table stores throws, because answering
+ * without the facet would return a plausible unfiltered total.
+ */
+function dailyTable(query: ArchetypeQuery, seriesDimension: string | undefined, unfaceted: string): string {
+  const facets = (query as { facets?: readonly { column: string }[] }).facets ?? []
+  if (!facets.length)
+    return unfaceted
+  const dims = [...(seriesDimension ? [seriesDimension] : []), ...facets.map(facet => facet.column)]
+  const unsupported = dims.find(dim => !DAILY_FACET_COLUMNS.has(dim))
+  if (unsupported)
+    throw new Error(`[archetype-sql] ${query.archetype}: a daily read cannot combine a facet with the ${unsupported} dimension`)
+  if (dims.includes('country') && dims.some(dim => dim !== 'country'))
+    throw new Error(`[archetype-sql] ${query.archetype}: no fact table stores country with page or query, so a daily read cannot apply this facet`)
+  return tableForDimensions(dims)
+}
+
 /**
  * Compile one archetype query to DuckDB SQL. Throws for `aux-cloud-only`.
  */
@@ -272,44 +295,48 @@ export function compileArchetypeSql(query: ArchetypeQuery): CompiledArchetypeSql
     case 'site-daily-timeseries': {
       // `dates` carries one row per (site, search_type, date) with TRUE site
       // totals — no GROUP BY needed, and it includes anonymized impressions
-      // that a dimension-grouped table would drop.
-      const table = 'dates'
+      // that a dimension-grouped table would drop. A faceted read uses the
+      // table that stores the facet column instead.
+      const table = dailyTable(query, undefined, 'dates')
       const where = rangePredicate(query)
+      const facet = facetPredicate(query, table)
       return {
         table,
         sql: `SELECT date, ${query.metrics.map(m => `${metricExpr(m)} AS ${m}`).join(', ')} FROM ${table} `
-          + `WHERE ${where.sql} GROUP BY date ORDER BY date`,
-        params: where.params,
+          + `WHERE ${where.sql}${facet.sql} GROUP BY date ORDER BY date`,
+        params: [...where.params, ...facet.params],
       }
     }
 
     // ── 2. Per-entity daily timeseries ──────────────────────────────────────
     case 'entity-daily-timeseries': {
-      const table = tableForDimensions([query.entity.dimension])
+      const table = dailyTable(query, query.entity.dimension, tableForDimensions([query.entity.dimension]))
       const col = dimExpr(query.entity.dimension, table)
       const where = rangePredicate(query)
+      const facet = facetPredicate(query, table)
       return {
         table,
         sql: `SELECT date, ${metricSelectList(query.metrics)} FROM ${table} `
-          + `WHERE ${where.sql} AND ${col} = ? GROUP BY date ORDER BY date`,
-        params: [...where.params, query.entity.value],
+          + `WHERE ${where.sql}${facet.sql} AND ${col} = ? GROUP BY date ORDER BY date`,
+        params: [...where.params, ...facet.params, query.entity.value],
       }
     }
 
     // ── 3. Per-entity daily sparkline (top-N entities at once) ──────────────
     case 'entity-daily-sparkline': {
-      const table = tableForDimensions([query.dimension])
+      const table = dailyTable(query, query.dimension, tableForDimensions([query.dimension]))
       const col = dimExpr(query.dimension, table)
       const where = rangePredicate(query)
+      const facet = facetPredicate(query, table)
       if (query.entities.length === 0)
         throw new Error('[archetype-sql] entity-daily-sparkline requires resolved entities')
       const placeholders = query.entities.map(() => '?').join(', ')
       return {
         table,
         sql: `SELECT ${col} AS entity, date, ${metricExpr(query.metric)} AS ${query.metric} `
-          + `FROM ${table} WHERE ${where.sql} AND ${col} IN (${placeholders}) `
+          + `FROM ${table} WHERE ${where.sql}${facet.sql} AND ${col} IN (${placeholders}) `
           + `GROUP BY ${col}, date ORDER BY ${col}, date`,
-        params: [...where.params, ...query.entities],
+        params: [...where.params, ...facet.params, ...query.entities],
       }
     }
 
@@ -429,7 +456,9 @@ export function compileArchetypeSql(query: ArchetypeQuery): CompiledArchetypeSql
 
     // ── 6. Multi-series stacked daily ───────────────────────────────────────
     case 'multi-series-stacked-daily': {
-      const table = tableForDimensions([query.seriesDimension])
+      // A device series reads the `dates` pivot, which stores no other column,
+      // so `dailyTable` refuses any facet on it.
+      const table = dailyTable(query, query.seriesDimension, tableForDimensions([query.seriesDimension]))
       const where = rangePredicate(query)
       if (query.seriesDimension === 'device') {
         return {
@@ -440,11 +469,12 @@ export function compileArchetypeSql(query: ArchetypeQuery): CompiledArchetypeSql
         }
       }
       const col = dimExpr(query.seriesDimension, table)
+      const facet = facetPredicate(query, table)
       return {
         table,
         sql: `SELECT date, ${col} AS ${query.seriesDimension}, ${metricExpr(query.metric)} AS ${query.metric} `
-          + `FROM ${table} WHERE ${where.sql} GROUP BY date, ${col} ORDER BY date, ${col}`,
-        params: where.params,
+          + `FROM ${table} WHERE ${where.sql}${facet.sql} GROUP BY date, ${col} ORDER BY date, ${col}`,
+        params: [...where.params, ...facet.params],
       }
     }
 
