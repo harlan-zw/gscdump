@@ -79,7 +79,7 @@ The credential stays in the dev server process. The panel never receives it.
 
 Search Console stores a Site's pages by path. The devtool reads the path of the page in view, with its query string, and ignores the dev server's origin. Search Console matches a path exactly, so `/blog/` and `/blog` are different pages.
 
-The window ends on the last day the Hosted record holds. The comparison window is the same number of days just before it.
+The window ends three days before today in Pacific time, because Google has not finalized newer days. The gscdump.com dashboard uses the same end. If the Hosted record ends earlier, the window ends on its last day. The comparison window is the same number of days just before it.
 
 ## Coding agents
 

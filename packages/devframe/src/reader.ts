@@ -3,6 +3,7 @@ import type { GscdumpCredential } from './credential'
 import type { PeriodWindows } from './page-stats'
 import type { DateWindow, GscdumpContext, PageStats, PageStatsInput, Period, SiteSummary } from './shared/protocol'
 import { parseRecordReadRefusal } from '@gscdump/contracts'
+import { periodToDateRange } from '@gscdump/sdk/period'
 import { createGscdumpV1Client, isGscdumpV1Error } from '@gscdump/sdk/v1'
 import { matchSite, readAccount } from './account'
 import { bearerOf, dashboardOrigin, resolveCredential } from './credential'
@@ -194,7 +195,11 @@ export function createGscdumpReader(options: GscdumpReaderOptions, deps: Gscdump
     const current = await currentSession()
     if (current._tag !== 'Ready')
       return { _tag: 'SiteUnavailable', context: current.context }
-    const windows = periodWindows(periodDays(period), site)
+    // End where the gscdump.com dashboard ends: before the days Google has not
+    // finalized, and never past the last day the record holds.
+    const stableEnd = periodToDateRange(period, { now: new Date(deps.now()) }).end
+    const newestDate = site.newestDate && site.newestDate > stableEnd ? stableEnd : site.newestDate
+    const windows = periodWindows(periodDays(period), { oldestDate: site.oldestDate, newestDate })
     if (!windows)
       return { _tag: 'NoData', siteId: site.siteId, message: 'The Site\'s record holds no days yet. gscdump is still syncing it.' }
     const value = readPage(current, site, path, period, windows, false)

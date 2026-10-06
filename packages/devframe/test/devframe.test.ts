@@ -166,6 +166,18 @@ describe('page stats', () => {
     expect(stats._tag === 'Ok' && stats.window).toEqual({ start: '2026-09-22', end: '2026-09-28' })
   })
 
+  it('leaves out the days Google has not finalized, as the dashboard does', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-06T12:00:00Z'))
+    const fresh = { ...EXAMPLE, newestDateSynced: '2026-10-05' }
+    const devframe = await boot({ apiKey: 'gsd_test', fetch: fakeGscdump({ sites: [fresh] }).fetch })
+
+    const stats = await devframe.pageStats({ page: '/blog/post', period: '7d' })
+    vi.useRealTimers()
+
+    expect(stats._tag === 'Ok' && stats.window).toEqual({ start: '2026-09-27', end: '2026-10-03' })
+  })
+
   it('reports a record that is not ready as no data, not as zero', async () => {
     const devframe = await boot({ apiKey: 'gsd_test', fetch: fakeGscdump({ onRows: () => refusal({ reason: 'record_not_ready' }) }).fetch })
 
