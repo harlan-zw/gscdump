@@ -21,6 +21,7 @@ import type {
 } from 'gscdump/query/plan'
 import type {
   ComparisonFilter,
+  ComparisonOrderBy,
   ExtraQuery,
   ResolvedComparisonSQL,
   ResolvedSQL,
@@ -72,6 +73,22 @@ function orderByClause(state: BuilderState, prefix: string = '', columnOverride?
     return sql.raw(`ORDER BY ${prefix}${safeCol} ${safeDir}`)
   }
   return sql.raw(`ORDER BY ${prefix}clicks DESC`)
+}
+
+/**
+ * The projected change column and its ORDER BY for a comparison read. The
+ * column and direction arrive from a request, so both are checked against the
+ * closed set before they reach SQL.
+ */
+function changeOrderClause(order: ComparisonOrderBy): { column: SQL, orderBy: SQL } {
+  if (order.column !== 'clicksChange')
+    throw new Error(`[resolver] unknown comparison order column: ${JSON.stringify(order.column)}`)
+  if (order.dir !== 'asc' && order.dir !== 'desc')
+    throw new Error(`[resolver] unknown comparison order direction: ${JSON.stringify(order.dir)}`)
+  return {
+    column: sql.raw('CAST(COALESCE(c.clicks, 0) AS DOUBLE) - CAST(COALESCE(p.clicks, 0) AS DOUBLE) as "clicksChange"'),
+    orderBy: sql.raw(`ORDER BY clicksChange ${order.dir.toUpperCase()}`),
+  }
 }
 
 function limitOffsetClause(state: BuilderState): SQL {
@@ -408,6 +425,7 @@ export function resolveComparisonSQL<TK extends string>(
   previous: BuilderState,
   options: ResolverOptions<TK>,
   comparisonFilter?: ComparisonFilter,
+  comparisonOrderBy?: ComparisonOrderBy,
 ): ResolvedComparisonSQL {
   const { adapter, siteId, searchType } = options
   const comparisonPlan = buildComparisonPlan(current, previous, adapter.capabilities)
@@ -480,7 +498,12 @@ export function resolveComparisonSQL<TK extends string>(
 
   const filterClause = comparisonFilter ? COMPARISON_FILTER_SQL[comparisonFilter] : sql.raw('')
 
-  const orderSql = orderByClause(current, '')
+  // A change order ranks the joined rows by period-over-period movement before
+  // the row cap. Ordering by the current window instead caps away a large loser
+  // whose current clicks are low. It orders by its own output alias, the same
+  // shape as the default `ORDER BY clicks`.
+  const changeOrder = comparisonOrderBy ? changeOrderClause(comparisonOrderBy) : undefined
+  const orderSql = changeOrder?.orderBy ?? orderByClause(current, '')
   const limitSql = limitOffsetClause(current)
 
   // Outer SELECT enumerates columns explicitly (not `c.*`) and casts the
@@ -497,6 +520,8 @@ export function resolveComparisonSQL<TK extends string>(
   outerCurrentCols.push(sql.raw('CAST(COALESCE(c.impressions, 0) AS DOUBLE) as "impressions"'))
   outerCurrentCols.push(sql.raw('COALESCE(c.ctr, 0) as "ctr"'))
   outerCurrentCols.push(sql.raw('COALESCE(c.position, 0) as "position"'))
+  if (changeOrder)
+    outerCurrentCols.push(changeOrder.column)
 
   const mainQuery = sql`WITH current AS (${currentCte}), previous AS (${previousCte}) SELECT ${joinComma(outerCurrentCols)}, COALESCE(CAST(p.clicks AS DOUBLE), 0) as "prevClicks", COALESCE(CAST(p.impressions AS DOUBLE), 0) as "prevImpressions", COALESCE(p.ctr, 0) as "prevCtr", COALESCE(p.position, 0) as "prevPosition" FROM current c FULL OUTER JOIN previous p ON ${joinOn} WHERE 1=1 ${filterClause} ${orderSql} ${limitSql}`
 

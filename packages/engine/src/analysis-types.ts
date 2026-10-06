@@ -5,6 +5,7 @@
  */
 
 import type { BuilderState, SearchType } from 'gscdump/query'
+import type { ComparisonOrderBy } from './resolver/types'
 
 export type AnalysisTool
   = | 'striking-distance' | 'opportunity' | 'movers' | 'decay'
@@ -73,6 +74,8 @@ export interface AnalysisParams {
   qc?: BuilderState
   /** data-query comparison filter applied to joined current/previous rows. */
   comparisonFilter?: 'new' | 'lost' | 'improving' | 'declining'
+  /** data-query comparison order applied to the joined rows before the row cap. */
+  comparisonOrderBy?: ComparisonOrderBy
   /** GSC slice the analysis is scoped to. Undefined = analyzer runs cross-type (today's behaviour for web-only sites). */
   searchType?: SearchType
 }

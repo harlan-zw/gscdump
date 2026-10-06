@@ -38,6 +38,16 @@ export interface ResolverAdapter<TableKey extends string = string> {
 
 export type ComparisonFilter = 'new' | 'lost' | 'improving' | 'declining'
 
+/**
+ * Order for a comparison read, applied to the joined rows before the row cap.
+ * `clicksChange` is current clicks minus previous clicks, so `asc` puts the
+ * biggest losers first and `desc` the biggest gainers.
+ */
+export interface ComparisonOrderBy {
+  column: 'clicksChange'
+  dir: 'asc' | 'desc'
+}
+
 export interface ResolverOptions<TableKey extends string = string> {
   adapter: ResolverAdapter<TableKey>
   /** Optional site scope. Required for multi-tenant D1; omitted for parquet. */

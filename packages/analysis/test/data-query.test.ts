@@ -144,6 +144,34 @@ describe('data-query', () => {
       expect(r.prevImpressions).toBe(0)
   })
 
+  it('comparison path ranks by click change before the row cap', async () => {
+    const out = await analyzeInBrowser(runner, { schema: 'main' }, {
+      type: 'data-query',
+      q: {
+        dimensions: ['query'],
+        orderBy: { column: 'clicks', dir: 'desc' },
+        rowLimit: 2,
+        filter: { _filters: [
+          { dimension: 'date', operator: 'gte', expression: '2026-04-10' },
+          { dimension: 'date', operator: 'lte', expression: '2026-04-11' },
+        ] },
+      },
+      qc: {
+        dimensions: ['query'],
+        filter: { _filters: [
+          { dimension: 'date', operator: 'gte', expression: '2026-04-01' },
+          { dimension: 'date', operator: 'lte', expression: '2026-04-01' },
+        ] },
+      },
+      comparisonOrderBy: { column: 'clicksChange', dir: 'asc' },
+    }, defaultAnalyzerRegistry)
+
+    // Current-click order would keep alpha and beta. Change order keeps the
+    // biggest loser (dropped, 8 → 0) and the smallest gain (gamma, 0 → 5).
+    const rows = out.results as Array<{ query: string, clicksChange: number }>
+    expect(rows.map(r => [r.query, r.clicksChange])).toEqual([['dropped', -8], ['gamma', 5]])
+  })
+
   it('orderBy + rowLimit honored through the optimized path', async () => {
     const out = await analyzeInBrowser(runner, { schema: 'main' }, {
       type: 'data-query',

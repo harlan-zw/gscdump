@@ -40,6 +40,7 @@
   gscAddAndVerifyResponseSchema: object
   gscApiRangeSchema: object
   gscComparisonFilterSchema: object
+  gscComparisonOrderBySchema: object
   GSCDUMP_INDEXING_TRANSITION_FIELDS: object
   GSCDUMP_ONBOARDING_CONTRACT_VERSION: string
   GSCDUMP_OPTIONAL_INDEXING_SCOPE: string

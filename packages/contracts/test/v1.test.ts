@@ -342,6 +342,22 @@ describe('@gscdump/contracts/v1 HTTP registry', () => {
     }).success).toBe(false)
     expect(schemas.analyticsReportRequest.safeParse({ state: { dimensions: ['date'] } }).success).toBe(false)
     expect(schemas.analyticsReportDetailRequest.safeParse({ state: { dimensions: ['query'] } }).success).toBe(false)
+    expect(schemas.analyticsReportRequest.parse({
+      state: { dimensions: ['page'] },
+      comparison: { dimensions: ['page'] },
+      filter: 'declining',
+      comparisonOrderBy: { column: 'clicksChange', dir: 'asc' },
+    })).toMatchObject({ comparisonOrderBy: { column: 'clicksChange', dir: 'asc' } })
+    // A change order without a previous window has nothing to order by.
+    expect(schemas.analyticsReportRequest.safeParse({
+      state: { dimensions: ['page'] },
+      comparisonOrderBy: { column: 'clicksChange', dir: 'asc' },
+    }).success).toBe(false)
+    expect(schemas.analyticsReportRequest.safeParse({
+      state: { dimensions: ['page'] },
+      comparison: { dimensions: ['page'] },
+      comparisonOrderBy: { column: 'impressionsChange', dir: 'asc' },
+    }).success).toBe(false)
     expect(schemas.ticketRequest.parse({})).toEqual({})
     expect(schemas.ticketRequest.parse({ origin: 'https://nuxtseo.com' })).toEqual({
       origin: 'https://nuxtseo.com',
