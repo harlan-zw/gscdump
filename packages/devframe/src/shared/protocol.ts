@@ -20,6 +20,8 @@ export interface SiteSummary {
   siteId: string
   /** The Site as gscdump registered it, for example `example.com`. */
   siteUrl: string
+  /** The exact host the Site covers, for example `example.com`. A page on another host is not on this Site. */
+  host: string
   /** The first day the Hosted record holds, `YYYY-MM-DD`. */
   oldestDate: string | null
   /** The last day the Hosted record holds, `YYYY-MM-DD`. */
@@ -27,15 +29,21 @@ export interface SiteSummary {
 }
 
 /**
- * What the node side can read, decided once per panel boot. Each tag names
- * the next step the panel shows.
+ * What the panel can read, decided once per panel boot and again when the
+ * page's host changes. Each tag names the next step the panel shows.
  */
 export type GscdumpContext
   = | { _tag: 'Ready', site: SiteSummary, sites: SiteSummary[], configured: boolean }
     | { _tag: 'SiteRequired', sites: SiteSummary[], target: string | null }
-    | { _tag: 'NoSites' }
+    | { _tag: 'NoSiteForPage', host: string }
+    | BlockedContext
+
+/** A context that stops before any Site is chosen: no credential, no Sites, or no service. */
+export type BlockedContext
+  = | { _tag: 'NoSites' }
     | { _tag: 'CredentialMissing' }
     | { _tag: 'CredentialRejected', source: CredentialSource }
+    | { _tag: 'SignedOut', signInUrl: string }
     | { _tag: 'Unavailable', message: string }
 
 export type CredentialSource = 'option' | 'env' | 'cli-session'

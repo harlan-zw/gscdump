@@ -2,6 +2,7 @@ import type { GscdumpCredential } from './credential'
 import type { SiteSummary } from './shared/protocol'
 import { z } from 'zod'
 import { cliHeadersOf } from './credential'
+import { hostOf } from './source'
 
 const accountSchema = z.object({
   sites: z.array(z.object({
@@ -38,6 +39,7 @@ export async function readAccount(credential: GscdumpCredential, request: typeof
     sites: parsed.data.sites.map(site => ({
       siteId: site.siteId,
       siteUrl: site.siteUrl,
+      host: hostOf(site.siteUrl) ?? site.siteUrl,
       oldestDate: site.oldestDateSynced ?? null,
       newestDate: site.newestDateSynced ?? null,
     })),

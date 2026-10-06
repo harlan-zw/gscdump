@@ -53,7 +53,8 @@
     "dev": "vite --config playground/vite.config.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest",
-    "prepack": "pnpm run build"
+    "prepack": "pnpm run build",
+    "build:extension": "vite build --config extension/vite.config.ts"
   },
   "peerDependencies": {
     "@vitejs/devtools-kit": ">=0.7.6"
@@ -70,6 +71,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@types/chrome": "catalog:devframe",
     "@types/ws": "catalog:devframe",
     "@vitejs/devtools": "catalog:devframe",
     "@vitejs/devtools-kit": "catalog:devframe",

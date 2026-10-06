@@ -1,5 +1,5 @@
 import type { DevframeDefinition } from 'devframe'
-import type { GscdumpReaderOptions } from './reader'
+import type { HostedSourceOptions } from './sources/hosted'
 import { readFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { homedir } from 'node:os'
@@ -7,11 +7,14 @@ import { dirname, join } from 'node:path'
 import process from 'node:process'
 import { defineDevframe } from 'devframe'
 import pkg from '../package.json' with { type: 'json' }
-import { createGscdumpReader } from './reader'
+import { createPageStatsReader } from './reader'
 import { createRpcFunctions } from './rpc'
 import { DEVFRAME_ID } from './shared/protocol'
+import { createHostedSource } from './sources/hosted'
 
-export interface GscdumpDevframeOptions extends GscdumpReaderOptions {
+export interface GscdumpDevframeOptions extends HostedSourceOptions {
+  /** The Site to read: a Site ID, a Site URL, or its host. Optional when the credential holds one Site. */
+  site?: string
   /** Override the request implementation, for proxies and tests. */
   fetch?: typeof fetch
 }
@@ -63,12 +66,12 @@ export function createGscdumpDevframe(options: GscdumpDevframeOptions = {}): Dev
     capabilities: { build: false },
     setup(ctx) {
       const env = process.env
-      const reader = createGscdumpReader(options, {
+      const source = createHostedSource(options, {
         fetch: options.fetch ?? globalThis.fetch,
         env,
         readCliAuthentication: () => readCliAuthentication(env),
-        now: Date.now,
       })
+      const reader = createPageStatsReader({ site: options.site }, source, Date.now)
       const scoped = ctx.scope(DEVFRAME_ID)
       for (const fn of createRpcFunctions(reader))
         scoped.rpc.register(fn)
@@ -78,5 +81,5 @@ export function createGscdumpDevframe(options: GscdumpDevframeOptions = {}): Dev
 
 export default createGscdumpDevframe
 
-export type { GscdumpReaderOptions } from './reader'
 export type { DailyPoint, DateWindow, GscdumpContext, MetricTotals, PageStats, PageStatsInput, Period, QueryRow, SiteSummary } from './shared/protocol'
+export type { HostedSourceOptions } from './sources/hosted'

@@ -127,6 +127,7 @@ catalogs:
     '@vitest/browser': ^5.0.1
     vitest: ^5.0.1
   devframe:
+    '@types/chrome': ^0.3.4
     '@types/ws': ^8.18.2
     '@vitejs/devtools': ^0.7.6
     '@vitejs/devtools-kit': ^0.7.6
