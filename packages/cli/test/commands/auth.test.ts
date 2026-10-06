@@ -55,6 +55,8 @@ vi.mock('../../src/auth', () => ({
   resolveBYOK: mocks.resolveBYOK,
   getAuth: mocks.getAuth,
   resolveAuth: mocks.resolveAuth,
+  resolveServiceAccount: async () => null,
+  isStaleServiceAccountPointer: () => false,
   ACCESS_NOT_SET_UP: 'Google credentials are missing. Set up one of the 2 access modes:',
 }))
 
