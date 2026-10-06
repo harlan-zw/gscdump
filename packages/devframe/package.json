@@ -1,7 +1,7 @@
 {
   "name": "@gscdump/devframe",
   "type": "module",
-  "version": "5.7.0",
+  "version": "6.0.0",
   "description": "Search Console clicks, impressions, and queries for the page you are developing, in Vite DevTools and any devframe hub.",
   "author": {
     "name": "Harlan Wilton",
