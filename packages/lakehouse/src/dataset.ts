@@ -254,6 +254,10 @@ export interface IcebergDataset {
   icebergPartitionSpec: () => IcebergPartitionSpec
   icebergSortOrder: () => IcebergSortOrder | undefined
   createTable: (conn: IcebergConnection) => Promise<IcebergTableOpResult[]>
+  /** Inspect current metadata without caches before admitting a provisioned table. */
+  verifyTable: (conn: IcebergConnection) => Promise<
+    { _tag: 'Ok' } | { _tag: 'Err', reason: 'schema-mismatch' | 'partition-mismatch' }
+  >
   /**
    * One-shot append over an EXISTING connection: identity INT32 guard, dedupe
    * by identity+dims+naturalKey (last-wins), cluster pre-sort (if
@@ -269,6 +273,18 @@ export interface IcebergDataset {
    * across source batches.
    */
   appendBatches: (conn: IcebergConnection, source: AppendBatchSource, opts: AppendBatchesOptions) => Promise<AppendBatchesResult>
+  /** Fresh, exact snapshot membership. Missing evidence never falls back to current files. */
+  resolveAppendFiles: (conn: IcebergConnection, appendId: string, identity: string | number, dims?: Record<string, string>) => Promise<
+    { _tag: 'Ok', snapshotId: string, files: IcebergListedDataFile[] } | { _tag: 'Err', reason: 'append-unavailable' }
+  >
+  /** Create once per request. The next request must create a fresh resolver. */
+  createAppendFileResolver: (conn: IcebergConnection) => Promise<
+    ((appendId: string, identity: string | number, dims?: Record<string, string>) => ReturnType<IcebergDataset['resolveAppendFiles']>) & {
+      currentFiles: (identity: string | number, dims?: Record<string, string>) =>
+        { _tag: 'Ok', files: IcebergListedDataFile[] } | { _tag: 'Err', reason: 'append-unavailable' }
+      confirmCurrent: () => Promise<boolean>
+    }
+  >
   /**
    * PURE row processing — the identity INT32 guard, dedupe (identity+dims+
    * naturalKey, last-wins) and cluster pre-sort `appendRows`/`appendSink`
@@ -397,6 +413,13 @@ export function defineIcebergDataset(def: IcebergDatasetDef): IcebergDataset {
     return createDatasetTable(conn, def.table, schema, partitionSpecIcebird, sortOrder)
   }
 
+  async function verifyTable(conn: IcebergConnection): Promise<
+    { _tag: 'Ok' } | { _tag: 'Err', reason: 'schema-mismatch' | 'partition-mismatch' }
+  > {
+    const { verifyDatasetTable } = await import('./dataset-runtime')
+    return verifyDatasetTable(conn, def.table, schema, partitionSpecIcebird)
+  }
+
   function process(rows: readonly Record<string, unknown>[]): { records: Record<string, unknown>[], skipped: number } {
     const guarded: Record<string, unknown>[] = []
     let skipped = 0
@@ -488,6 +511,28 @@ export function defineIcebergDataset(def: IcebergDatasetDef): IcebergDataset {
     return buildManifestPartitionFilter(def.partition, readerPredicate(identity, dims), months)
   }
 
+  async function resolveAppendFiles(conn: IcebergConnection, appendId: string, identity: string | number, dims?: Record<string, string>): Promise<
+    { _tag: 'Ok', snapshotId: string, files: IcebergListedDataFile[] } | { _tag: 'Err', reason: 'append-unavailable' }
+  > {
+    const { resolveDatasetAppendFiles } = await import('./dataset-runtime')
+    return resolveDatasetAppendFiles(conn, def.table, appendId, readerPredicate(identity, dims))
+  }
+
+  async function createAppendFileResolver(conn: IcebergConnection): ReturnType<IcebergDataset['createAppendFileResolver']> {
+    const { createDatasetAppendFileResolver } = await import('./dataset-runtime')
+    const dates = def.columns.filter(column => column.type === 'DATE')
+    const dateColumn = def.partition.find(field => field.transform === 'month')?.sourceColumn
+      ?? (dates.length === 1 ? dates[0]?.name : undefined)
+    const resolve = await createDatasetAppendFileResolver(conn, def.table, dateColumn)
+    return Object.assign(
+      (appendId: string, identity: string | number, dims?: Record<string, string>) => resolve(appendId, readerPredicate(identity, dims)),
+      {
+        currentFiles: (identity: string | number, dims?: Record<string, string>) => resolve.currentFiles(readerPredicate(identity, dims)),
+        confirmCurrent: resolve.confirmCurrent,
+      },
+    )
+  }
+
   async function resolveDataFiles(
     conn: IcebergConnection,
     identity: string | number,
@@ -515,8 +560,11 @@ export function defineIcebergDataset(def: IcebergDatasetDef): IcebergDataset {
     icebergPartitionSpec: () => partitionSpecIcebird,
     icebergSortOrder: () => sortOrder,
     createTable,
+    verifyTable,
     appendRows,
     appendBatches,
+    resolveAppendFiles,
+    createAppendFileResolver,
     prepareRows: process,
     appendSink,
     readerPredicate,

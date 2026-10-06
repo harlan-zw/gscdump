@@ -55,6 +55,8 @@ export const HTTP_V1_ERROR_CODES = [
   'api_key_not_found',
   'api_key_limit_reached',
   'rate_limited',
+  'conflict',
+  'service_unavailable',
   'realtime_unavailable',
   'internal_error',
   'contract_violation',

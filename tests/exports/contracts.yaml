@@ -244,6 +244,16 @@
   querySourceModes: object
   sitemapNextActions: object
   sitemapStatuses: object
+  siteVersionBeginRequestSchema: object
+  siteVersionCandidateRequestSchema: object
+  siteVersionCandidateSchema: object
+  siteVersionIdentityResponseSchema: object
+  siteVersionIdentitySchema: object
+  siteVersionPreviewRequestSchema: object
+  siteVersionPreviewSchema: object
+  siteVersionRefusalSchema: object
+  siteVersionSliceSchema: object
+  siteVersionWindowSchema: object
   VALID_WEBHOOK_EVENTS: object
   WEBHOOK_CONTRACT_VERSION: string
   WEBHOOK_CONTRACT_VERSION_HEADER: string

@@ -5,5 +5,6 @@ export {
   partnerControlEndpointSchemas,
   partnerControlEndpointSchemas as partnerEndpointSchemas,
 } from './schemas'
+export * from './site-version'
 export type * from './types'
 export * from './webhook-constants'

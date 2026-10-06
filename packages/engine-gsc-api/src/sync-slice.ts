@@ -21,6 +21,15 @@ export interface GscApiRow {
   position: number
 }
 
+export interface GscCommittedPage {
+  siteUrl: string
+  request: SearchAnalyticsQuery
+  rows: GscApiRow[]
+  terminal: boolean
+  aggregation: GscAggregation
+  metadata: GscSearchAnalyticsMetadata | undefined
+}
+
 export interface SyncSliceDomainFilter {
   /**
    * Exact registered host to scope the slice to, without a protocol.
@@ -79,6 +88,8 @@ export interface RunGscSyncSliceOptions {
   searchType?: SearchType
   /** Invoked once per successful GSC API page. Hosts wire telemetry here. */
   onPage?: (info: { searchType: SearchType, rowsThisPage: number }) => void
+  /** Durable outcomes include empty terminal pages and follow successful batch commits. */
+  onCommittedPage?: (page: GscCommittedPage) => Promise<void>
 }
 
 /**
@@ -125,6 +136,7 @@ export interface RunGscSearchAppearanceContextSliceOptions {
   onTotalBatch?: (rows: GscApiRow[]) => Promise<void>
   onContextBatch: (batch: { searchAppearance: string, table: SearchAppearanceContextTable, rows: GscApiRow[] }) => Promise<void>
   onPage?: (info: { searchType: SearchType, rowsThisPage: number }) => void
+  onCommittedPage?: (page: GscCommittedPage) => Promise<void>
   continuation?: SearchAppearanceContinuation
 }
 
@@ -271,7 +283,7 @@ export async function runGscSyncSlice(
   // become a `timeout` result (retry at this cursor); any other error is carried
   // and rethrown only when the page is consumed, preserving serial throw-order.
   type PageResult
-    = | { kind: 'ok', startRow: number, rows: GscApiRow[], metadata?: GscSearchAnalyticsMetadata, reported: GscAggregation | null }
+    = | { kind: 'ok', startRow: number, request: SearchAnalyticsQuery, rows: GscApiRow[], metadata?: GscSearchAnalyticsMetadata, reported: GscAggregation | null }
       | { kind: 'timeout', startRow: number }
       | { kind: 'error', error: unknown }
   const fetchPage = async (row: number): Promise<PageResult> => {
@@ -290,6 +302,7 @@ export async function runGscSyncSlice(
       return {
         kind: 'ok',
         startRow: row,
+        request: query,
         reported: reportedAggregation((response as { responseAggregationType?: unknown }).responseAggregationType),
         rows: (response.rows ?? []) as GscApiRow[],
         metadata: (response as { metadata?: GscSearchAnalyticsMetadata }).metadata,
@@ -364,6 +377,15 @@ export async function runGscSyncSlice(
         return { totalRows: totalRows - rows.length, hasMore: true, nextStartRow: page.startRow, metadata, aggregation }
     }
 
+    await opts.onCommittedPage?.({
+      siteUrl: opts.siteUrl,
+      request: page.request,
+      rows,
+      terminal: isLastPage,
+      aggregation,
+      metadata: page.metadata,
+    })
+
     if (isLastPage)
       return { totalRows, hasMore: false, nextStartRow, metadata, aggregation }
     if (prefetch === null)
@@ -421,6 +443,7 @@ export async function runGscSearchAppearanceContextSlice(
       searchType: opts.searchType,
       initialStartRow: opts.continuation?.phase === 'discovery' ? opts.continuation.nextStartRow : undefined,
       onPage: opts.onPage,
+      onCommittedPage: opts.onCommittedPage,
       onBatch: async (rows) => {
         for (const row of rows) {
           const value = String(row.keys?.[0] ?? '')
@@ -466,6 +489,7 @@ export async function runGscSearchAppearanceContextSlice(
       searchType: opts.searchType,
       initialStartRow: i === startIndex ? startRow : undefined,
       onPage: opts.onPage,
+      onCommittedPage: opts.onCommittedPage,
       onBatch: rows => opts.onContextBatch({ searchAppearance, table, rows }),
     })
     totalRows += context.totalRows

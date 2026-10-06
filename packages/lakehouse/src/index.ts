@@ -16,6 +16,7 @@ export {
 export {
   catalogCacheScope,
   connectIcebergCatalog,
+  createIcebergNamespace,
   dropIcebergTables,
   ensureIcebergNamespace,
   invalidateSnapshotRef,

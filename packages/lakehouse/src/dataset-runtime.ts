@@ -15,6 +15,7 @@ import type {
   AppendBatchesResult,
   AppendBatchSource,
 } from './dataset'
+import { restCatalogLoadTable } from 'icebird/src/catalog/rest.js'
 import { icebergCreateTable } from 'icebird/src/write/write.js'
 import {
   connectIcebergCatalog,
@@ -24,9 +25,37 @@ import {
   resolveIcebergDataFiles,
 } from './catalog'
 
+export { resolveIcebergAppendFiles as resolveDatasetAppendFiles } from './catalog'
+export { createIcebergAppendFileResolver as createDatasetAppendFileResolver } from './catalog'
+
 interface PreparedRows {
   records: Record<string, unknown>[]
   skipped: number
+}
+
+/** Provisioning must inspect the actual current schema, not a cached table name. */
+export async function verifyDatasetTable(
+  conn: IcebergConnection,
+  table: string,
+  schema: IcebergSchema,
+  partitionSpec: IcebergPartitionSpec,
+): Promise<{ _tag: 'Ok' } | { _tag: 'Err', reason: 'schema-mismatch' | 'partition-mismatch' }> {
+  const { metadata } = await restCatalogLoadTable(conn.catalog, { namespace: conn.namespace, table })
+  const currentSchema = metadata.schemas?.find(s => s['schema-id'] === metadata['current-schema-id'])
+  if (!currentSchema || currentSchema.fields.length !== schema.fields.length
+    || !schema.fields.every(expected => currentSchema.fields.some(actual =>
+      actual.id === expected.id && actual.name === expected.name
+      && actual.type === expected.type && actual.required === expected.required))) {
+    return { _tag: 'Err', reason: 'schema-mismatch' }
+  }
+  const currentSpec = metadata['partition-specs']?.find(s => s['spec-id'] === metadata['default-spec-id'])
+  if (!currentSpec || currentSpec.fields.length !== partitionSpec.fields.length
+    || !partitionSpec.fields.every(expected => currentSpec.fields.some(actual =>
+      actual['source-id'] === expected['source-id'] && actual['field-id'] === expected['field-id']
+      && actual.name === expected.name && actual.transform === expected.transform))) {
+    return { _tag: 'Err', reason: 'partition-mismatch' }
+  }
+  return { _tag: 'Ok' }
 }
 
 export async function createDatasetTable(
