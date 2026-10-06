@@ -1,16 +1,15 @@
 <script setup lang="ts">
-import type { DevframeRpcClient } from 'devframe/client'
-import type { GscdumpContext, PageChannelProtocol, PageLocation, PageStats, Period } from '../src/shared/protocol'
+import type { GscdumpContext, PageLocation, PageStats, Period } from '../src/shared/protocol'
 import type { Metric } from './format'
-import { connectDevframe } from 'devframe/client'
-import { connectPanelChannel } from 'devframe/in-page-channel'
-import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
-import { PAGE_CHANNEL, PERIODS } from '../src/shared/protocol'
+import type { PanelHost } from './host'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { PERIODS } from '../src/shared/protocol'
 import DailyChart from './components/DailyChart.vue'
 import QueryTable from './components/QueryTable.vue'
 import StatTile from './components/StatTile.vue'
 import { formatDay, METRICS } from './format'
-import { callGscdump } from './rpc'
+
+const { host } = defineProps<{ host: PanelHost }>()
 
 // Per-viewer preferences. Storage can be blocked; the panel works without it.
 function stored(key: string): string | null {
@@ -37,20 +36,17 @@ function store(key: string, value: string | null): void {
 const SITE_KEY = 'gscdump-devframe:site'
 const PERIOD_KEY = 'gscdump-devframe:period'
 
-const client = shallowRef<DevframeRpcClient | null>(null)
-const connectionError = ref<string | null>(null)
 const context = ref<GscdumpContext | null>(null)
 const preferredSiteId = ref<string | null>(stored(SITE_KEY))
 const storedPeriod = stored(PERIOD_KEY)
 const period = ref<Period>(PERIODS.some(p => p.value === storedPeriod) ? storedPeriod as Period : '28d')
 const metric = ref<Metric>('clicks')
 
-/** A dock iframe or a popup. Only then can a page script answer. */
-const embedded = window.parent !== window || !!window.opener
-/** The page in view in the host app, from the page script. `null` outside a hub dock. */
+/** The page in view, from the host. `null` when the host cannot see one. */
 const hostLocation = ref<PageLocation | null>(null)
-const pageReady = ref(!embedded)
-const follow = ref(embedded)
+/** The first read waits briefly for the page in view, so it does not read `/` first. */
+const pageReady = ref(!host.followPage)
+const follow = ref(!!host.followPage)
 const pageInput = ref('/')
 const page = ref('/')
 
@@ -63,23 +59,21 @@ const windowLabel = computed(() => periodOption.value.label)
 const previousLabel = computed(() => `previous ${periodOption.value.days} days`)
 const site = computed(() => context.value?._tag === 'Ready' ? context.value.site : null)
 const sites = computed(() => context.value?._tag === 'Ready' || context.value?._tag === 'SiteRequired' ? context.value.sites : [])
+/** The host of the page in view. A new host can mean a new Site. */
+const pageHost = computed(() => hostLocation.value ? URL.parse(hostLocation.value.href)?.host ?? null : null)
 
 async function loadContext(): Promise<void> {
-  if (!client.value)
-    return
   context.value = null
-  context.value = await callGscdump(client.value, 'gscdump:get-context', preferredSiteId.value)
-    .catch((error: unknown) => ({ _tag: 'Unavailable', message: error instanceof Error ? error.message : String(error) }) as const)
+  context.value = await host.context(preferredSiteId.value, hostLocation.value?.href ?? null)
 }
 
 async function loadStats(): Promise<void> {
   const current = site.value
-  if (!client.value || !current || !pageReady.value)
+  if (!current || !pageReady.value)
     return
   const id = ++request
   loading.value = true
-  const result = await callGscdump(client.value, 'gscdump:get-page-stats', { page: page.value, period: period.value, siteId: current.siteId })
-    .catch((error: unknown): PageStats => ({ _tag: 'Failed', message: error instanceof Error ? error.message : String(error), requestId: null }))
+  const result = await host.pageStats({ page: page.value, period: period.value, siteId: current.siteId })
   if (id !== request)
     return
   stats.value = result
@@ -99,7 +93,7 @@ function showPage(): void {
   page.value = next
 }
 
-function followApp(): void {
+function followPage(): void {
   follow.value = true
   if (hostLocation.value) {
     pageInput.value = hostLocation.value.path
@@ -108,6 +102,10 @@ function followApp(): void {
 }
 
 watch(period, value => store(PERIOD_KEY, value))
+watch([pageReady, pageHost], () => {
+  if (pageReady.value)
+    void loadContext()
+}, { immediate: true })
 watch([page, period, site, pageReady], () => void loadStats())
 watch(hostLocation, (location) => {
   if (location && follow.value) {
@@ -116,36 +114,21 @@ watch(hostLocation, (location) => {
   }
 })
 
-let channel: ReturnType<typeof connectPanelChannel<PageChannelProtocol>> | null = null
+let stopFollowing: (() => void) | null = null
 
-onMounted(async () => {
-  // The page script answers only inside a hub dock over the app. Outside one,
-  // the panel reads the page typed into the field.
-  if (embedded) {
-    channel = connectPanelChannel<PageChannelProtocol>({ name: PAGE_CHANNEL, functions: {} })
-    // The first read waits briefly for the app's page, so it does not read `/` first.
-    setTimeout(() => {
-      pageReady.value = true
-    }, 2000)
-    void channel.sharedState.get('location').then((state) => {
-      hostLocation.value = { ...state.value() }
-      pageReady.value = true
-      state.on('updated', (value) => {
-        hostLocation.value = { ...value }
-      })
-    })
-  }
-
-  const connected = await connectDevframe().catch((error: unknown) => error instanceof Error ? error : new Error(String(error)))
-  if (connected instanceof Error) {
-    connectionError.value = connected.message
+onMounted(() => {
+  if (!host.followPage)
     return
-  }
-  client.value = connected
-  await loadContext()
+  setTimeout(() => {
+    pageReady.value = true
+  }, 2000)
+  stopFollowing = host.followPage((location) => {
+    hostLocation.value = location
+    pageReady.value = true
+  })
 })
 
-onBeforeUnmount(() => channel?.close())
+onBeforeUnmount(() => stopFollowing?.())
 
 const okStats = computed(() => stats.value?._tag === 'Ok' ? stats.value : null)
 const empty = computed(() => okStats.value?.totals.impressions === 0)
@@ -176,11 +159,7 @@ const dateRange = computed(() => okStats.value ? `${formatDay(okStats.value.wind
       </div>
     </header>
 
-    <p v-if="connectionError" class="notice error">
-      The devtool did not connect to the dev server: {{ connectionError }}
-    </p>
-
-    <p v-else-if="!context" class="notice muted">
+    <p v-if="!context" class="notice muted">
       Connecting to gscdump
     </p>
 
@@ -209,6 +188,22 @@ const dateRange = computed(() => okStats.value ? `${formatDay(okStats.value.wind
       </button>
     </section>
 
+    <section v-else-if="context._tag === 'SignedOut'" class="notice">
+      <strong>Sign in to gscdump.com</strong>
+      <p>This panel reads your Sites with your gscdump.com login. Sign in, then select Try again.</p>
+      <div class="actions">
+        <a class="button" :href="context.signInUrl" target="_blank" rel="noopener">Sign in</a>
+        <button type="button" class="button" @click="loadContext">
+          Try again
+        </button>
+      </div>
+    </section>
+
+    <section v-else-if="context._tag === 'NoSiteForPage'" class="notice">
+      <strong>No Site for {{ context.host }}</strong>
+      <p>None of your gscdump Sites covers <code class="mono">{{ context.host }}</code>. Open a page on one of your Sites, or add this one at <a href="https://gscdump.com/app/onboarding?step=connect-sites" target="_blank" rel="noopener">gscdump.com</a>.</p>
+    </section>
+
     <section v-else-if="context._tag === 'NoSites'" class="notice">
       <strong>No Sites yet</strong>
       <p>Your gscdump account has no Sites. Connect a Site at <a href="https://gscdump.com/app/onboarding?step=connect-sites" target="_blank" rel="noopener">gscdump.com</a>, then select Try again.</p>
@@ -226,9 +221,9 @@ const dateRange = computed(() => okStats.value ? `${formatDay(okStats.value.wind
     </section>
 
     <section v-else-if="context._tag === 'SiteRequired'" class="notice">
-      <strong>Select the Site this app serves</strong>
+      <strong>Select a Site</strong>
       <p v-if="context.target">
-        No single Site matches "{{ context.target }}". Set the <code class="mono">site</code> option to a Site ID from this list.
+        No single Site matches "{{ context.target }}". Select one.
       </p>
       <div class="site-list">
         <button v-for="option in context.sites" :key="option.siteId" type="button" class="button" @click="selectSite(option.siteId)">
@@ -251,10 +246,10 @@ const dateRange = computed(() => okStats.value ? `${formatDay(okStats.value.wind
           class="button"
           :aria-pressed="follow"
           :disabled="!hostLocation"
-          :title="hostLocation ? 'Show the page that is open in the app' : 'Open this panel from the app to follow its page'"
-          @click="followApp"
+          :title="hostLocation ? 'Show the page in view' : 'This panel cannot see a page here'"
+          @click="followPage"
         >
-          Follow app
+          {{ host.followLabel }}
         </button>
       </form>
 
@@ -405,6 +400,11 @@ const dateRange = computed(() => okStats.value ? `${formatDay(okStats.value.wind
 
 .notice.error {
   border-color: color-mix(in srgb, var(--bad) 40%, var(--border));
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
 }
 
 .site-list {

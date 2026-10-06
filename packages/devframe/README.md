@@ -81,6 +81,21 @@ Search Console stores a Site's pages by path. The devtool reads the path of the 
 
 The window ends three days before today in Pacific time, because Google has not finalized newer days. The gscdump.com dashboard uses the same end. If the Hosted record ends earlier, the window ends on its last day. The comparison window is the same number of days just before it.
 
+## Chrome extension (prototype)
+
+The same panel also builds as a Chrome side panel. It shows the stats for the page in the current tab, on your live site. It is not on the Chrome Web Store yet.
+
+```bash
+pnpm --filter @gscdump/devframe build:extension
+```
+
+1. Open `chrome://extensions` and turn on Developer mode.
+2. Select Load unpacked, then select `packages/devframe/dist-extension`.
+3. Sign in to gscdump.com in the same browser.
+4. Open a page on one of your Sites, then select the extension's toolbar button.
+
+The extension stores no API key. It reads your Sites with your gscdump.com login, and the tab's host selects the Site. It asks for two permissions: `tabs`, to read the current tab's address, and access to gscdump.com.
+
 ## Coding agents
 
 The `get-page-stats` function is also an MCP tool. When the host serves MCP (Vite DevTools does), a coding agent can read a page's clicks, impressions, CTR, position, and top queries while it changes the page.
