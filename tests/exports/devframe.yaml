@@ -1,6 +1,8 @@
 .:
   createGscdumpDevframe: function
   default: function
+./nuxt:
+  default: function
 ./vite:
   default: function
   gscdump: function
