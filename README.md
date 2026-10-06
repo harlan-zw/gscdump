@@ -202,6 +202,7 @@ The [generated contracts](./packages/contracts/generated) define operation input
 | [`@gscdump/sdk`](./packages/sdk) | Hosted HTTP, realtime, and webhook clients |
 | [`@gscdump/cloudflare`](./packages/cloudflare) | Cloudflare server-tail and request deduplication helpers |
 | [`@gscdump/cli`](./packages/cli) | CLI and MCP server (`gscdump mcp`) |
+| [`@gscdump/devframe`](./packages/devframe) | Search Console data for the page in view, in Vite DevTools, Nuxt DevTools, and devframe hubs |
 
 ## Support and contributions
 

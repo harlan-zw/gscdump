@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "resolveJsonModule": true,
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts", "app/**/*.ts", "test/**/*.ts", "playground/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}
