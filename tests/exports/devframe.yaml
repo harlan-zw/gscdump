@@ -1,0 +1,6 @@
+.:
+  createGscdumpDevframe: function
+  default: function
+./vite:
+  default: function
+  gscdump: function
