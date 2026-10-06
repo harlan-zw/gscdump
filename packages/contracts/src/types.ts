@@ -367,6 +367,12 @@ export interface BackfillResponse {
 
 export type GscComparisonFilter = 'new' | 'lost' | 'improving' | 'declining'
 
+/** Comparison read order applied before the row cap; see `gscComparisonOrderBySchema`. */
+export interface GscComparisonOrderBy {
+  column: 'clicksChange'
+  dir: 'asc' | 'desc'
+}
+
 export interface GscdumpDataRow {
   page?: string
   query?: string

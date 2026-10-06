@@ -614,6 +614,29 @@
                     ],
                     "type": "object"
                   },
+                  "comparisonOrderBy": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "column": {
+                        "enum": [
+                          "clicksChange"
+                        ],
+                        "type": "string"
+                      },
+                      "dir": {
+                        "enum": [
+                          "asc",
+                          "desc"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "column",
+                      "dir"
+                    ],
+                    "type": "object"
+                  },
                   "filter": {
                     "enum": [
                       "new",

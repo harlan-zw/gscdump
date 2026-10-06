@@ -157,6 +157,7 @@ export function buildDataQueryPlan<TK extends string>(
       prev,
       options,
       params.comparisonFilter,
+      params.comparisonOrderBy,
     )
     extraQueries.unshift({ name: 'totals', sql: totals.sql, params: totals.params })
     extraQueries.push({ name: 'count', sql: comparison.countSql, params: comparison.countParams })
@@ -269,8 +270,16 @@ export function shapeDataQueryRowResults(
       merged.push(row)
   }
 
-  if (state.orderBy) {
-    const { column, dir } = state.orderBy
+  // Parity with the SQL path: a change order projects `clicksChange` and ranks
+  // by it, replacing the current-window order.
+  const changeOrder = params.comparisonOrderBy
+  if (changeOrder) {
+    for (const row of merged)
+      row.clicksChange = Number(row.clicks ?? 0) - Number(row.prevClicks ?? 0)
+  }
+  const order = changeOrder ?? state.orderBy
+  if (order) {
+    const { column, dir } = order
     merged.sort((a, b) => {
       const av = Number(a[column]) || 0
       const bv = Number(b[column]) || 0
