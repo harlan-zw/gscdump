@@ -1060,6 +1060,7 @@ export async function createIcebergAppendFileResolver(conn: IcebergConnection, t
   const dateFieldId = dateColumnFieldId(metadata, dateColumn)
   const manifestCache: ManifestReadCache = { lists: new Map(), entries: new Map() }
   const immutableBytes = new Map<string, Promise<ArrayBuffer>>()
+  const retainedSizes = new Map<string, number>()
   // This request-local table session retains at most 4 MiB of immutable metadata.
   const maxRetainedBytes = 4 * 1024 * 1024
   const budgetFailure = { _tag: 'ManifestBudgetExceeded' } as const
@@ -1072,11 +1073,23 @@ export async function createIcebergAppendFileResolver(conn: IcebergConnection, t
       if (!bytes) {
         bytes = Promise.resolve(conn.resolver.reader(url)).then(async (buffer) => {
           if (!Number.isSafeInteger(buffer.byteLength) || buffer.byteLength < 0
-            || retainedBytes + buffer.byteLength > maxRetainedBytes) {
+            || buffer.byteLength > maxRetainedBytes) {
             unavailable = true
             throw budgetFailure
           }
+          // Cache pressure does not disprove committed files. Evict old immutable
+          // reads and their decoded entries, then read them again if needed.
+          for (const [key, size] of retainedSizes) {
+            if (retainedBytes + buffer.byteLength <= maxRetainedBytes)
+              break
+            retainedSizes.delete(key)
+            immutableBytes.delete(key)
+            manifestCache.lists.delete(key)
+            manifestCache.entries.delete(key)
+            retainedBytes -= size
+          }
           retainedBytes += buffer.byteLength
+          retainedSizes.set(url, buffer.byteLength)
           const content = await buffer.slice(0, buffer.byteLength)
           if (content.byteLength !== buffer.byteLength) {
             unavailable = true
