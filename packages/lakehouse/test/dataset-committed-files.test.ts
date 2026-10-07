@@ -162,6 +162,26 @@ it('bounds a request resolver and refreshes metadata in the next request', async
   expect(await next('day-0', 17)).toEqual({ _tag: 'Err', reason: 'append-unavailable' })
 })
 
+it('verifies a full append inventory larger than the retained metadata budget', async () => {
+  const { conn } = fixture()
+  for (let day = 0; day < 256; day++)
+    await dataset.appendBatches(conn, () => [[{ site_id: 17, url: `/day-${day}` }]], { appendId: `day-${day}` })
+  const readBytes = new Map<string, number>()
+  const reader = conn.resolver.reader
+  conn.resolver.reader = async (url) => {
+    const buffer = await reader(url)
+    readBytes.set(url, buffer.byteLength)
+    return buffer
+  }
+  const resolve = await dataset.createAppendFileResolver(conn)
+  for (let day = 0; day < 256; day++)
+    expect(await resolve(`day-${day}`, 17)).toMatchObject({ _tag: 'Ok', files: [{ rowCount: 1 }] })
+  expect([...readBytes.values()].reduce((sum, size) => sum + size, 0)).toBeGreaterThan(4 * 1024 * 1024)
+  expect(await resolve('day-0', 17)).toMatchObject({ _tag: 'Ok', files: [{ rowCount: 1 }] })
+  expect(await resolve.confirmCurrent()).toBe(true)
+  expect(await resolve('day-0', 18)).toEqual({ _tag: 'Err', reason: 'append-unavailable' })
+}, 60_000)
+
 it('exposes unknown current files without attributing them to the selected append', async () => {
   const { conn } = fixture()
   await dataset.appendBatches(conn, () => [[{ site_id: 17, url: '/selected' }]], { appendId: 'selected' })
