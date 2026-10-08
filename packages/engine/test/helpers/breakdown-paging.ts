@@ -2,6 +2,7 @@ import type { TopNBreakdownQuery } from '@gscdump/contracts/archetypes'
 import type { BuilderState } from 'gscdump/query'
 import { createNodeDuckDBHandle, resetNodeDuckDB } from '@gscdump/engine/node'
 import { formatLiteral } from '@gscdump/engine/sql'
+import { between, date } from 'gscdump/query'
 import { afterAll, beforeAll, expect } from 'vitest'
 
 export const db = createNodeDuckDBHandle()
@@ -14,7 +15,7 @@ export function pagingState(limit: number, range = currentRange): BuilderState {
   return {
     dimensions: ['query'],
     metrics: ['clicks', 'impressions', 'ctr', 'position'],
-    filter: { _filters: [{ dimension: 'date', operator: 'between', expression: range.start, expression2: range.end }] },
+    filter: between(date, range.start, range.end),
     orderBy: { column: 'clicks', dir: 'desc' },
     rowLimit: limit,
   }
