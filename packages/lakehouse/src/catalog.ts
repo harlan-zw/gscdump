@@ -15,6 +15,7 @@ import type {
   icebergAppend,
   icebergAppendBatches,
 } from 'icebird/src/write/write.js'
+import type { AppendIdentity } from './append-identity'
 import type { CatalogCache, CatalogCacheGetOutcome } from './catalog-cache'
 import type { IcebergFieldSummary, ManifestPartitionFilter, PartitionValueMatch } from './partition-prune'
 import type { IcebergPartitionField, IcebergPrimitiveType, IcebergS3Config } from './schema'
@@ -27,6 +28,7 @@ import {
 import { cachingResolver } from 'icebird/src/fetch.js'
 import { icebergManifests } from 'icebird/src/manifest.js'
 import { s3SignedResolver } from 'icebird/src/s3.js'
+import { deriveAppendIdentity } from './append-identity'
 import { stringifyBigintSafe } from './bigint'
 import { cacheGet, cachePut, reportCatalogCacheError } from './catalog-cache'
 import { toIcebergDayCount } from './date'
@@ -448,8 +450,9 @@ export interface CommitRetryOptions {
   /**
    * Idempotency token stamped into the appended snapshot's summary
    * (`lakehouse.append-id`) and matched by the landed-check. When omitted it is
-   * DERIVED from the records' content, making the token STABLE across
-   * PROCESSES, not just within one call's retry loop.
+   * Derived from framed, typed record content when omitted. Row and object
+   * key order do not change the token. A matching legacy content token throws
+   * `LegacyAppendIdentityUnverifiable` until committed rows are verified.
    */
   appendId?: string
 }
@@ -529,7 +532,7 @@ function defaultCommitSleep(ms: number): Promise<void> {
  * ({@link isCommitTransient}: 429 rate-limits and R2 5xx blips), using
  * full-jitter exponential back-off, plus a landed-check idempotency guard so a
  * failure whose commit actually landed is never re-applied (see
- * `deriveAppendId`/`appendAlreadyLanded`).
+ * `deriveAppendIdentity`/`checkAppendLanded`).
  *
  * Retrying is safe because `icebergAppend` writes data + manifest files BEFORE
  * the atomic catalog pointer swap, so a 5xx during the upload phase aborts
@@ -547,14 +550,17 @@ export async function icebergAppendRetrying(
   const maxDelayMs = options.maxDelayMs ?? 20_000
   const sleep = options.sleep ?? defaultCommitSleep
   const random = options.random ?? Math.random
-  const appendId = options.appendId ?? await deriveAppendId(args)
+  const identity: AppendIdentity = options.appendId === undefined
+    ? await deriveAppendIdentity(args.records ?? [])
+    : { _tag: 'Explicit', appendId: options.appendId }
+  const appendId = identity.appendId
   const stampedArgs = {
     ...args,
     snapshotProperties: { ...(args as { snapshotProperties?: Record<string, string> }).snapshotProperties, [APPEND_ID_SUMMARY_KEY]: appendId },
-    isAlreadyApplied: (metadata: LandedCheckMetadata) => hasAppendId(metadata, appendId),
+    isAlreadyApplied: (metadata: LandedCheckMetadata) => hasAppendIdentity(metadata, identity),
   } as IcebergAppendArgs
 
-  let check = await checkAppendLanded(args, appendId)
+  let check = await checkAppendLanded(args, identity)
   if (check.landed)
     return
 
@@ -566,7 +572,7 @@ export async function icebergAppendRetrying(
       return
     if (!isCommitTransient(err))
       throw err
-    check = await checkAppendLanded(args, appendId)
+    check = await checkAppendLanded(args, identity)
     if (check.landed)
       return
     if (attempt === maxAttempts - 1)
@@ -600,7 +606,7 @@ export async function icebergAppendBatchesRetrying(
     isAlreadyApplied: (metadata: LandedCheckMetadata) => hasAppendId(metadata, appendId),
   }
 
-  let check = await checkAppendLanded(args, appendId)
+  let check = await checkAppendLanded(args, { _tag: 'Explicit', appendId })
   if (check.landed)
     return false
 
@@ -614,7 +620,7 @@ export async function icebergAppendBatchesRetrying(
       return true
     if (!isCommitTransient(err))
       throw err
-    check = await checkAppendLanded(args, appendId)
+    check = await checkAppendLanded(args, { _tag: 'Explicit', appendId })
     if (check.landed)
       return true
     if (attempt === maxAttempts - 1)
@@ -623,18 +629,6 @@ export async function icebergAppendBatchesRetrying(
     await sleep(Math.floor(random() * ceiling))
   }
   return false
-}
-
-/** Content-addressed idempotency token — see `@gscdump/engine`'s original for full rationale. */
-async function deriveAppendId(args: IcebergAppendArgs): Promise<string> {
-  const records = ((args as { records?: ReadonlyArray<Record<string, unknown>> }).records) ?? []
-  if (records.length === 0)
-    return globalThis.crypto.randomUUID()
-  const rowSig = (r: Record<string, unknown>): string =>
-    Object.keys(r).sort().map(k => `${k}=${String(r[k])}`).join('')
-  const body = records.map(rowSig).sort().join('')
-  const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(body))
-  return Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('')
 }
 
 type LandedCheckMetadata = Awaited<ReturnType<typeof restCatalogLoadTable>>['metadata']
@@ -651,7 +645,7 @@ type AppendLandedCheck
 /** Did the append carrying `appendId` already commit? REST catalogs only. */
 async function checkAppendLanded(
   args: { catalog?: { type?: string }, namespace?: string | string[], table?: string },
-  appendId: string,
+  identity: AppendIdentity,
 ): Promise<AppendLandedCheck> {
   const a = args as { catalog?: { type?: string }, namespace?: string | string[], table?: string }
   if (a.catalog?.type !== 'rest' || a.namespace == null || a.table == null)
@@ -660,7 +654,7 @@ async function checkAppendLanded(
     namespace: a.namespace,
     table: a.table,
   })
-  return hasAppendId(metadata, appendId)
+  return hasAppendIdentity(metadata, identity)
     ? { landed: true }
     : { landed: false, metadata }
 }
@@ -668,6 +662,19 @@ async function checkAppendLanded(
 function hasAppendId(metadata: LandedCheckMetadata, appendId: string): boolean {
   // Catalog snapshot arrays have no chronological ordering guarantee.
   return metadata.snapshots?.some(snapshot => (snapshot.summary as Record<string, string> | undefined)?.[APPEND_ID_SUMMARY_KEY] === appendId) ?? false
+}
+
+function hasAppendIdentity(metadata: LandedCheckMetadata, identity: AppendIdentity): boolean {
+  if (hasAppendId(metadata, identity.appendId))
+    return true
+  // Old content hashes cannot distinguish a retry from a serialization collision.
+  if (identity._tag === 'Content' && hasAppendId(metadata, identity.legacyAppendId)) {
+    throw Object.assign(new Error('A legacy append ID matched. Verify committed rows before retrying with an explicit append ID.'), {
+      _tag: 'LegacyAppendIdentityUnverifiable',
+      legacyAppendId: identity.legacyAppendId,
+    })
+  }
+  return false
 }
 
 // ---------------------------------------------------------------------------
