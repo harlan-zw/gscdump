@@ -116,6 +116,7 @@ import {
   REALTIME_V1_EVENT_SEMANTICS,
 } from './realtime'
 import { gscdumpV1OperationRoute, gscdumpV1Surface } from './route-catalog'
+import { sitemapEvidenceV1Schemas, sitemapInspectQueryV1Schema } from './sitemap-evidence'
 import { sitemapSubmissionV1Schemas, sitemapSubmitResultV1Schemas } from './sitemap-submission'
 import { GSCDUMP_HTTP_V1_VERSION } from './version'
 
@@ -419,6 +420,7 @@ export function createGscdumpV1Protocol() {
   const bingLinkResponse = defineSuccessResponse(bingLinkResultV1Schemas, partnerResponseMeta)
   const bingAuthorizationResponse = defineSuccessResponse(bingAuthorizationV1Schemas, partnerResponseMeta)
   const bingSitemapSubmitResponse = defineSuccessResponse(bingSitemapSubmitResultV1Schemas, partnerResponseMeta)
+  const sitemapEvidenceResponse = defineSuccessResponse(sitemapEvidenceV1Schemas, partnerResponseMeta)
   const sitemapSubmissionResponse = defineSuccessResponse(sitemapSubmissionV1Schemas, partnerResponseMeta)
   const sitemapSubmitResponse = defineSuccessResponse(sitemapSubmitResultV1Schemas, partnerResponseMeta)
   const indexingTransition = defineResponseObject({
@@ -1968,6 +1970,42 @@ export function createGscdumpV1Protocol() {
                   syncStatus: 'synced',
                   sitemapScope: { excludedCount: 0, duplicateCount: 0 },
                 },
+              },
+              meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
+            },
+          },
+        },
+      }),
+      inspectSiteSitemap: defineHttpOperation({
+        ...gscdumpV1OperationRoute('partner.sites.sitemaps.inspect'),
+        visibility: 'public',
+        semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
+        auth: {
+          credentials: ['user_key', 'partner_key'],
+          scopes: ['sitemaps:read'],
+          ownership: [
+            { credential: 'user_key', rule: 'authorized_site' },
+            { credential: 'partner_key', rule: 'authorized_site' },
+          ],
+        },
+        request: { params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }), query: sitemapInspectQueryV1Schema, headers: requestHeaders, body: null },
+        responses: { 200: sitemapEvidenceResponse },
+        errors: partnerSiteErrors,
+        errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [{ type: 'site.sitemaps', idFrom: 'params.siteId' }], changes: [] },
+        lifecycle: { introduced: '5.9.0' },
+        docs: {
+          summary: 'Inspect a Sitemap',
+          description: 'Reads provider evidence for one exact Sitemap URL. Google uses a live read. Bing uses its dated stored read. Missing means the provider did not list that exact Sitemap at Capture time. Unavailable never means missing. This operation submits nothing.',
+          tags: ['Sitemaps'],
+          examples: {
+            request: { params: { siteId: 's_01' }, query: { searchEngine: 'google', url: 'https://example.com/sitemap-old.xml' } },
+            response: {
+              data: {
+                searchEngine: 'google',
+                sitemapUrl: 'https://example.com/sitemap-old.xml',
+                capture: { _tag: 'captured', source: 'live', capturedAt: '2026-10-08T02:00:00.000Z' },
+                state: { _tag: 'listed', lastSubmitted: null, lastDownloaded: null, isPending: true, errors: 0, warnings: 0, urlCount: null },
               },
               meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
             },
@@ -4096,6 +4134,7 @@ export function createGscdumpV1Protocol() {
       bingLinkResponse,
       bingAuthorizationResponse,
       bingSitemapSubmitResponse,
+      sitemapEvidenceResponse,
       sitemapSubmissionResponse,
       sitemapSubmitResponse,
       lifecycleResponse,

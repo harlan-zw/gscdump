@@ -57,7 +57,7 @@ The CLI has 2 access modes:
 | Mode | Credentials | What the CLI reads |
 | --- | --- | --- |
 | Local | Your own Google credentials: a service account (recommended) or an OAuth client | Google directly, into a local Store |
-| Hosted | Your gscdump.com account | Your hosted record on gscdump.com. Explicit `indexing inspect --yes` requests spend URL Inspections |
+| Hosted | Your gscdump.com account | Your hosted record. `indexing inspect --yes` spends URL Inspections. `sitemaps inspect --engine google` reads one Sitemap live |
 
 ### Local mode
 
@@ -89,7 +89,7 @@ gscdump mcp
 
 ### Hosted mode
 
-Hosted login opens gscdump.com in your browser. Sign in, approve the CLI, then [connect a Site](https://gscdump.com/app/onboarding?step=connect-sites). The CLI saves its own session. Hosted mode reads your hosted record. `indexing inspect --yes` requests new Google URL Inspections through the platform. Commands that call Google, such as `sync`, `inspect`, and `query --live`, need Local mode.
+Hosted login opens gscdump.com in your browser. Sign in, approve the CLI, then [connect a Site](https://gscdump.com/app/onboarding?step=connect-sites). The CLI saves its own session. Hosted mode reads your hosted record. `indexing inspect --yes` requests new Google URL Inspections through the platform. `sitemaps inspect --engine google` reads one Sitemap live through the platform. That read uses Google's API quota, without spending URL Inspections. Bing Sitemap inspection reads dated stored evidence. Direct Google commands, such as `sync`, `inspect`, and `query --live`, need Local mode.
 
 ```bash
 gscdump auth login --mode hosted
