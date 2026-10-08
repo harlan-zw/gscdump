@@ -53,6 +53,7 @@ export const GSCDUMP_V1_ROUTE_CATALOG = {
     'partner.sites.indexing.diagnostics.get': { surface: 'partner', method: 'GET', template: '/sites/{siteId}/indexing/diagnostics' },
     'partner.sites.sitemaps.get': { surface: 'partner', method: 'GET', template: '/sites/{siteId}/sitemaps' },
     'partner.sites.sitemaps.changes.get': { surface: 'partner', method: 'GET', template: '/sites/{siteId}/sitemaps/changes' },
+    'partner.sites.sitemaps.inspect': { surface: 'partner', method: 'GET', template: '/sites/{siteId}/sitemaps/inspect' },
     'partner.sites.sitemaps.submission.get': { surface: 'partner', method: 'GET', template: '/sites/{siteId}/sitemaps/submission' },
     'partner.sites.sitemaps.submission.create': { surface: 'partner', method: 'POST', template: '/sites/{siteId}/sitemaps/submission' },
     'partner.sites.analysis.get': { surface: 'partner', method: 'GET', template: '/sites/{siteId}/analysis' },

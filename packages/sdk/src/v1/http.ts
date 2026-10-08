@@ -751,6 +751,7 @@ export function createGscdumpV1Client(options: CreateGscdumpV1ClientOptions): Gs
     getSiteIndexingDiagnostics: (input, executeOptions) => execute('partner.sites.indexing.diagnostics.get' satisfies MethodId<'getSiteIndexingDiagnostics'>, input, executeOptions),
     getSiteSitemaps: (input, executeOptions) => execute('partner.sites.sitemaps.get' satisfies MethodId<'getSiteSitemaps'>, input, executeOptions),
     getSiteSitemapChanges: (input, executeOptions) => execute('partner.sites.sitemaps.changes.get' satisfies MethodId<'getSiteSitemapChanges'>, input, executeOptions),
+    inspectSiteSitemap: (input, executeOptions) => execute('partner.sites.sitemaps.inspect' satisfies MethodId<'inspectSiteSitemap'>, input, executeOptions),
     getSiteSitemapSubmission: (input, executeOptions) => execute('partner.sites.sitemaps.submission.get' satisfies MethodId<'getSiteSitemapSubmission'>, input, executeOptions),
     submitSiteSitemap: (input, executeOptions) => execute('partner.sites.sitemaps.submission.create' satisfies MethodId<'submitSiteSitemap'>, input, executeOptions),
     listSitemapUrls: (input, executeOptions) => execute('partner.sites.sitemaps.urls.get' satisfies MethodId<'listSitemapUrls'>, input, executeOptions),

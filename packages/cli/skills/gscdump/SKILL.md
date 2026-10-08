@@ -72,7 +72,7 @@ gscdump query --site example.com -d page -f json
 ```
 
 Hosted mode can run only these commands: `sites`, `query`, `sitemaps current`, `sitemaps history`, `sitemaps membership`,
-`sitemaps lastmod`, `sitemaps export`, `indexing urls`, `indexing inspect --yes`, `indexing summary`, `indexing watch list|add|remove`,
+`sitemaps lastmod`, `sitemaps export`, `sitemaps inspect`, `indexing urls`, `indexing inspect --yes`, `indexing summary`, `indexing watch list|add|remove`,
 and the `bing` commands `login --site`, `sites`, `status`, `dump`, `inspect`, and `verify`.
 Direct Google commands need Local mode: `sync`, `inspect`, `query --live`, `analyze --live`, `report --live`,
 `sites add|get|delete|verify*`, `sitemaps list|get|submit|delete`, `indexing submit|remove|status|batch`, `entities`, and `mcp`.
@@ -467,6 +467,21 @@ gscdump indexing urls --site example.com --status not_indexed --all --format csv
 - Each row lists the sitemaps that contain the URL.
 - Pages hold 100 rows by default and 500 at most. Use `--offset` for the next page, or `--all` for every page.
 - With local authentication, the command fails. Pipe `gscdump sitemaps urls <sitemap-url>` into `gscdump inspect --site <site>` instead.
+
+## Inspect one Sitemap (hosted)
+
+```sh
+gscdump sitemaps inspect https://example.com/sitemap-old.xml --site example.com --engine google --json
+gscdump sitemaps inspect https://example.com/sitemap-old.xml --site example.com --engine bing --json
+```
+
+Google reads that exact Sitemap from Search Console during the request.
+Bing reads its stored provider list. Quote `capture.capturedAt` and `capture.source` with the answer.
+`listed` carries provider dates, flags, and counts. A null date means the provider supplied no date.
+`missing` means that exact Sitemap was absent at Capture time.
+`unavailable` means gscdump could not establish the evidence. The command exits with code 1.
+The command never submits a Sitemap or inspects URLs inside it.
+For Hosted MCP, use `inspect-sitemap` at `https://gscdump.com/mcp`.
 
 ## Read the coverage ladder (hosted)
 
