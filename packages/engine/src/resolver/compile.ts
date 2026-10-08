@@ -67,12 +67,18 @@ function withMinimumImpressions<TK extends string>(state: BuilderState, options:
 // ORDER BY is safe-stripped because `column` / `dir` come from `BuilderState`
 // (typed union) but we still guard against raw strings reaching SQL.
 function orderByClause(state: BuilderState, prefix: string = '', columnOverride?: string): SQL {
+  const ties = dimensionOrder(state.dimensions, state.orderBy?.column, prefix)
   if (state.orderBy) {
     const safeCol = (columnOverride ?? state.orderBy.column).replace(/\W/g, '')
     const safeDir = state.orderBy.dir.toUpperCase() === 'ASC' ? 'ASC' : 'DESC'
-    return sql.raw(`ORDER BY ${prefix}${safeCol} ${safeDir}`)
+    return sql.raw(`ORDER BY ${prefix}${safeCol} ${safeDir}${ties}`)
   }
-  return sql.raw(`ORDER BY ${prefix}clicks DESC`)
+  return sql.raw(`ORDER BY ${prefix}clicks DESC${ties}`)
+}
+
+// Metric ties must keep the same row keys when LIMIT changes between pages.
+function dimensionOrder(dimensions: readonly Dimension[], primary?: string, prefix = ''): string {
+  return [...new Set(dimensions)].filter(d => d !== primary).map(d => `, ${prefix}"${d.replace(/\W/g, '')}" ASC`).join('')
 }
 
 /**
@@ -80,14 +86,14 @@ function orderByClause(state: BuilderState, prefix: string = '', columnOverride?
  * column and direction arrive from a request, so both are checked against the
  * closed set before they reach SQL.
  */
-function changeOrderClause(order: ComparisonOrderBy): { column: SQL, orderBy: SQL } {
+function changeOrderClause(order: ComparisonOrderBy, dimensions: readonly Dimension[]): { column: SQL, orderBy: SQL } {
   if (order.column !== 'clicksChange')
     throw new Error(`[resolver] unknown comparison order column: ${JSON.stringify(order.column)}`)
   if (order.dir !== 'asc' && order.dir !== 'desc')
     throw new Error(`[resolver] unknown comparison order direction: ${JSON.stringify(order.dir)}`)
   return {
     column: sql.raw('CAST(COALESCE(c.clicks, 0) AS DOUBLE) - CAST(COALESCE(p.clicks, 0) AS DOUBLE) as "clicksChange"'),
-    orderBy: sql.raw(`ORDER BY clicksChange ${order.dir.toUpperCase()}`),
+    orderBy: sql.raw(`ORDER BY clicksChange ${order.dir.toUpperCase()}${dimensionOrder(dimensions)}`),
   }
 }
 
@@ -502,7 +508,7 @@ export function resolveComparisonSQL<TK extends string>(
   // the row cap. Ordering by the current window instead caps away a large loser
   // whose current clicks are low. It orders by its own output alias, the same
   // shape as the default `ORDER BY clicks`.
-  const changeOrder = comparisonOrderBy ? changeOrderClause(comparisonOrderBy) : undefined
+  const changeOrder = comparisonOrderBy ? changeOrderClause(comparisonOrderBy, groupByDims) : undefined
   const orderSql = changeOrder?.orderBy ?? orderByClause(current, '')
   const limitSql = limitOffsetClause(current)
 

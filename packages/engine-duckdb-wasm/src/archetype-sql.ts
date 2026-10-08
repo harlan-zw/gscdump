@@ -353,6 +353,7 @@ export function compileArchetypeSql(query: ArchetypeQuery): CompiledArchetypeSql
       // current-range value — same ordering, unambiguous. Mirrors the
       // @gscdump/cloudflare server-tail sibling.
       const compareOrder = `COALESCE(c.${query.orderBy.metric}, 0) ${dir}`
+      const order = `${query.orderBy.metric} ${dir}, ${query.dimension} ASC`
       const metricList = query.metrics.includes(query.orderBy.metric)
         ? query.metrics
         : [...query.metrics, query.orderBy.metric]
@@ -370,7 +371,7 @@ export function compileArchetypeSql(query: ArchetypeQuery): CompiledArchetypeSql
             + `prev AS (${deviceUnpivotSql(STD_METRICS, cmp.sql, false)}) `
             + `SELECT COALESCE(c.device, p.device) AS device, ${curCols}, ${prevCols} `
             + `FROM cur c FULL OUTER JOIN prev p ON c.device = p.device `
-            + `ORDER BY ${compareOrder} LIMIT ?`
+            + `ORDER BY ${compareOrder}, COALESCE(c.device, p.device) ASC LIMIT ?`
           const params = [...where.params, ...where.params, ...where.params, ...cmp.params, ...cmp.params, ...cmp.params, query.limit]
           if (query.offset && query.offset > 0) {
             sql += ' OFFSET ?'
@@ -380,7 +381,7 @@ export function compileArchetypeSql(query: ArchetypeQuery): CompiledArchetypeSql
         }
         let sql = `SELECT device, ${metricList.join(', ')} FROM (`
           + `${deviceUnpivotSql(metricList, where.sql, false)}) `
-          + `ORDER BY ${query.orderBy.metric} ${dir} LIMIT ?`
+          + `ORDER BY ${order} LIMIT ?`
         const params = [...where.params, ...where.params, ...where.params, query.limit]
         if (query.offset && query.offset > 0) {
           sql += ' OFFSET ?'
@@ -411,7 +412,7 @@ export function compileArchetypeSql(query: ArchetypeQuery): CompiledArchetypeSql
           + `prev AS (SELECT ${col} AS k, ${metricSelectList(STD_METRICS)} FROM ${table} WHERE ${cmp.sql}${facet.sql} GROUP BY ${col}) `
           + `SELECT COALESCE(c.k, p.k) AS ${query.dimension}, ${curCols}, ${prevCols}${variantOut}${totalCol} `
           + `FROM cur c FULL OUTER JOIN prev p ON c.k = p.k `
-          + `${moverWhere}ORDER BY ${orderSql} LIMIT ?`
+          + `${moverWhere}ORDER BY ${orderSql}, COALESCE(c.k, p.k) ASC LIMIT ?`
         const params = [...where.params, ...facet.params, ...cmp.params, ...facet.params, query.limit]
         if (query.offset && query.offset > 0) {
           sql += ' OFFSET ?'
@@ -422,7 +423,7 @@ export function compileArchetypeSql(query: ArchetypeQuery): CompiledArchetypeSql
 
       let sql = `SELECT ${col} AS ${query.dimension}, ${metricSelectList(query.metrics)}${variantSel}${totalCol} `
         + `FROM ${table} WHERE ${where.sql}${facet.sql} GROUP BY ${col} `
-        + `ORDER BY ${query.orderBy.metric} ${dir} LIMIT ?`
+        + `ORDER BY ${order} LIMIT ?`
       const params = [...where.params, ...facet.params, query.limit]
       if (query.offset && query.offset > 0) {
         sql += ' OFFSET ?'
