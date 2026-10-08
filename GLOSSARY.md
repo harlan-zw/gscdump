@@ -170,7 +170,7 @@ Use "Google Search Console property" only to explain the Google term for a Site.
 No Local request uses gscdump's OAuth client or Google quota.
 
 ### Hosted
-**Is:** gscdump.com runs the sync and keeps the record. The CLI in Hosted mode reads that record. An explicit `indexing inspect --yes` request asks the platform for new Google URL Inspections within its shared quota.
+**Is:** gscdump.com runs the sync and keeps the record. The CLI in Hosted mode reads that record. An explicit `indexing inspect --yes` request asks the platform for new Google URL Inspections within its shared quota. `sitemaps inspect --engine google` reads one Sitemap live through the platform. That read uses Google's API quota, without spending URL Inspections. Bing Sitemap inspection reads dated stored evidence.
 **Use for:** the SDK and CLI paths that reach `gscdump.com/api`.
 **Never:** Cloud, cloud mode, the cloud, Pro.
 

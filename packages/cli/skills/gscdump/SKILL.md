@@ -476,6 +476,7 @@ gscdump sitemaps inspect https://example.com/sitemap-old.xml --site example.com 
 ```
 
 Google reads that exact Sitemap from Search Console during the request.
+That read uses Google's API quota, without spending URL Inspections.
 Bing reads its stored provider list. Quote `capture.capturedAt` and `capture.source` with the answer.
 `listed` carries provider dates, flags, and counts. A null date means the provider supplied no date.
 `missing` means that exact Sitemap was absent at Capture time.
