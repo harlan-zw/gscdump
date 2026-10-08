@@ -88,7 +88,7 @@ flowchart LR
 
 ## Usage
 
-Google's discovery, crawling, indexing, and serving name separate Search processes. Use these platform terms when explaining Google.
+Google's discovery, crawling, rendering, indexing, and serving name separate Search processes. Use these platform terms when explaining Google.
 Indexing Evidence records a dated observation of those processes. A Submission Receipt records notification acceptance or rejection.
 Neither one establishes a publication-to-indexing deadline. A gscdump sync or export moves data; it does not run Google's Search processes.
 
