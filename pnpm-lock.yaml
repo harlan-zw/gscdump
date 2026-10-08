@@ -149,6 +149,9 @@ catalogs:
     drizzle-orm:
       specifier: 1.0.0-rc.4
       version: 1.0.0-rc.4
+    fzstd:
+      specifier: ^0.1.1
+      version: 0.1.1
     hyparquet:
       specifier: ^1.31.1
       version: 1.31.1
@@ -631,6 +634,9 @@ importers:
       aws4fetch:
         specifier: 'catalog:'
         version: 1.0.20
+      fzstd:
+        specifier: 'catalog:'
+        version: 0.1.1
       hyparquet:
         specifier: 'catalog:'
         version: 1.31.1
