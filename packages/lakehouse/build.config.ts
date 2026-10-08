@@ -37,6 +37,11 @@ export default defineBuildConfig({
         resolve: {
           alias: { hysnappy: hysnappyShim },
         },
+        // `unstorage`'s type-only import pulls `ioredis` (and its `denque`
+        // dependency) into the declaration graph. Both ship CommonJS dts that
+        // rolldown-plugin-dts cannot bundle. Keep them external, following the
+        // same pattern as `@gscdump/cli`'s DuckDB externals.
+        external: [/^ioredis(?:\/|$)/, /^denque(?:\/|$)/],
       },
     },
   ],
