@@ -88,6 +88,10 @@ flowchart LR
 
 ## Usage
 
+Google's discovery, crawling, indexing, and serving name separate Search processes. Use these platform terms when explaining Google.
+Indexing Evidence records a dated observation of those processes. A Submission Receipt records notification acceptance or rejection.
+Neither one establishes a publication-to-indexing deadline. A gscdump sync or export moves data; it does not run Google's Search processes.
+
 - Use Analyzer in prose. `<tool>` is the existing CLI positional label; MCP also uses the protocol noun "tool".
 - Analyzer, Report, and Section IDs use separate namespaces. `brand` can name both an Analyzer and a Report.
 - Use Site in prose. Explain it as a Google Search Console property when readers need the Google term.
