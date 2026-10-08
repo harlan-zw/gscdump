@@ -1,7 +1,7 @@
 {
   "name": "gscdump",
   "type": "module",
-  "version": "5.8.1",
+  "version": "5.9.0",
   "description": "Direct Google Search Console and Bing Webmaster clients with typed queries and Indexing Evidence",
   "author": {
     "name": "Harlan Wilton",
