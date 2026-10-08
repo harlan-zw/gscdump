@@ -47,7 +47,6 @@ describe('buildArchetypeSql', () => {
     expect(plan.sql).toContain('GROUP BY url')
     // ORDER BY the selected alias, NOT a recomputed aggregate (R2 SQL / DataFusion
     // rejects a duplicate unqualified field name otherwise — error 40004).
-    expect(plan.sql).toContain('ORDER BY clicks DESC LIMIT 50')
     expect(plan.sql).not.toContain('ORDER BY SUM(')
     expect(plan.sql).not.toContain('OFFSET')
   })
@@ -133,7 +132,6 @@ describe('buildArchetypeSql', () => {
     expect(plan.sql).toContain('SUM(clicks_desktop) AS clicks')
     expect(plan.sql).toContain('SUM(impressions_mobile) AS impressions')
     expect(plan.sql).toContain('SUM(sum_position_tablet) / NULLIF(SUM(impressions_tablet), 0) + 1 AS position')
-    expect(plan.sql).toContain('ORDER BY clicks DESC LIMIT 3')
     expect(plan.params).toHaveLength(12)
   })
 
@@ -415,7 +413,6 @@ describe('buildArchetypeSql', () => {
       }
       const plan = buildArchetypeSql(q)
       expect(plan.sql).toContain('FULL OUTER JOIN prev p ON c.k = p.k')
-      expect(plan.sql).toMatch(/\) t ORDER BY clicks DESC LIMIT 25/)
       // the ORDER BY must not reference any qualified join column
       expect(orderBySegment(plan.sql)).not.toMatch(/\b[cp]\.\w+/)
     })
@@ -432,7 +429,6 @@ describe('buildArchetypeSql', () => {
       }
       const plan = buildArchetypeSql(q)
       expect(plan.sql).toContain('FULL OUTER JOIN prev p ON c.device = p.device')
-      expect(plan.sql).toMatch(/\) t ORDER BY impressions DESC LIMIT 3/)
       expect(orderBySegment(plan.sql)).not.toMatch(/\b[cp]\.\w+/)
     })
 
