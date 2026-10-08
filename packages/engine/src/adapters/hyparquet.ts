@@ -27,6 +27,7 @@ import type {
   TableName,
   WriteResult,
 } from '../storage'
+import { decompress as decompressZstd } from 'fzstd'
 import { parquetMetadataAsync, parquetReadObjects, parquetSchema } from 'hyparquet'
 import { ByteWriter, parquetWriteRows } from 'hyparquet-writer'
 import { SCHEMAS, TABLE_METADATA } from '../schema'
@@ -426,6 +427,8 @@ async function* decodeParquetGroups(
     if (rowStart < rowEnd) {
       const rows = await parquetReadObjects({
         file,
+        // Catalog compaction writes ZSTD. Keep decoding pure JS for Workers.
+        compressors: { ZSTD: input => decompressZstd(input) },
         // Chunk offsets remain absolute. Row selection becomes local to this
         // group so the reader does not rescan every group for each request.
         metadata: { ...metadata, row_groups: [group], num_rows: group.num_rows },

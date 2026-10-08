@@ -212,6 +212,7 @@
     "@types/node": "catalog:",
     "@types/proper-lockfile": "catalog:",
     "aws4fetch": "catalog:",
+    "fzstd": "catalog:",
     "hyparquet": "catalog:",
     "hyparquet-writer": "catalog:",
     "icebird": "catalog:",
