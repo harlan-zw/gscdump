@@ -6,16 +6,16 @@ type ContentValue = string | ContentValue[]
 
 function encodeValue(value: unknown): ContentValue {
   if (value === null)
-    return ['null']
+    return 'null'
   if (typeof value !== 'object') {
     if (typeof value === 'function' || typeof value === 'symbol')
       throw new TypeError('Append records contain an unsupported value.')
-    return [typeof value, Object.is(value, -0) ? '-0' : String(value)]
+    return `${typeof value}:${Object.is(value, -0) ? '-0' : String(value)}`
   }
   if (value instanceof Date)
-    return ['date', value.toISOString()]
+    return `date:${value.toISOString()}`
   if (value instanceof Uint8Array)
-    return ['bytes', Array.from(value, byte => byte.toString(16).padStart(2, '0')).join('')]
+    return `bytes:${Array.from(value, byte => byte.toString(16).padStart(2, '0')).join('')}`
   if (Array.isArray(value))
     return ['array', Array.from(value, encodeValue)]
   if (value instanceof Map) {
@@ -36,8 +36,24 @@ async function hashContent(content: string): Promise<string> {
 export async function deriveAppendIdentity(records: readonly Record<string, unknown>[]): Promise<AppendIdentity> {
   if (!records.length)
     return { _tag: 'Explicit', appendId: crypto.randomUUID() }
-  const contentHash = await hashContent(JSON.stringify(records.map(record => JSON.stringify(encodeValue(record))).sort()))
-  // Hash sequentially so both serialized batches need not remain in memory.
+  // Finish the smaller legacy batch before allocating the framed batch.
   const legacyAppendId = await hashContent(records.map(record => Object.keys(record).sort().map(key => `${key}=${String(record[key])}`).join('')).sort().join(''))
+  const groups = new Map<string, string[]>()
+  for (const record of records) {
+    if (Object.getPrototypeOf(record) !== Object.prototype && Object.getPrototypeOf(record) !== null)
+      throw new TypeError('Append records contain an unsupported value.')
+    const keys = Object.keys(record).sort()
+    const schema = JSON.stringify(keys)
+    const row = JSON.stringify(keys.map(key => encodeValue(record[key])))
+    const group = groups.get(schema)
+    if (group)
+      group.push(row)
+    else
+      groups.set(schema, [row])
+  }
+  // Shared schemas avoid repeating field names. Complete JSON rows retain framing.
+  const content = `[${Array.from(groups, ([schema, rows]) => `[${schema},[${rows.sort().join(',')}]]`).sort().join(',')}]`
+  groups.clear()
+  const contentHash = await hashContent(content)
   return { _tag: 'Content', appendId: `content-v2:${contentHash}`, legacyAppendId }
 }

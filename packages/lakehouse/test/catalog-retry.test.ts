@@ -291,6 +291,9 @@ describe('icebergAppendRetrying', () => {
     [[{ a: -0 }], [{ a: 0 }]],
     [[{ a: 1n }], [{ a: '1' }]],
     [[{ a: undefined }], [{ a: 'undefined' }]],
+    [[{ a: '\uD800' }], [{ a: '\uD801' }]],
+    [[{ a: 'x', b: 'y' }], [{ a: 'x' }, { b: 'y' }]],
+    [[{}], [{}, {}]],
   ])('commits distinct records despite identical legacy serialization, case %#', async (first, second) => {
     await icebergAppendRetrying({ ...APPEND_ARGS, records: first }, FAST)
     const firstId = icebergAppend.mock.calls[0][0].snapshotProperties['lakehouse.append-id']
@@ -304,6 +307,14 @@ describe('icebergAppendRetrying', () => {
     const appendId = icebergAppend.mock.calls[0][0].snapshotProperties['lakehouse.append-id']
     restCatalogLoadTable.mockResolvedValue({ metadata: { snapshots: [{ summary: { 'lakehouse.append-id': appendId } }] } })
     await icebergAppendRetrying({ ...APPEND_ARGS, records: [{ b: null, a: 'y' }, { b: { y: 1, z: 2 }, a: 'x' }] }, FAST)
+    expect(icebergAppend).toHaveBeenCalledTimes(1)
+  })
+
+  it('recognizes reordered rows with different field sets', async () => {
+    await icebergAppendRetrying({ ...APPEND_ARGS, records: [{ a: 'x' }, { b: 'y', a: null }, {}] }, FAST)
+    const appendId = icebergAppend.mock.calls[0][0].snapshotProperties['lakehouse.append-id']
+    restCatalogLoadTable.mockResolvedValue({ metadata: { snapshots: [{ summary: { 'lakehouse.append-id': appendId } }] } })
+    await icebergAppendRetrying({ ...APPEND_ARGS, records: [{ a: null, b: 'y' }, {}, { a: 'x' }] }, FAST)
     expect(icebergAppend).toHaveBeenCalledTimes(1)
   })
 
