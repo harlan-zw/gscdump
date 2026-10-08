@@ -368,7 +368,9 @@ function buildTopNBreakdown(q: TopNBreakdownQuery, pruned: boolean, mode: Partit
   // alias. Both compareRange branches therefore wrap the join in a derived table
   // `(...) t` and apply this ORDER BY on the OUTER select, where only the final
   // unqualified output columns are in scope.
-  const order = `${metricAlias(q.orderBy.metric)} ${q.orderBy.dir.toUpperCase()}`
+  // A metric alone leaves tied rows free to move across LIMIT/OFFSET pages.
+  const orderKey = q.dimension === 'page' && !q.compareRange ? 'url' : q.dimension
+  const order = `${metricAlias(q.orderBy.metric)} ${q.orderBy.dir.toUpperCase()}, ${orderKey} ASC`
   const limit = `LIMIT ${Math.max(0, Math.floor(q.limit))}`
   const offset = q.offset && q.offset > 0 ? ` OFFSET ${Math.floor(q.offset)}` : ''
   const metricList0 = q.metrics.includes(q.orderBy.metric) ? q.metrics : [...q.metrics, q.orderBy.metric]
@@ -428,7 +430,7 @@ function buildTopNBreakdown(q: TopNBreakdownQuery, pruned: boolean, mode: Partit
     // the unqualified output aliases (`clicks`, `prevClicks`) so it never pulls a
     // qualified join column into the sort schema (R2 SQL 40004).
     const moverWhere = q.movers ? `WHERE ${moverClause(q.movers).where} ` : ''
-    const outerOrder = q.movers ? moverOrderByAlias(q.movers) : order
+    const outerOrder = q.movers ? `${moverOrderByAlias(q.movers)}, ${q.dimension} ASC` : order
     const inner = `SELECT COALESCE(c.k, p.k) AS ${q.dimension}, ${curCols}, ${prevCols}${variantOut}${totalCol} `
       + `FROM cur c FULL OUTER JOIN prev p ON c.k = p.k ${moverWhere}`
     const sql = `WITH cur AS (SELECT ${col} AS k, ${curMetrics}${variantSel} FROM ${factTableRef()} WHERE ${w.clause}${facet.sql} GROUP BY ${col}), `
