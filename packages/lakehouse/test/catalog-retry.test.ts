@@ -13,7 +13,8 @@ const restCatalogLoadTable = vi.fn(async () => ({ metadata: { snapshots: [] as A
 vi.mock('icebird/src/catalog/rest.js', () => ({ restCatalogConnect: vi.fn(), restCatalogCreateNamespace: vi.fn(), restCatalogListTables: vi.fn(), restCatalogLoadTable }))
 vi.mock('icebird/src/write/write.js', () => ({ icebergAppend, icebergAppendBatches, icebergDropTable: vi.fn() }))
 
-const { icebergAppendBatchesRetrying, icebergAppendRetrying } = await import('../src/catalog')
+const { icebergAppendBatchesRetrying } = await import('../src/catalog')
+const { icebergAppendRetrying } = await import('../src/unsafe-raw')
 const { isCommitRateLimited, isCommitServerError, isCommitTransient } = await import('../src/maintenance')
 
 const APPEND_ARGS = {
@@ -275,6 +276,84 @@ describe('icebergAppendRetrying', () => {
     await icebergAppendRetrying({ ...APPEND_ARGS, records: [{ url: '/p2', site_id: 1 }] }, FAST)
     const id3 = (icebergAppend.mock.calls[0][0] as { snapshotProperties: Record<string, string> }).snapshotProperties['lakehouse.append-id']
     expect(id3).not.toBe(id1)
+  })
+
+  it.each([
+    [[{ a: 'x', b: 'yb=z' }], [{ a: 'xb=y', b: 'z' }]],
+    [[{ a: 'xa=y' }], [{ a: 'x' }, { a: 'y' }]],
+    [[{ a: 1 }], [{ a: '1' }]],
+    [[{ a: null }], [{ a: 'null' }]],
+    [[{ a: { x: 1 } }], [{ a: { x: 2 } }]],
+    [[{ a: new Uint8Array([1, 2]) }], [{ a: '1,2' }]],
+    [[{ a: [1, 2] }], [{ a: [1, '2'] }]],
+    [[{ a: new Map([['x', 1]]) }], [{ a: new Map([['x', 2]]) }]],
+    [[{ a: new Date('2026-10-08') }], [{ a: new Date('2026-10-08').toString() }]],
+    [[{ a: -0 }], [{ a: 0 }]],
+    [[{ a: 1n }], [{ a: '1' }]],
+    [[{ a: undefined }], [{ a: 'undefined' }]],
+  ])('commits distinct records despite identical legacy serialization, case %#', async (first, second) => {
+    await icebergAppendRetrying({ ...APPEND_ARGS, records: first }, FAST)
+    const firstId = icebergAppend.mock.calls[0][0].snapshotProperties['lakehouse.append-id']
+    restCatalogLoadTable.mockResolvedValue({ metadata: { snapshots: [{ summary: { 'lakehouse.append-id': firstId } }] } })
+    await icebergAppendRetrying({ ...APPEND_ARGS, records: second }, FAST)
+    expect(icebergAppend).toHaveBeenCalledTimes(2)
+  })
+
+  it('recognizes the same rows after changing row and object key order', async () => {
+    await icebergAppendRetrying({ ...APPEND_ARGS, records: [{ a: 'x', b: { z: 2, y: 1 } }, { a: 'y', b: null }] }, FAST)
+    const appendId = icebergAppend.mock.calls[0][0].snapshotProperties['lakehouse.append-id']
+    restCatalogLoadTable.mockResolvedValue({ metadata: { snapshots: [{ summary: { 'lakehouse.append-id': appendId } }] } })
+    await icebergAppendRetrying({ ...APPEND_ARGS, records: [{ b: null, a: 'y' }, { b: { y: 1, z: 2 }, a: 'x' }] }, FAST)
+    expect(icebergAppend).toHaveBeenCalledTimes(1)
+  })
+
+  it('refuses an ambiguous legacy match before replaying or skipping rows', async () => {
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('a=xb=yb=z'))
+    const legacyId = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('')
+    restCatalogLoadTable.mockResolvedValue({ metadata: { snapshots: [{ summary: { 'lakehouse.append-id': legacyId } }] } })
+    for (const records of [[{ a: 'x', b: 'yb=z' }], [{ a: 'xb=y', b: 'z' }]]) {
+      await expect(icebergAppendRetrying({ ...APPEND_ARGS, records }, FAST)).rejects.toMatchObject({
+        _tag: 'LegacyAppendIdentityUnverifiable',
+        legacyAppendId: legacyId,
+      })
+    }
+    expect(icebergAppend).not.toHaveBeenCalled()
+    await icebergAppendRetrying(APPEND_ARGS, { ...FAST, appendId: legacyId })
+    expect(icebergAppend).not.toHaveBeenCalled()
+  })
+
+  it('refuses a legacy match that appears while a default append retries', async () => {
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('site_id=1url=/'))
+    const legacyId = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('')
+    restCatalogLoadTable.mockResolvedValueOnce({ metadata: { snapshots: [] } })
+      .mockResolvedValue({ metadata: { snapshots: [{ summary: { 'lakehouse.append-id': legacyId } }] } })
+    icebergAppend.mockRejectedValueOnce({ status: 503 })
+    await expect(icebergAppendRetrying(APPEND_ARGS, FAST)).rejects.toMatchObject({ _tag: 'LegacyAppendIdentityUnverifiable' })
+    expect(icebergAppend).toHaveBeenCalledTimes(1)
+  })
+
+  it('refuses a concurrent legacy commit inside the catalog commit guard', async () => {
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('site_id=1url=/'))
+    const legacyId = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('')
+    icebergAppend.mockImplementationOnce(async (args) => {
+      args.isAlreadyApplied({ snapshots: [{ summary: { 'lakehouse.append-id': legacyId } }] })
+      return {}
+    })
+    await expect(icebergAppendRetrying(APPEND_ARGS, FAST)).rejects.toMatchObject({ _tag: 'LegacyAppendIdentityUnverifiable' })
+    expect(icebergAppend).toHaveBeenCalledTimes(1)
+  })
+
+  it('recognizes the new content ID when both ID generations exist', async () => {
+    await icebergAppendRetrying(APPEND_ARGS, FAST)
+    const appendId = icebergAppend.mock.calls[0][0].snapshotProperties['lakehouse.append-id']
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('site_id=1url=/'))
+    const legacyId = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('')
+    restCatalogLoadTable.mockResolvedValue({ metadata: { snapshots: [
+      { summary: { 'lakehouse.append-id': legacyId } },
+      { summary: { 'lakehouse.append-id': appendId } },
+    ] } })
+    await icebergAppendRetrying(APPEND_ARGS, FAST)
+    expect(icebergAppend).toHaveBeenCalledTimes(1)
   })
 
   it('backs off with full-jitter exponential delay between 429 retries', async () => {
