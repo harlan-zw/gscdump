@@ -1,6 +1,8 @@
 ---
 name: gscdump
 description: Drive the `gscdump` CLI for Google Search Console and Bing in Local or Hosted mode. Sync Google rows to a local Store, export Bing datasets, run SEO Analyzers and Reports, inspect Indexing Evidence, and manage sitemaps. Use when the user mentions gscdump, Search Console data, Bing Webmaster data, or GSC automation.
+license: MIT
+compatibility: "Requires the gscdump CLI and Node.js 22.13+ in the 22 release line, or Node.js 24+. API tasks need network access and credentials."
 ---
 
 # gscdump CLI
