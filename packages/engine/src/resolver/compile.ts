@@ -66,14 +66,13 @@ function withMinimumImpressions<TK extends string>(state: BuilderState, options:
 
 // ORDER BY is safe-stripped because `column` / `dir` come from `BuilderState`
 // (typed union) but we still guard against raw strings reaching SQL.
-function orderByClause(state: BuilderState, prefix: string = '', columnOverride?: string): SQL {
+function orderByClause(state: BuilderState, prefix: string = '', columnOverride?: string | SQL): SQL {
   const ties = dimensionOrder(state.dimensions, state.orderBy?.column, prefix)
-  if (state.orderBy) {
-    const safeCol = (columnOverride ?? state.orderBy.column).replace(/\W/g, '')
-    const safeDir = state.orderBy.dir.toUpperCase() === 'ASC' ? 'ASC' : 'DESC'
-    return sql.raw(`ORDER BY ${prefix}${safeCol} ${safeDir}${ties}`)
-  }
-  return sql.raw(`ORDER BY ${prefix}clicks DESC${ties}`)
+  const column = typeof columnOverride === 'object'
+    ? columnOverride
+    : sql.raw(`${prefix}${(columnOverride ?? state.orderBy?.column ?? 'clicks').replace(/\W/g, '')}`)
+  const safeDir = state.orderBy?.dir.toUpperCase() === 'ASC' ? 'ASC' : 'DESC'
+  return sql`ORDER BY ${column} ${sql.raw(`${safeDir}${ties}`)}`
 }
 
 // Metric ties must keep the same row keys when LIMIT changes between pages.
@@ -389,7 +388,12 @@ export function resolveToSQL<TK extends string>(
     body = sql`${body} GROUP BY ${joinComma(groupByExprs)}`
   if (having.length > 0)
     body = sql`${body} HAVING ${joinAnd(having)}`
-  const mainQuery = sql`${body} ${orderByClause(state)} ${limitOffsetClause(state)}`
+  // An unselected metric has no aggregate alias. Sort by its aggregate, never its raw column.
+  const sortColumn = state.orderBy?.column ?? 'clicks'
+  const sortAggregate = adapter.isMetricDimension(sortColumn) && !metrics.includes(sortColumn)
+    ? adapter.metricSql(sortColumn, tableKey)
+    : undefined
+  const mainQuery = sql`${body} ${orderByClause(state, '', sortAggregate)} ${limitOffsetClause(state)}`
 
   let countQuery: SQL
   if (groupByExprs.length > 0) {
