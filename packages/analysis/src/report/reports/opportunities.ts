@@ -19,7 +19,7 @@ const DEFAULT_MAX = 5
 
 export const opportunitiesReport = defineReport<OpportunitiesReportParams>({
   id: 'opportunities',
-  description: 'Striking-distance, low-CTR, zero-click, and query-migration opportunities.',
+  description: 'Striking-distance, low-CTR, and query-migration opportunities.',
   defaultPeriod: 'last-28d',
   defaultComparison: 'none',
   argsSpec: {
@@ -40,7 +40,7 @@ export const opportunitiesReport = defineReport<OpportunitiesReportParams>({
       sections: [
         buildStrikingSection(results.striking, max),
         buildOpportunitySection(results.opportunity, max),
-        buildZeroClickSection(results['zero-click'], max),
+        buildLowCtrQueriesSection(results['zero-click'], max),
         buildMigrationSection(results['query-migration'], max),
       ],
     }
@@ -135,7 +135,7 @@ function zeroClickWhy(r: ZeroClickRow): string {
   return `${ctr} at position ${r.position.toFixed(1)} on ${r.page}`
 }
 
-function buildZeroClickSection(res: AnalysisResult | undefined, max: number): ReportSection {
+function buildLowCtrQueriesSection(res: AnalysisResult | undefined, max: number): ReportSection {
   const rows = reportRows<ZeroClickRow>(res)
     .sort((a, b) => b.impressions - a.impressions)
   const kept = rows.slice(0, max)
@@ -146,7 +146,7 @@ function buildZeroClickSection(res: AnalysisResult | undefined, max: number): Re
   }))
   return {
     id: 'zero-click',
-    title: 'Zero-click queries',
+    title: 'Low-CTR queries',
     severity: 'info',
     summary: { magnitudeLabel: `${kept.reduce((s, r) => s + r.impressions, 0)} impressions at low CTR` },
     findings,

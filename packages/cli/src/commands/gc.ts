@@ -7,7 +7,7 @@ const DEFAULT_GRACE_HOURS = 24
 export const gcCommand = defineCommand({
   meta: {
     name: 'gc',
-    description: 'Delete orphaned object-store files not referenced by any manifest entry',
+    description: 'Delete retired and unreferenced files; expire hourly files created over 90 days ago',
   },
   args: {
     'grace-hours': {
@@ -23,7 +23,7 @@ export const gcCommand = defineCommand({
     'dry-run': {
       type: 'boolean',
       default: false,
-      description: 'List retired manifest entries past the grace window without deleting',
+      description: 'Preview retired entries only; excludes expired hourly files and unreferenced files',
     },
     ...OUTPUT_ARGS,
   },
@@ -57,7 +57,8 @@ export const gcCommand = defineCommand({
       for (const c of candidates)
         console.log(`  ${c.objectKey}  \x1B[90m(retired ${new Date(c.retiredAt).toISOString()})\x1B[0m`)
       console.log()
-      logger.info(`gc --dry-run: ${candidates.length} retired manifest entry(ies) past ${args['grace-hours']}h grace; pass without --dry-run to delete`)
+      logger.info(`gc --dry-run: ${candidates.length} retired manifest entry(ies) past ${args['grace-hours']}h grace.`)
+      logger.warn('This preview excludes expired hourly files and unreferenced files. The deletion run also removes those files.')
       return
     }
 
@@ -70,6 +71,6 @@ export const gcCommand = defineCommand({
       console.log(JSON.stringify({ graceHours: Number(args['grace-hours']), deleted: result.deleted }, null, 2))
       return
     }
-    logger.success(`gc: deleted ${result.deleted} orphan file(s)`)
+    logger.success(`gc: deleted ${result.deleted} retired, expired hourly, or unreferenced file(s)`)
   },
 })

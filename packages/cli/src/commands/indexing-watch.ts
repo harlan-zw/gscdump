@@ -35,7 +35,7 @@ function watchedRow(entry: WatchedUrls['watched'][number]): Record<string, unkno
 
 function skipHint(reason: WatchedUrlsChange['skipped'][number]['reason'], manager: SiteManager): string | undefined {
   return reason === 'inspection_disabled'
-    ? `gscdump never inspects this Site, so a Watched URL gets no Checkpoint. To use Watched URLs, turn on URL Inspection ${siteSettingsPlace(manager)}.`
+    ? `gscdump never inspects this Site, so a Watched URL gets no Watched URL inspection. To use Watched URLs, turn on URL Inspection ${siteSettingsPlace(manager)}.`
     : undefined
 }
 
@@ -82,7 +82,7 @@ async function changeInChunks(
 const listCommand = defineCommand({
   meta: {
     name: 'list',
-    description: 'List Watched URLs with the latest Checkpoint of each (hosted)',
+    description: 'List Watched URLs with the latest Watched URL inspection of each (hosted)',
   },
   args: { ...HOSTED_ARGS, ...OUTPUT },
   async run({ args }) {
@@ -131,7 +131,7 @@ const addCommand = defineCommand({
 const removeCommand = defineCommand({
   meta: {
     name: 'remove',
-    description: 'Remove Watched URLs and their Checkpoints (hosted)',
+    description: 'Remove Watched URLs and their Watched URL inspections (hosted)',
   },
   args: { ...HOSTED_ARGS, ...URL_ARGS, ...OUTPUT },
   async run({ args }) {

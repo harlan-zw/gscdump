@@ -68,8 +68,8 @@ Read the 4 ladder states in `counts`, lowest rung first. Name each state with th
 | Key | Name | Meaning |
 | --- | --- | --- |
 | `unknown_to_google` | unknown | URL Inspection reported the URL as unknown at its check time |
-| `discovered_not_indexed` | discovered | URL Inspection reported discovery without a crawl at its check time |
-| `crawled_not_indexed` | crawled | URL Inspection reported a crawl without indexing at its check time |
+| `discovered_not_indexed` | discovered, not indexed | URL Inspection reported discovery without a crawl at its check time |
+| `crawled_not_indexed` | crawled, not indexed | URL Inspection reported a crawl without indexing at its check time |
 | `indexed` | indexed | URL Inspection reported the URL as indexed at its check time |
 
 The other keys in `counts` are exclusions, such as `noindex`, `not_found`, and `redirect`.
@@ -78,7 +78,7 @@ A newer host can add keys to `counts`. Treat a key you do not know as its own st
 
 Rules for every answer:
 
-- `capture.source` is `stored` for counts gscdump saved on its daily run, and `live` for counts made during the request.
+- `capture.source` is `stored` for counts gscdump saved on its daily run, and `live` for counts made during the request from saved inspections. Neither value means Google was inspected again.
 - Quote `capturedAt` with every count. Also quote `capture.oldestVerdictAt` and the `capture.freshness` percents: `olderThan7dPercent` and `olderThan30dPercent`.
 - If `capture._tag` is `empty`, gscdump holds no verdicts for the Site. Report no ladder.
 - The counts are stored URL Inspection verdicts. They are not Google's live index.
@@ -100,6 +100,8 @@ Rules for every answer:
 
 ## Watch URLs (hosted)
 
+The frozen `checkpoints` array holds Watched URL inspections. These are the scheduled inspection history for watched URLs.
+
 ```sh
 gscdump indexing watch add --site example.com https://example.com/guide https://example.com/pricing
 gscdump indexing watch list --site example.com --json
@@ -107,12 +109,12 @@ gscdump indexing watch remove --site example.com https://example.com/pricing
 ```
 
 - A Site can hold 50 Watched URLs. `add` and `remove` send 50 URLs per request, so a longer list works. Every URL must be absolute. `add` fails before any request if one is relative.
-- If `add` skips a URL with `inspection_disabled`, the Site has URL Inspection off. gscdump never inspects it, so the URL gets no Checkpoint. Tell the owner to turn on URL Inspection in the Site settings.
+- If `add` skips a URL with `inspection_disabled`, the Site has URL Inspection off. gscdump never inspects it, so the URL gets no Watched URL inspection. Tell the owner to turn on URL Inspection in the Site settings.
 - gscdump inspects each Watched URL every 7 days, before other scheduled URLs. It never backs off.
 - Each scheduled inspection spends the Site's daily URL Inspection budget and the URL Inspections meter. Get consent before `add`.
-- Each scheduled inspection stores one Checkpoint. `watch list --json` returns Checkpoints newest first, with `checkedAt`, the `coverageState` key, and Google's text.
-- Compare Checkpoints by date to see when a URL moves up the ladder. A new Watched URL has no Checkpoint until its first inspection.
-- `remove` deletes the URL's Checkpoints. The saved URL Inspection results stay.
+- Each scheduled inspection stores one Watched URL inspection. `watch list --json` returns Watched URL inspections newest first, with `checkedAt`, the `coverageState` key, and Google's text.
+- Compare Watched URL inspections by date to see when a URL moves up the ladder. A new Watched URL has no Watched URL inspection until its first inspection.
+- `remove` deletes the URL's Watched URL inspections. The saved URL Inspection results stay.
 
 
 ## Refresh hosted Google URL Inspection results

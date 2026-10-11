@@ -13,7 +13,7 @@ export const HOSTED_KEY_REJECTED = 'gscdump.com rejected the API key. Run `gscdu
 /** A command that calls Google ran in Hosted mode. */
 export const LOCAL_MODE_REQUIRED = [
   'This command calls Google, so it needs Local mode.',
-  'Hosted mode reads your gscdump.com record and never calls Google.',
+  'This command needs your own Google credentials. Hosted inspections use the platform separately.',
   'If you want Local mode, run `gscdump auth login --mode local`.',
 ].join('\n')
 
