@@ -77,7 +77,7 @@ flowchart LR
 | Report | `report/reports/*` | `analysis/report` | Report 1—N Section | "report" (`gscdump report`, `run-report`) |
 | Section | inline `id:` in each report | `analysis/report` | Section 1—1 Analyzer run | "finding" / section id in `ReportResult` |
 | Rollup | `u_<u>/<s>/rollups/<id>` | `engine/rollups` | Site 1—N Rollup | "rollup" (`store rollups`) |
-| Entity | per-site entity stores | `engine/entities` | Site 1—N Entity | not surfaced |
+| Entity | per-site entity stores | `engine/entities` | Site 1—N Entity | "saved URL inspections" or "Indexing API metadata" in `entities` help |
 | Canonical Query | `query_canonical` | `analysis` (`normalizeQuery`) | Query N—1 Canonical Query | not surfaced |
 | Query Dimension | `query_dim` | `engine/entities` | Site 1—1 Query Dimension | not surfaced |
 | Manifest authority | `ManifestStore` / R2 HEAD pointer | `engine` | (siteId, table, searchType) 1—1 Manifest | not surfaced |
@@ -135,8 +135,8 @@ the `@gscdump/analysis/registry` export.
 **Casing:** `Analyzer` in prose, `analyzer` in identifiers, kebab-case ids (`striking-distance`).
 
 ### Report
-**Is:** an intent-keyed composition of Analyzers returning a `ReportResult` of
-bounded Sections plus next steps.
+**Is:** a composition of Analyzers that answers a question about search traffic.
+It returns a `ReportResult` with bounded Sections of findings.
 **Use for:** the `gscdump report` command, the `list-reports`/`run-report` MCP tools,
 `@gscdump/analysis/report`, the eight IDs in README Reports.
 **Never:** analysis run, digest, summary, audit.
@@ -271,6 +271,8 @@ _Avoid_: aggregate, summary, snapshot (collides with **Entity** snapshots).
 
 **Entity**:
 Per-site slow-changing state, point-lookup-by-id — URL inspections, sitemap snapshots, indexing-metadata events, the query dimension. Distinct family from time-series facts.
+Use the concrete data name in CLI help: saved URL inspections or Google Indexing API metadata.
+The `entities` command keeps its name. Its metadata contains notification times, which do not prove Google indexed a URL.
 _Avoid_: record (overloaded), object.
 
 **Sitemap document reader** (`sitemapd`):
