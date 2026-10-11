@@ -280,7 +280,7 @@ A routing stop also has `siteUrl`. `STORE_RANGE_NOT_COVERED` adds `missingDates`
 | `gscdump indexing` | Indexing API notifications and quota; hosted URL Inspection results |
 | `gscdump indexing inspect <url...> --yes` | Hosted: refresh up to 10 URLs through the platform, spending shared URL Inspections. Never retry automatically |
 | `gscdump indexing summary` | Hosted: the coverage ladder per day, with the time gscdump counted the verdicts |
-| `gscdump indexing watch` | Hosted: list, add, and remove Watched URLs and read their Checkpoints |
+| `gscdump indexing watch` | Hosted: list, add, and remove Watched URLs and read their Watched URL inspections |
 | `gscdump dump` | Export Store tables, inspections, sitemaps, and Bing data as Parquet, CSV, JSON, NDJSON, SQLite, or DuckDB |
 | `gscdump store` | Store stats, compaction, garbage collection, resets |
 | `gscdump entities` | Read saved inspections; snapshot Indexing API metadata |
@@ -421,7 +421,7 @@ the failure and continue. Never retry an uncertain submission.
   `sites verify`, `sitemaps submit`, `sitemaps delete`, `indexing submit`,
   `indexing remove`, `store reset`, and `store rm-site` change Google or
   delete local data. `indexing watch add` spends URL Inspections every week,
-  and `indexing watch remove` deletes Checkpoints. `--yes` is consent you
+  and `indexing watch remove` deletes Watched URL inspections. `--yes` is consent you
   borrow from the user.
 - **Never loop unattended.** One `sync` per Site per task. Inspection batches
   spend a daily pool. Use `--dry-run` and `--explain` to plan first.

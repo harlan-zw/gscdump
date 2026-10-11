@@ -2,18 +2,12 @@
 //
 //   maturity branch → ( REACH stage  ×  HEALTH stage )
 //
-// REACH answers "is the site winning organic visibility, and if not, why" —
-// because a low-reach site's CAUSE (new / decayed / faded / quality-suppressed)
-// IS the diagnosis. HEALTH answers "can Google crawl + index the pages that
-// SHOULD be indexed", purpose-aware (pSEO expects a long non-indexed tail;
-// event sites expect retired pages). The headline picks the dominant axis: a
-// real, non-purpose-expected HEALTH blocker wins, otherwise REACH leads and the
-// other axis is an evidence sub-line.
-//
-// Soft quality violations (Google crawls a page then refuses to index it) are
-// NOT exposed by the Search Console API — no Manual Actions / Security Issues
-// endpoint exists — so `quality_rejection` is inferred from crawled-not-indexed
-// share. See docs/search-console-stage-v2-audit.md §10.
+// REACH classifies observed search visibility. HEALTH applies warning thresholds
+// to supplied inspection and crawl observations, with purpose-aware exclusions.
+// These heuristics do not establish the cause of a visibility or indexing change.
+// A HEALTH warning leads the headline; otherwise REACH leads.
+// `quality_rejection` is a preserved public tag for crawled-not-indexed and
+// soft-404 observations. Neither state establishes a quality violation.
 
 import type { SearchConsoleStageIssue } from './search-console-stage'
 import { countSearchConsoleIssues, formatSearchConsoleCount } from './search-console-signals'
@@ -25,13 +19,13 @@ export type ReachStage
     | 'plateaued' // established + flat
     | 'declining' // established + sustained drop (still alive)
     | 'faded' // had real reach, recent window collapsed vs its own peak (spike→died)
-    | 'decayed' // old, used to rank, eroded to staleness (impressions linger, clicks gone)
+    | 'decayed' // Legacy tag for current impressions with very low CTR after prior visibility.
 
 export type HealthStage
   = | 'healthy'
     | 'crawl_faults' // real 5xx / broken links on pages that matter
-    | 'quality_rejection' // Google crawled then refused — soft quality / AI-spam suppression
-    | 'not_indexed' // Discovered and Crawled, currently not indexed together dominate the known URLs
+    | 'quality_rejection' // Legacy tag for a high crawled-not-indexed or soft-404 share; not a causal diagnosis.
+    | 'not_indexed' // Discovered, crawled-not-indexed and soft-404 observations meet the warning threshold.
 
 export interface TriageEvidence {
   label: string
@@ -117,12 +111,12 @@ const GROWTH_IMPRESSIONS_PCT = 20
 const DECLINE_CLICKS_PCT = -10
 const MIN_DECLINE_PRIOR_CLICKS = 50
 const FADED_LIVENESS = 0.2 // recent week <20% of peak week
-const DECAY_CTR = 0.005 // clicks/impressions below this on an established base = eroded relevance
+const DECAY_CTR = 0.005 // Low observed clicks/impressions; the ratio does not establish a relevance cause.
 // crawl_faults floor sits between scripts.nuxt.com (9 server errors, tolerable) and
 // newworldartists.net (137, broken); 3% share catches large-site breakage.
 const HARD_BLOCK_FLOOR = 10
 const HARD_BLOCK_SHARE = 0.03
-// quality_rejection: Google crawled then refused a large share.
+// Preserved quality_rejection category: observed not-indexed share, not an inferred cause.
 const REJECT_SHARE = 0.3
 const REJECT_MIN = 50
 
@@ -220,20 +214,20 @@ function sustain(metric: string, value: number, gapLabel: string): StageProgress
 
 const HEALTH_COPY: Record<HealthStage, Pick<HealthVerdict, 'summary' | 'primaryAction'>> = {
   healthy: {
-    summary: 'Google can crawl and index the pages that should be indexed.',
-    primaryAction: 'No indexing cleanup needed — focus on reach.',
+    summary: 'Available observations do not exceed the indexing warning thresholds.',
+    primaryAction: 'Review inspection coverage and freshness before deciding whether indexing needs attention.',
   },
   crawl_faults: {
-    summary: 'Real access faults (server errors / broken links) are capping otherwise-indexable pages.',
+    summary: 'Available observations show access faults or broken links above the warning threshold.',
     primaryAction: 'Fix the 5xx and broken URLs; return 410/404 for pages you retire on purpose.',
   },
   not_indexed: {
-    summary: 'Google has not indexed most known URLs. It queued many without a crawl, and it crawled others and left them out.',
-    primaryAction: 'Link to the queued URLs from pages Google already indexed, and consolidate or improve the crawled ones.',
+    summary: 'Saved inspections show a substantial share of known URLs are discovered or crawled but not indexed.',
+    primaryAction: 'Inspect affected URLs and check discovery, responses, and canonical URLs before choosing changes.',
   },
   quality_rejection: {
-    summary: 'Google is crawling pages and refusing to index them — a soft quality signal it never reports explicitly.',
-    primaryAction: 'Consolidate or improve the rejected pages, or noindex the thin/low-value set.',
+    summary: 'Saved inspections show many crawled or soft-404 URLs are not indexed. These states do not establish a quality cause.',
+    primaryAction: 'Inspect affected URLs and check their content, responses, and canonical URLs before choosing changes.',
   },
 }
 
@@ -274,31 +268,28 @@ export function classifyHealthStage(input: SiteTriageInput): HealthVerdict {
         'access faults',
         hardBlocks,
         faultTarget,
-        `${formatSearchConsoleCount(hardBlocks)} faults — fix ~${formatSearchConsoleCount(toFix)} to clear the gate`,
+        `${formatSearchConsoleCount(hardBlocks)} faults. About ${formatSearchConsoleCount(toFix)} fewer would meet the warning threshold.`,
       ),
     }
   }
 
-  // Soft quality rejection: Google spent crawl budget then declined. soft_404
-  // (thin/empty) counts here, not as a hard fault. Applies even to pSEO.
+  // This legacy category combines observed not-indexed states. Neither state proves a quality cause.
   const rejectPool = crawledNotIndexed + softFound
   if (totalUrls > 0 && rejectPool > REJECT_MIN && rejectPool / totalUrls >= REJECT_SHARE) {
     const share = rejectPool / totalUrls
-    // Pages to clear so the remaining rejected share drops just under REJECT_SHARE.
-    const toClear = Math.max(0, Math.ceil(rejectPool - REJECT_SHARE * totalUrls))
     return {
       stage: 'quality_rejection',
       ...HEALTH_COPY.quality_rejection,
       evidence: [
-        { label: 'Crawled, then refused', value: formatSearchConsoleCount(rejectPool) },
+        { label: 'Crawled not indexed or soft 404', value: formatSearchConsoleCount(rejectPool) },
         { label: 'Share of known URLs', value: `${(share * 100).toFixed(0)}%` },
       ],
       progression: escapeReduce(
         'healthy',
-        'crawled-rejected share',
+        'crawled-not-indexed or soft-404 share',
         share,
         REJECT_SHARE,
-        `${(share * 100).toFixed(0)}% rejected — improve/consolidate ~${formatSearchConsoleCount(toClear)} pages to clear`,
+        `${(share * 100).toFixed(0)}% of known URLs. This classification applies at 30% or more, with over 50 affected URLs.`,
       ),
     }
   }
@@ -309,13 +300,12 @@ export function classifyHealthStage(input: SiteTriageInput): HealthVerdict {
   const notIndexedPool = rejectPool + discoveredNotIndexed
   if (totalUrls > 0 && notIndexedPool > REJECT_MIN && notIndexedPool / totalUrls >= REJECT_SHARE) {
     const share = notIndexedPool / totalUrls
-    const toClear = Math.max(0, Math.ceil(notIndexedPool - REJECT_SHARE * totalUrls))
     return {
       stage: 'not_indexed',
       ...HEALTH_COPY.not_indexed,
       evidence: [
         { label: 'Discovered, currently not indexed', value: formatSearchConsoleCount(discoveredNotIndexed) },
-        { label: 'Crawled, currently not indexed', value: formatSearchConsoleCount(rejectPool) },
+        { label: 'Crawled not indexed or soft 404', value: formatSearchConsoleCount(rejectPool) },
         { label: 'Share of known URLs', value: `${(share * 100).toFixed(0)}%` },
       ],
       progression: escapeReduce(
@@ -323,7 +313,7 @@ export function classifyHealthStage(input: SiteTriageInput): HealthVerdict {
         'not-indexed share',
         share,
         REJECT_SHARE,
-        `${(share * 100).toFixed(0)}% not indexed. Get ~${formatSearchConsoleCount(toClear)} URLs indexed to clear the gate`,
+        `${(share * 100).toFixed(0)}% of known URLs. This classification applies at 30% or more, with over 50 affected URLs.`,
       ),
     }
   }
@@ -331,8 +321,16 @@ export function classifyHealthStage(input: SiteTriageInput): HealthVerdict {
   return {
     stage: 'healthy',
     ...HEALTH_COPY.healthy,
+    ...(totalUrls <= 0
+      ? {
+          summary: 'No known URL count is available to assess indexing.',
+          primaryAction: 'Collect URL Inspection results before assessing indexing.',
+        }
+      : {}),
     evidence: [],
-    progression: sustain('indexing health', 1, 'Indexable pages are getting indexed — no gate blocking reach.'),
+    progression: sustain('indexing health', 1, totalUrls <= 0
+      ? 'Indexing assessment unavailable without a known URL count.'
+      : 'No warning threshold exceeded in available observations. This does not confirm every URL is indexed.'),
   }
 }
 
@@ -342,28 +340,28 @@ export function classifyHealthStage(input: SiteTriageInput): HealthVerdict {
 
 const REACH_COPY: Record<ReachStage, Pick<ReachVerdict, 'summary' | 'primaryAction'>> = {
   emerging: {
-    summary: 'Search Console is ready. Search visibility is still limited.',
+    summary: 'Available search data does not meet the established visibility or growth thresholds.',
     primaryAction: 'Improve discovery and indexing, then build on pages that earn impressions.',
   },
   growing: {
-    summary: 'Discoverable, indexed-enough, and trending up. The next work is expansion, not cleanup.',
-    primaryAction: 'Expand: striking-distance pages, content gaps, authority.',
+    summary: 'Search clicks or impressions meet the growth thresholds in the supplied periods.',
+    primaryAction: 'Review growing pages and relevant search queries for further opportunities.',
   },
   plateaued: {
-    summary: 'Established but flat — visibility is steady, not compounding.',
+    summary: 'Current impressions meet the established threshold, without measured growth or decline meeting the other thresholds.',
     primaryAction: 'Refresh top pages and open a new content cluster to restart growth.',
   },
   declining: {
-    summary: 'Established visibility is genuinely falling versus the previous period.',
+    summary: 'Search clicks fell by over 10% in both supplied comparison windows.',
     primaryAction: 'Investigate the losing pages, recent releases, and competitor moves before expanding.',
   },
   faded: {
-    summary: 'The site had real reach that has collapsed — it spiked and is now near-invisible in search.',
-    primaryAction: 'Diagnose the drop (quality, deindexing, lost rankings) — the 90-day total hides it; look at the recent week.',
+    summary: 'Recent weekly impressions are below 20% of the peak week in the supplied history.',
+    primaryAction: 'Compare the recent week with the peak. Investigate affected queries, pages, and inspection results.',
   },
   decayed: {
-    summary: 'Still shows for old terms but earns almost no clicks — the content has aged out of relevance.',
-    primaryAction: 'Refresh the decayed top pages, or mark the site low-priority if it is no longer maintained.',
+    summary: 'The Site still earns impressions, but its observed 28-day CTR is below 0.5%.',
+    primaryAction: 'Review queries, positions, and search appearance before deciding whether pages need changes.',
   },
 }
 
@@ -450,8 +448,7 @@ export function classifyReachStage(input: SiteTriageInput): ReachVerdict {
     )
   }
 
-  // Decayed: established lifetime base, not growing, impressions linger but
-  // clicks have evaporated (aged-out content ranking for stale/low-intent terms).
+  // Preserved decayed category: prior visibility, current impressions, and low observed CTR.
   const ctr = clicks28d != null && imp28d > 0 ? clicks28d / imp28d : null
   if (hadRealReach && imp28d >= MIN_GROWTH_IMPRESSIONS_28D && ctr != null && ctr < DECAY_CTR) {
     return reach(
@@ -465,7 +462,7 @@ export function classifyReachStage(input: SiteTriageInput): ReachVerdict {
         'CTR (clicks/impressions)',
         ctr,
         DECAY_CTR,
-        `${(ctr * 100).toFixed(2)}% CTR on ${formatSearchConsoleCount(imp28d)} impressions — refresh content toward ~${(DECAY_CTR * 100).toFixed(1)}%`,
+        `${(ctr * 100).toFixed(2)}% CTR on ${formatSearchConsoleCount(imp28d)} impressions. The low-CTR threshold is ${(DECAY_CTR * 100).toFixed(1)}%.`,
       ),
     )
   }

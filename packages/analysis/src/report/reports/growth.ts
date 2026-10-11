@@ -25,7 +25,7 @@ const DEFAULT_MAX = 5
 
 export const growthReport = defineReport<GrowthReportParams>({
   id: 'growth',
-  description: 'Strategic growth signals: content velocity, keyword breadth, intent atlas, and long-tail shape over a long window (default 90d / YoY).',
+  description: 'Newly observed search queries, queries per page, shared-word groups, and long-tail shape (default 90d / YoY).',
   defaultPeriod: 'last-90d',
   defaultComparison: 'yoy',
   argsSpec: {
@@ -44,9 +44,9 @@ export const growthReport = defineReport<GrowthReportParams>({
     const max = ctx.params.maxFindings ?? DEFAULT_MAX
     return {
       sections: [
-        buildContentVelocity(results['content-velocity']),
+        buildNewlyObservedQueriesSection(results['content-velocity']),
         buildKeywordBreadth(results['keyword-breadth']),
-        buildIntentAtlas(results['intent-atlas']),
+        buildSharedWordQueryGroupsSection(results['intent-atlas']),
         buildLongTail(results['long-tail'], max),
       ],
     }
@@ -59,15 +59,15 @@ interface ContentVelocityRow {
   totalKeywords: number
 }
 
-function buildContentVelocity(res: AnalysisResult | undefined): ReportSection {
+function buildNewlyObservedQueriesSection(res: AnalysisResult | undefined): ReportSection {
   const rows = reportRows<ContentVelocityRow>(res)
   const totalNew = rows.reduce((s, r) => s + r.newKeywords, 0)
   const avgPerWeek = rows.length > 0 ? totalNew / rows.length : 0
   return {
     id: 'content-velocity',
-    title: 'Content velocity',
+    title: 'Newly observed search queries',
     severity: 'info',
-    summary: { magnitudeLabel: `${totalNew} new keywords across ${rows.length} weeks (avg ${avgPerWeek.toFixed(1)}/wk)` },
+    summary: { magnitudeLabel: `${totalNew} search queries first observed within this window, across ${rows.length} weeks (avg ${avgPerWeek.toFixed(1)}/wk)` },
     findings: [],
     coverage: sectionCoverage(res),
     artifact: sectionArtifact(res, 'content-velocity'),
@@ -85,9 +85,9 @@ function buildKeywordBreadth(res: AnalysisResult | undefined): ReportSection {
   const top = rows[0]
   return {
     id: 'keyword-breadth',
-    title: 'Keyword breadth',
+    title: 'Search queries per page',
     severity: 'info',
-    summary: { magnitudeLabel: top ? `${totalPages} pages; modal bucket "${top.bucket}" (${top.pageCount} pages)` : 'no data' },
+    summary: { magnitudeLabel: top ? `${totalPages} pages; smallest query-count bucket "${top.bucket}" (${top.pageCount} pages)` : 'no data' },
     findings: [],
     coverage: sectionCoverage(res),
     artifact: sectionArtifact(res, 'keyword-breadth'),
@@ -103,15 +103,15 @@ interface IntentAtlasRow {
   avgPosition: number
 }
 
-function buildIntentAtlas(res: AnalysisResult | undefined): ReportSection {
+function buildSharedWordQueryGroupsSection(res: AnalysisResult | undefined): ReportSection {
   const rows = reportRows<IntentAtlasRow>(res)
   const totalClusters = rows.length
   const totalKeywords = rows.reduce((s, r) => s + r.keywordCount, 0)
   return {
     id: 'intent-atlas',
-    title: 'Intent atlas',
+    title: 'Shared-word query groups',
     severity: 'info',
-    summary: { magnitudeLabel: `${totalClusters} clusters covering ${totalKeywords} keywords` },
+    summary: { magnitudeLabel: `${totalClusters} shared-word groups covering ${totalKeywords} search queries` },
     findings: [],
     coverage: sectionCoverage(res),
     artifact: sectionArtifact(res, 'intent-atlas'),

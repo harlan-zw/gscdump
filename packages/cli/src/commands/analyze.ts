@@ -7,7 +7,7 @@ import { defineCommand } from 'citty'
 import { unwrapResult } from 'gscdump/result'
 import { analysisNeeds, analyzerTables, resolveAnalysisSource } from '../analysis-local'
 import { analyzeCommandMeta } from '../command-meta'
-import { coverageWarning, renderAnalysis } from '../render/analysis'
+import { ANALYZER_DISPLAY, coverageWarning, renderAnalysis } from '../render/analysis'
 import { terminalOutputOptions } from '../render/terminal'
 import { logger, parseFetchBudget, parseIntegerOption, setJsonOutput, toCSV } from '../utils'
 import { DEFAULT_WINDOW, parseWindowFlags, PERIOD_FLAGS, windowFlagErrorToException } from '../window'
@@ -116,7 +116,7 @@ function makeToolCommand(tool: AnalysisTool): CommandDef<any> {
   return defineCommand({
     meta: {
       name: tool,
-      description: `Run ${tool} analysis`,
+      description: ANALYZER_DISPLAY[tool]?.description ?? `Run ${tool} analysis`,
     },
     args: {
       'site': { type: 'string', alias: 's', description: 'Site URL' },
@@ -190,7 +190,7 @@ const listCommand = defineCommand({
       return
     }
     for (const id of ANALYSIS_TOOLS)
-      console.log(id)
+      console.log(ANALYZER_DISPLAY[id] ? `${id}: ${ANALYZER_DISPLAY[id].description}` : id)
   },
 })
 

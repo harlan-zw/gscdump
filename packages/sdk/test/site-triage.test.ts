@@ -54,6 +54,22 @@ describe('classifyReachStage', () => {
 describe('classifyHealthStage', () => {
   const issue = (type: string, count: number) => ({ type, label: type, count })
 
+  it('reports missing indexing observations without claiming successful indexing', () => {
+    const health = classifyHealthStage({})
+    expect(health.stage).toBe('healthy')
+    expect(health.summary).toBe('No known URL count is available to assess indexing.')
+    expect(health.primaryAction).toBe('Collect URL Inspection results before assessing indexing.')
+    expect(health.progression.gapLabel).toBe('Indexing assessment unavailable without a known URL count.')
+  })
+
+  it('describes the measured 30% share without claiming a majority or a quality cause', () => {
+    const health = classifyHealthStage({ totalUrls: 1000, issues: [issue('crawled_not_indexed', 300)] })
+    expect(health.stage).toBe('quality_rejection')
+    expect(health.summary).toBe('Saved inspections show many crawled or soft-404 URLs are not indexed. These states do not establish a quality cause.')
+    expect(health.evidence).toContainEqual({ label: 'Share of known URLs', value: '30%' })
+    expect(health.progression.gapLabel).toBe('30% of known URLs. This classification applies at 30% or more, with over 50 affected URLs.')
+  })
+
   it('names a Site whose known URLs are mostly Discovered as not indexed', () => {
     const health = classifyHealthStage({
       totalUrls: 1000,
@@ -62,7 +78,7 @@ describe('classifyHealthStage', () => {
     expect(health.stage).toBe('not_indexed')
     expect(health.evidence).toEqual([
       { label: 'Discovered, currently not indexed', value: '600' },
-      { label: 'Crawled, currently not indexed', value: '100' },
+      { label: 'Crawled not indexed or soft 404', value: '100' },
       { label: 'Share of known URLs', value: '70%' },
     ])
   })

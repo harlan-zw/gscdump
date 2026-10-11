@@ -161,13 +161,28 @@ describe('hosted indexing summary and watch commands', () => {
     await run(['indexing', 'summary', '--site', 'example.com'])
 
     const output = stdout.join('\n')
-    const counted = stdout.find(line => line.includes('2026-09-29'))
-    expect(counted?.split(/\s+/)).toEqual(expect.arrayContaining(['1484', '2', '0', '1']))
-    expect(stdout.find(line => line.includes('2026-09-28'))).toContain('not counted')
-    expect(output).toContain('Counted 2026-09-29T02:00:00.000Z from stored URL Inspection verdicts (stored).')
+    expect(output).toContain('Unknown: 1484')
+    expect(output).toContain('Discovered, not indexed: 2')
+    expect(output).toContain('Crawled, not indexed: 0')
+    expect(output).toContain('Indexed: 1')
+    expect(output).toContain('not counted')
+    expect(output).toContain('Saved daily count at 2026-09-29T02:00:00.000Z, from stored URL Inspection verdicts.')
     expect(output).toContain('99.8% are older than 7 days and 82.8% are older than 30 days.')
     expect(output).toContain('The counts cover URLs in the Site\'s live sitemaps.')
     expect(stderr).toContain('not Google\'s live index')
+  })
+
+  it('distinguishes a fresh count from the dates of saved inspections', async () => {
+    const originalSource = summary.capture.source
+    summary.capture.source = 'live'
+    await run(['indexing', 'summary', '--site', 'example.com']).finally(() => {
+      summary.capture.source = originalSource
+    })
+    const output = stdout.join('\n')
+    expect(output).toContain('Counted during this request at 2026-09-29T02:00:00.000Z, from stored URL Inspection verdicts.')
+    expect(output).toContain('Verdicts inspected between 2026-08-20T03:00:00.000Z and 2026-09-29T01:00:00.000Z.')
+    expect(output).toContain('Discovered, not indexed')
+    expect(output).toContain('Crawled, not indexed')
   })
 
   it('lists each Watched URL with its latest Checkpoint', async () => {
