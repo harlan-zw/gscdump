@@ -13,7 +13,7 @@ export const gcCommand = defineCommand({
     'grace-hours': {
       type: 'string',
       default: String(DEFAULT_GRACE_HOURS),
-      description: `Spare orphans younger than this (default: ${DEFAULT_GRACE_HOURS}h)`,
+      description: `Grace period in hours for retired and unreferenced files (default: ${DEFAULT_GRACE_HOURS}h)`,
     },
     'site': {
       type: 'string',
