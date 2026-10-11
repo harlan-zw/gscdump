@@ -35,7 +35,7 @@ export const storeCommandMeta = {
 
 export const inspectCommandMeta = {
   name: 'inspect',
-  description: 'Inspect the indexing status of one or more URLs and save the results to the Store',
+  description: 'Read Google URL Inspection results and save them to the Store',
 }
 
 export const indexingCommandMeta = {
@@ -45,7 +45,7 @@ export const indexingCommandMeta = {
 
 export const entitiesCommandMeta = {
   name: 'entities',
-  description: 'Manage local entity snapshots (URL inspections and indexing metadata)',
+  description: 'Read saved URL inspections and save Google Indexing API metadata',
 }
 
 export const analyzeCommandMeta = {
@@ -55,7 +55,7 @@ export const analyzeCommandMeta = {
 
 export const reportCommandMeta = {
   name: 'report',
-  description: 'Run an intent-keyed report (composes analyzers into bounded sections)',
+  description: 'Run a Report to find traffic changes, SEO opportunities, and risks',
 }
 
 export const authCommandMeta = {
