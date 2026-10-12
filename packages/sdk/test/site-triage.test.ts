@@ -24,10 +24,31 @@ function weeklyObservations(priorClicks: number[], currentClicks: number[]) {
 }
 
 describe('classifyReachStage', () => {
-  it('recognizes recent click recovery despite a longer decline', () => {
-    const verdict = classifyReachStage({ impressions28d: 15065, clicks28d: 191, clicksPrior28d: 132, clicksPct28d: 44.7, clicksPct90d: -17, daily: observations(132, 191, 23292, 15065) })
+  it.each([[132, 191, 23292, 15065], [191, 132, 15065, 23292]])(
+    'reports opposing measured click and impression directions as mixed',
+    (prior, current, priorImpressions, currentImpressions) => {
+      expect(classify(prior, current, priorImpressions, currentImpressions).stage).toBe('mixed')
+    },
+  )
+
+  it('recognizes recent click recovery when impressions are flat despite a longer decline', () => {
+    const verdict = classifyReachStage({ impressions28d: 15065, clicks28d: 191, clicksPct90d: -17, daily: observations(132, 191, 15065, 15065) })
     expect(verdict.stage).toBe('growing')
-    expect(verdict.evidence).toContainEqual({ label: 'Clicks 28d', value: '+45%' })
+  })
+
+  it.each([0, 2, 25])('recognizes stable measured visibility with %i clicks', (clicks) => {
+    expect(classify(clicks, clicks, 50000, 50000).stage).toBe('plateaued')
+  })
+
+  it('keeps flat observations with sparse impressions emerging', () => {
+    expect(classify(2, 2, 280, 280).stage).toBe('emerging')
+  })
+
+  it('includes the absolute click growth floor in progression targets', () => {
+    const verdict = classify(50, 60)
+    expect(verdict.progression.target).toBe(70)
+    expect(verdict.progression.pct).toBeLessThan(1)
+    expect(classify(50, 70).stage).toBe('growing')
   })
 
   it('does not claim strong growth from nine extra clicks', () => {
@@ -104,6 +125,21 @@ describe('classifyReachStage', () => {
     expect(classifyReachStage({ impressions28d: 0 }).stage).toBe('emerging')
     expect(classifyReachStage({}).stage).toBe('insufficient_data')
     expect(classifyReachStage({ impressions28d: 28000 }).stage).toBe('insufficient_data')
+  })
+
+  it.each(['date', 'negative', 'periodEnd'])('refuses %s defects in supplied sparse early history', (defect) => {
+    const daily = observations(0, 0, 280, 280).slice(-14)
+    if (defect === 'date')
+      daily[0]!.date = 'invalid'
+    if (defect === 'negative')
+      daily[0]!.clicks = -1
+    const periodEnd = defect === 'periodEnd' ? '2026-10-09' : daily.at(-1)!.date
+    expect(classifyReachStage({ daily, impressions28d: 280, periodEnd }).stage).toBe('insufficient_data')
+  })
+
+  it('keeps valid sparse early history emerging', () => {
+    const daily = observations(0, 0, 280, 280).slice(-14)
+    expect(classifyReachStage({ daily, impressions28d: 280, periodEnd: daily.at(-1)!.date }).stage).toBe('emerging')
   })
 
   it.each(['missing', 'duplicate', 'negative', 'mismatch'])('refuses a %s daily comparison', (defect) => {

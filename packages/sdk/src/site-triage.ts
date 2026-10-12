@@ -88,13 +88,13 @@ export interface SiteTriageInput {
   // ── maturity + reach (GSC, lag-trimmed windows) ──
   /** Impressions over the trailing 28 days — the maturity tier. */
   impressions28d?: number | null
-  /** Lifetime-ish impressions (trailing 12 months) — separates new from decayed/faded. */
+  /** Legacy aggregate retained in stored caller inputs. Daily observations determine reach. */
   impressions12m?: number | null
-  /** Absolute clicks over the trailing 28 days — for the clicks≪impressions decay tell. */
+  /** Absolute clicks over the trailing 28 days, checked against daily observations when supplied. */
   clicks28d?: number | null
   clicksPct90d?: number | null
   clicksPct28d?: number | null
-  /** Absolute prior-28d clicks — gates decline so a % crash on trivial traffic isn't a false decline. */
+  /** Legacy prior aggregate. Daily observations supply the comparison baseline. */
   clicksPrior28d?: number | null
   impressionsPct90d?: number | null
   positionDelta90d?: number | null
@@ -393,7 +393,7 @@ type Direction = 'up' | 'down' | 'flat' | 'unclear'
 function measuredDirection(comparison: Comparison, minimumChange: number): Direction {
   const { pct, current, prior, upWeeks, downWeeks } = comparison
   if (pct == null)
-    return 'unclear'
+    return current === 0 && prior === 0 ? 'flat' : 'unclear'
   const delta = current - prior
   if (delta >= prior * 0.2 && delta >= minimumChange && upWeeks >= 3)
     return 'up'
@@ -433,19 +433,17 @@ export function classifyReachStage(input: SiteTriageInput): ReachVerdict {
   if (impressions == null || !Number.isFinite(impressions) || impressions < 0)
     return unavailable()
   const daily = input.daily?.slice(-56)
+  if (daily && (!completeDates(daily) || daily.some(row =>
+    !Number.isFinite(row.clicks) || row.clicks < 0 || !Number.isFinite(row.impressions) || row.impressions < 0)
+  || (input.periodEnd != null && daily.at(-1)?.date !== input.periodEnd))) {
+    return unavailable()
+  }
   if (!daily || daily.length < 56) {
     if (impressions < MIN_GROWTH_IMPRESSIONS_28D) {
       return reach('emerging', evidence, advance('growing', '28d impressions', impressions, MIN_GROWTH_IMPRESSIONS_28D, 'Build enough search visibility to measure a trend.'))
     }
     return unavailable()
   }
-  if (!completeDates(daily) || daily.some(row =>
-    !Number.isFinite(row.clicks) || row.clicks < 0 || !Number.isFinite(row.impressions) || row.impressions < 0)) {
-    return unavailable()
-  }
-  if (input.periodEnd != null && daily.at(-1)!.date !== input.periodEnd)
-    return unavailable()
-
   const clicks = compareWeeks(daily.map(row => row.clicks), 5)
   const visibility = compareWeeks(daily.map(row => row.impressions), 50)
   // A failed or mismatched aggregate window cannot be repaired by silently using another period.
@@ -459,7 +457,13 @@ export function classifyReachStage(input: SiteTriageInput): ReachVerdict {
     ...(clicks.pct != null ? [{ label: 'Clicks 28d', value: pctStr(clicks.pct) }] : []),
     ...(visibility.pct != null ? [{ label: 'Impressions 28d', value: pctStr(visibility.pct) }] : []),
   ]
-  // Clicks lead when their baseline is measurable. Impressions may move in another direction.
+  const growthTarget = Math.ceil(Math.max(clicks.prior * 1.2, clicks.prior + 20, 50))
+  const growthProgression = advance('growing', '28d clicks', clicks.current, growthTarget, `About ${formatSearchConsoleCount(Math.max(0, growthTarget - clicks.current))} more clicks would meet the growth count threshold. Growth also requires three materially increased paired weeks.`)
+  const opposingDirections = (clicksDirection === 'up' && impressionsDirection === 'down')
+    || (clicksDirection === 'down' && impressionsDirection === 'up')
+  if (clicks.prior >= 50 && visibility.prior >= 1000 && opposingDirections)
+    return reach('mixed', comparisonEvidence, growthProgression)
+
   if (clicks.prior >= 50 && clicksDirection === 'down') {
     const recoveryTarget = Math.ceil(clicks.prior * 0.9)
     return reach('declining', comparisonEvidence, escapeToward(
@@ -480,18 +484,21 @@ export function classifyReachStage(input: SiteTriageInput): ReachVerdict {
       summary: 'Impressions stayed below 20% of the prior weekly baseline for three consecutive weeks.',
     }
   }
+  if (clicksDirection === 'flat' && impressionsDirection === 'flat' && clicks.flatWeeks >= 3 && visibility.flatWeeks >= 3
+    && ((clicks.prior >= 50 && clicks.current >= 50) || (visibility.prior >= 1000 && visibility.current >= 1000))) {
+    if (clicks.prior < 50 || clicks.current < 50) {
+      const target = Math.ceil(Math.max(visibility.prior * 1.2, visibility.prior + 200))
+      return reach('plateaued', comparisonEvidence, advance('growing', '28d impressions', visibility.current, target, `About ${formatSearchConsoleCount(Math.max(0, target - visibility.current))} more impressions would meet the growth count threshold. Growth also requires three materially increased paired weeks.`))
+    }
+    return reach('plateaued', comparisonEvidence, growthProgression)
+  }
   if (clicks.prior < 50 || clicks.current < 50) {
     if (visibility.prior >= 1000 && visibility.current >= 1000 && impressionsDirection === 'up') {
       return reach('growing', comparisonEvidence, sustain('28d impressions growth', visibility.pct!, 'Impressions rose by at least 20% and 200 impressions in three or more paired weeks.'))
     }
     return reach('emerging', comparisonEvidence, advance('growing', '28d clicks', Math.min(clicks.prior, clicks.current), 50, 'At least 50 clicks in each period are required to compare click trends.'))
   }
-  if (clicksDirection === 'flat' && impressionsDirection === 'flat' && clicks.flatWeeks >= 3 && visibility.flatWeeks >= 3) {
-    const growthTarget = Math.ceil(clicks.prior * 1.2)
-    return reach('plateaued', comparisonEvidence, advance('growing', '28d clicks', clicks.current, growthTarget, `About ${formatSearchConsoleCount(Math.max(0, growthTarget - clicks.current))} more clicks would reach 20% growth over the previous period.`))
-  }
-  const growthTarget = Math.ceil(clicks.prior * 1.2)
-  return reach('mixed', comparisonEvidence, advance('growing', '28d clicks', clicks.current, growthTarget, `About ${formatSearchConsoleCount(Math.max(0, growthTarget - clicks.current))} more clicks would reach 20% growth over the previous period.`))
+  return reach('mixed', comparisonEvidence, growthProgression)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
