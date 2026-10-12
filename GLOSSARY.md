@@ -469,3 +469,23 @@ check are banned; words that did not are recorded in Open questions instead.
 | Cloud, cloud mode, `--mode cloud` | Hosted, `--mode hosted` | gscdump.com ADR-0012 names the mode. The CLI rejects `cloud` |
 | powerful, seamless, robust, blazing | (cut) | Marketing filler |
 | traffic trend (as a name for the whole-record classification) | Trajectory | Trajectory is one classification with named tags. A `trend` field elsewhere keeps its own meaning |
+
+### Site Triage
+
+**Is:** A deterministic comparison of search reach and saved indexing observations.
+**Reach labels:** Growing, Declining, Stable, Mixed trend, Emerging, and Waiting for data.
+Stable requires flat measured clicks and impressions across complete periods and at least three paired weeks.
+Known zero clicks can be Stable when both periods contain at least 1000 impressions.
+Emerging describes sparse observations, not Site age.
+Valid sparse early history can be Emerging. Malformed supplied observations or a mismatched reporting date require Waiting for data.
+Growing and Declining require meaningful changes across at least three paired weeks.
+Opposing measured click and impression directions produce Mixed trend when both baselines are measurable.
+Every Mixed trend verdict has null reach progression. Opposing directions appear in the summary with both measured changes.
+Clicks otherwise lead when their baseline is measurable. Sparse clicks permit impressions-based Growing or Declining.
+An impressions-based Declining comparison requires at least 1000 impressions in the prior period.
+Period comparisons for Growing and Declining require at least 20% change and 20 clicks or 200 impressions.
+At least three paired weeks must each change by 20% and 5 clicks or 50 impressions.
+A sustained impressions collapse also produces Declining. Low CTR alone does not establish decay.
+**Stored names:** Version 4 plateaued renders Stable. Older plateaued records require a fresh classification.
+The quality_rejection tag records crawled-not-indexed or soft-404 observations. It does not establish a quality cause.
+**Ratified by:** Harlan's deterministic Site status and Brundlefly naming review request, 12 October 2026.
