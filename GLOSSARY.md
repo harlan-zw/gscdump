@@ -480,8 +480,10 @@ Emerging describes sparse observations, not Site age.
 Valid sparse early history can be Emerging. Malformed supplied observations or a mismatched reporting date require Waiting for data.
 Growing and Declining require meaningful changes across at least three paired weeks.
 Opposing measured click and impression directions produce Mixed trend when both baselines are measurable.
-Clicks otherwise lead when their baseline is measurable. Sparse clicks permit an impressions-based growth classification.
-Growth requires at least 20% change and 20 clicks or 200 impressions across periods.
+Mixed trend from opposing directions has null reach progression and describes both measured directions in its summary.
+Clicks otherwise lead when their baseline is measurable. Sparse clicks permit impressions-based Growing or Declining.
+An impressions-based Declining comparison requires at least 1000 impressions in the prior period.
+Period comparisons for Growing and Declining require at least 20% change and 20 clicks or 200 impressions.
 At least three paired weeks must each change by 20% and 5 clicks or 50 impressions.
 A sustained impressions collapse also produces Declining. Low CTR alone does not establish decay.
 **Stored names:** Version 4 plateaued renders Stable. Older plateaued records require a fresh classification.

@@ -36,6 +36,13 @@ describe('classifyReachStage', () => {
     expect(verdict.stage).toBe('growing')
   })
 
+  it('does not show a completed growth goal for opposing search directions', () => {
+    const verdict = classify(132, 191, 23292, 15065)
+    expect(verdict.stage).toBe('mixed')
+    expect(verdict.progression).toBeNull()
+    expect(verdict.summary).toContain('Clicks +45%; impressions -35%')
+  })
+
   it.each([0, 2, 25])('recognizes stable measured visibility with %i clicks', (clicks) => {
     expect(classify(clicks, clicks, 50000, 50000).stage).toBe('plateaued')
   })
@@ -46,8 +53,8 @@ describe('classifyReachStage', () => {
 
   it('includes the absolute click growth floor in progression targets', () => {
     const verdict = classify(50, 60)
-    expect(verdict.progression.target).toBe(70)
-    expect(verdict.progression.pct).toBeLessThan(1)
+    expect(verdict.progression?.target).toBe(70)
+    expect(verdict.progression?.pct).toBeLessThan(1)
     expect(classify(50, 70).stage).toBe('growing')
   })
 
@@ -88,17 +95,38 @@ describe('classifyReachStage', () => {
     const declining = classify(100, 60)
     expect(declining.stage).toBe('declining')
     expect(declining.progression).toMatchObject({ direction: 'escape', nextStage: 'plateaued' })
-    expect(declining.progression.pct).toBeLessThan(1)
+    expect(declining.progression?.pct).toBeLessThan(1)
 
-    expect(classify(100, 100).progression.direction).toBe('advance')
-    expect(classify(100, 115).progression.direction).toBe('advance')
-    expect(classify(100, 160).progression.direction).toBe('sustain')
+    expect(classify(100, 100).progression?.direction).toBe('advance')
+    expect(classify(100, 115).progression?.direction).toBe('advance')
+    expect(classify(100, 160).progression?.direction).toBe('sustain')
   })
 
   it('uses measured impressions when clicks are sparse', () => {
     const verdict = classify(2, 3, 1000, 1600)
     expect(verdict.stage).toBe('growing')
-    expect(verdict.progression.metric).toBe('28d impressions growth')
+    expect(verdict.progression?.metric).toBe('28d impressions growth')
+  })
+
+  it.each([[10000, 6000], [1000, 800]])('recognizes sustained impression decline with sparse clicks', (prior, current) => {
+    const daily = observations(3, 3, prior, current).map((row, index) => ({
+      ...row,
+      impressions: Math.floor((index < 28 ? prior : current) / 28) + (index % 7 < (index < 28 ? prior : current) / 4 % 7 ? 1 : 0),
+    }))
+    const verdict = classifyReachStage({ daily, impressions28d: current })
+    expect(verdict.stage).toBe('declining')
+    expect(verdict.progression).toMatchObject({ direction: 'escape', metric: '28d impressions', value: current, target: Math.ceil(prior * 0.9) })
+    expect(verdict.progression?.pct).toBeLessThan(1)
+  })
+
+  it.each([[999, 599], [1000, 850]])('requires a measurable baseline and material impression loss', (prior, current) => {
+    expect(classify(3, 3, prior, current).stage).toBe('emerging')
+  })
+
+  it('does not infer sustained impression decline from one lost spike week', () => {
+    const daily = observations(3, 3, 10000, 10000)
+    daily[0]!.impressions += 10000
+    expect(classifyReachStage({ daily, impressions28d: 10000 }).stage).toBe('emerging')
   })
 
   it('does not turn sparse click percentages into decline', () => {

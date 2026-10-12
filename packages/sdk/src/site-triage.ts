@@ -43,7 +43,7 @@ export interface TriageEvidence {
  *    (crawl_faults/quality_rejection). `pct` = inverse distance: closer to passing ⇒ higher.
  *  - `sustain` — already good (growing/healthy). `nextStage` null, `pct` 1, framed as momentum.
  *
- * `gapLabel` is always a concrete count (pages/clicks/points), never a bare %.
+ * `gapLabel` gives a count toward the target or explains why progression is unavailable.
  */
 export interface StageProgression {
   nextStage: ReachStage | HealthStage | null
@@ -60,7 +60,8 @@ export interface ReachVerdict {
   summary: string
   primaryAction: string
   evidence: TriageEvidence[]
-  progression: StageProgression
+  /** Null when opposing measured directions provide no meaningful next-stage target. */
+  progression: StageProgression | null
 }
 
 export interface HealthVerdict {
@@ -365,7 +366,7 @@ const REACH_COPY: Record<ReachStage, Pick<ReachVerdict, 'summary' | 'primaryActi
   },
 }
 
-function reach(stage: ReachStage, evidence: TriageEvidence[], progression: StageProgression): ReachVerdict {
+function reach(stage: ReachStage, evidence: TriageEvidence[], progression: StageProgression | null): ReachVerdict {
   return { stage, ...REACH_COPY[stage], evidence, progression }
 }
 
@@ -461,8 +462,12 @@ export function classifyReachStage(input: SiteTriageInput): ReachVerdict {
   const growthProgression = advance('growing', '28d clicks', clicks.current, growthTarget, `About ${formatSearchConsoleCount(Math.max(0, growthTarget - clicks.current))} more clicks would meet the growth count threshold. Growth also requires three materially increased paired weeks.`)
   const opposingDirections = (clicksDirection === 'up' && impressionsDirection === 'down')
     || (clicksDirection === 'down' && impressionsDirection === 'up')
-  if (clicks.prior >= 50 && visibility.prior >= 1000 && opposingDirections)
-    return reach('mixed', comparisonEvidence, growthProgression)
+  if (clicks.prior >= 50 && visibility.prior >= 1000 && opposingDirections) {
+    return {
+      ...reach('mixed', comparisonEvidence, null),
+      summary: `Clicks ${pctStr(clicks.pct!)}; impressions ${pctStr(visibility.pct!)}. These measured directions oppose each other.`,
+    }
+  }
 
   if (clicks.prior >= 50 && clicksDirection === 'down') {
     const recoveryTarget = Math.ceil(clicks.prior * 0.9)
@@ -493,6 +498,16 @@ export function classifyReachStage(input: SiteTriageInput): ReachVerdict {
     return reach('plateaued', comparisonEvidence, growthProgression)
   }
   if (clicks.prior < 50 || clicks.current < 50) {
+    if (visibility.prior >= 1000 && impressionsDirection === 'down') {
+      const recoveryTarget = Math.ceil(visibility.prior * 0.9)
+      return reach('declining', comparisonEvidence, escapeToward(
+        'plateaued',
+        '28d impressions',
+        visibility.current,
+        recoveryTarget,
+        `About ${formatSearchConsoleCount(Math.max(0, recoveryTarget - visibility.current))} more impressions would bring this period within 10% of the previous period.`,
+      ))
+    }
     if (visibility.prior >= 1000 && visibility.current >= 1000 && impressionsDirection === 'up') {
       return reach('growing', comparisonEvidence, sustain('28d impressions growth', visibility.pct!, 'Impressions rose by at least 20% and 200 impressions in three or more paired weeks.'))
     }
