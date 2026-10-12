@@ -507,7 +507,7 @@ export interface GscdumpSiteRegistration {
   intId?: number | null
   /** Team-scoped catalog identifier (`user_sites.catalog_site_id`). Echoes caller input or defaults to `intId`. */
   catalogSiteId?: number | null
-  status: 'idle' | 'pending' | 'syncing' | 'synced' | 'error'
+  status: 'idle' | 'pending' | 'syncing' | 'partial' | 'synced' | 'error'
   message?: string
   existing?: boolean
   indexingEligible?: boolean

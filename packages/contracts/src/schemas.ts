@@ -604,7 +604,7 @@ export const gscdumpSiteRegistrationSchema = z.object({
   // Team-scoped catalog identifier (`user_sites.catalog_site_id`, migration
   // 0032). Echoes the supplied `catalogSiteId` or the `int_id` default.
   catalogSiteId: z.number().nullable().optional(),
-  status: z.enum(['idle', 'pending', 'syncing', 'synced', 'error']),
+  status: z.enum(['idle', 'pending', 'syncing', 'partial', 'synced', 'error']),
   message: z.string().optional(),
   existing: z.boolean().optional(),
   indexingEligible: z.boolean().optional(),

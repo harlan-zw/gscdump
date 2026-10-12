@@ -1,4 +1,4 @@
-import type { GscdumpAvailableSite } from '../src'
+import type { GscdumpAvailableSite, GscdumpSiteRegistration } from '../src'
 import { createGscdumpV1Protocol } from '@gscdump/contracts/v1'
 import { describe, expect, it } from 'vitest'
 
@@ -29,5 +29,13 @@ describe('available Sites sync states', () => {
   it('rejects unknown sync states from the producer', () => {
     const schema = createGscdumpV1Protocol().surfaces.partner.operations.listAvailableSites.responses[200].producer
     expect(() => schema.parse({ data: { sites: [{ siteUrl: 'https://example.com/', permissionLevel: 'siteOwner', registered: true, syncStatus: 'unknown' }] }, meta })).toThrow()
+  })
+
+  it('preserves partial when registering an existing Site', () => {
+    const response = createGscdumpV1Protocol().surfaces.partner.operations.createSite.responses[200]
+    const registration = { siteId: 's_01', status: 'partial', existing: true, message: 'Site already registered' }
+    const parsed: GscdumpSiteRegistration = response.producer.parse({ data: registration, meta }).data
+    expect(parsed).toEqual(registration)
+    expect(response.client.parse({ data: registration, meta }).data).toEqual(registration)
   })
 })

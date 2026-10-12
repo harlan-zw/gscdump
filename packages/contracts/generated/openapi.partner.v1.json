@@ -38472,6 +38472,7 @@
                             "idle",
                             "pending",
                             "syncing",
+                            "partial",
                             "synced",
                             "error"
                           ],
