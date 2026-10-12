@@ -21,7 +21,7 @@ export interface IndexingIssue {
 
 export const issueDetails: Record<string, IndexingIssueDetail> = {
   crawled_not_indexed: {
-    description: 'Google crawled these pages but decided not to add them to the index. This often means the content was deemed low-quality, duplicate, or not useful enough.',
+    description: 'Saved URL Inspection results report these URLs as crawled but not indexed at their check times. This state alone does not establish why.',
     fix: 'Improve content quality and uniqueness. Add internal links pointing to these pages. Ensure they have clear, distinct value compared to other pages on your site.',
   },
   discovered_not_indexed: {
@@ -89,7 +89,7 @@ export const issueDetails: Record<string, IndexingIssueDetail> = {
     fix: 'If the content moved, add 301 redirects to the new URLs. If intentionally removed, ensure no internal links still point to them. The 404s will clear over time.',
   },
   soft_404: {
-    description: 'These pages return a 200 status but Google detects them as effectively empty or error pages — "soft" 404s.',
+    description: 'Saved URL Inspection results report these URLs as Soft 404 at their check times. Review the affected pages before choosing work.',
     fix: 'Return a proper 404 status code for missing pages. If the pages should exist, add meaningful content. Avoid thin placeholder pages.',
   },
   blocked_robots: {
