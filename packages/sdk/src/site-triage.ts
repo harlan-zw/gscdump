@@ -184,6 +184,17 @@ function escapeReduce(
   return { nextStage, metric, value, target, pct, gapLabel, direction: 'escape' }
 }
 
+/** `escape` progression for an off-ramp where a larger value is better. */
+function escapeToward(
+  nextStage: ReachStage | HealthStage,
+  metric: string,
+  value: number,
+  target: number,
+  gapLabel: string,
+): StageProgression {
+  return { nextStage, metric, value, target, pct: clamp01(value / target), gapLabel, direction: 'escape' }
+}
+
 /** `sustain` progression: already good (growing/healthy). Full bar, framed as momentum. */
 function sustain(metric: string, value: number, gapLabel: string): StageProgression {
   return { nextStage: null, metric, value, target: value, pct: 1, gapLabel, direction: 'sustain' }
@@ -360,17 +371,19 @@ function reach(stage: ReachStage, evidence: TriageEvidence[], progression: Stage
 
 interface Comparison { current: number, prior: number, pct: number | null, upWeeks: number, downWeeks: number, flatWeeks: number }
 
-function compareWeeks(values: number[]): Comparison {
+function compareWeeks(values: number[], weeklyMinimumChange: number): Comparison {
   const weeks = Array.from({ length: 8 }, (_, index) =>
     values.slice(index * 7, (index + 1) * 7).reduce((sum, value) => sum + value, 0))
   const prior = weeks.slice(0, 4).reduce((sum, value) => sum + value, 0)
   const current = weeks.slice(4).reduce((sum, value) => sum + value, 0)
+  const materiallyChanged = (value: number, baseline: number, sign: 1 | -1): boolean =>
+    sign * (value - baseline) >= Math.max(baseline * 0.2, weeklyMinimumChange)
   return {
     current,
     prior,
     pct: prior > 0 ? (current / prior - 1) * 100 : null,
-    upWeeks: weeks.slice(4).filter((value, index) => value > weeks[index]!).length,
-    downWeeks: weeks.slice(4).filter((value, index) => value < weeks[index]!).length,
+    upWeeks: weeks.slice(4).filter((value, index) => materiallyChanged(value, weeks[index]!, 1)).length,
+    downWeeks: weeks.slice(4).filter((value, index) => materiallyChanged(value, weeks[index]!, -1)).length,
     flatWeeks: weeks.slice(4).filter((value, index) => Math.abs(value - weeks[index]!) <= weeks[index]! * 0.1).length,
   }
 }
@@ -433,8 +446,8 @@ export function classifyReachStage(input: SiteTriageInput): ReachVerdict {
   if (input.periodEnd != null && daily.at(-1)!.date !== input.periodEnd)
     return unavailable()
 
-  const clicks = compareWeeks(daily.map(row => row.clicks))
-  const visibility = compareWeeks(daily.map(row => row.impressions))
+  const clicks = compareWeeks(daily.map(row => row.clicks), 5)
+  const visibility = compareWeeks(daily.map(row => row.impressions), 50)
   // A failed or mismatched aggregate window cannot be repaired by silently using another period.
   if (visibility.current !== impressions || (input.clicks28d != null && clicks.current !== input.clicks28d))
     return unavailable()
@@ -448,7 +461,14 @@ export function classifyReachStage(input: SiteTriageInput): ReachVerdict {
   ]
   // Clicks lead when their baseline is measurable. Impressions may move in another direction.
   if (clicks.prior >= 50 && clicksDirection === 'down') {
-    return reach('declining', comparisonEvidence, sustain('28d clicks change', clicks.pct!, 'Clicks fell by at least 20% and 20 clicks in three or more paired weeks.'))
+    const recoveryTarget = Math.ceil(clicks.prior * 0.9)
+    return reach('declining', comparisonEvidence, escapeToward(
+      'plateaued',
+      '28d clicks',
+      clicks.current,
+      recoveryTarget,
+      `About ${formatSearchConsoleCount(Math.max(0, recoveryTarget - clicks.current))} more clicks would bring this period within 10% of the previous period.`,
+    ))
   }
   if (clicks.prior >= 50 && clicks.current >= 50 && clicksDirection === 'up') {
     return reach('growing', comparisonEvidence, sustain('28d clicks growth', clicks.pct!, 'Clicks rose by at least 20% and 20 clicks in three or more paired weeks.'))
@@ -456,7 +476,7 @@ export function classifyReachStage(input: SiteTriageInput): ReachVerdict {
   const liveness = reachLivenessRatio(daily)
   if (liveness != null && liveness < 0.2) {
     return {
-      ...reach('declining', comparisonEvidence, sustain('recent weekly impressions', liveness, 'All three recent weeks have less than 20% of the prior median weekly impressions.')),
+      ...reach('declining', comparisonEvidence, escapeToward('plateaued', 'recent weekly impressions', liveness, 0.2, 'Raise recent weekly impressions to at least 20% of the prior baseline.')),
       summary: 'Impressions stayed below 20% of the prior weekly baseline for three consecutive weeks.',
     }
   }
@@ -467,9 +487,11 @@ export function classifyReachStage(input: SiteTriageInput): ReachVerdict {
     return reach('emerging', comparisonEvidence, advance('growing', '28d clicks', Math.min(clicks.prior, clicks.current), 50, 'At least 50 clicks in each period are required to compare click trends.'))
   }
   if (clicksDirection === 'flat' && impressionsDirection === 'flat' && clicks.flatWeeks >= 3 && visibility.flatWeeks >= 3) {
-    return reach('plateaued', comparisonEvidence, sustain('28d clicks change', clicks.pct!, 'Clicks and impressions changed by no more than 10%.'))
+    const growthTarget = Math.ceil(clicks.prior * 1.2)
+    return reach('plateaued', comparisonEvidence, advance('growing', '28d clicks', clicks.current, growthTarget, `About ${formatSearchConsoleCount(Math.max(0, growthTarget - clicks.current))} more clicks would reach 20% growth over the previous period.`))
   }
-  return reach('mixed', comparisonEvidence, sustain('28d clicks change', clicks.pct ?? 0, 'The observations do not establish consistent growth, decline, or stability.'))
+  const growthTarget = Math.ceil(clicks.prior * 1.2)
+  return reach('mixed', comparisonEvidence, advance('growing', '28d clicks', clicks.current, growthTarget, `About ${formatSearchConsoleCount(Math.max(0, growthTarget - clicks.current))} more clicks would reach 20% growth over the previous period.`))
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

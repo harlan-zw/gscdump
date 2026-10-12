@@ -14,6 +14,15 @@ function classify(prior: number, current: number, priorImpressions = 28000, impr
   return classifyReachStage({ impressions28d, clicks28d: current, daily: observations(prior, current, priorImpressions, impressions28d) })
 }
 
+function weeklyObservations(priorClicks: number[], currentClicks: number[]) {
+  const clicks = [...priorClicks, ...currentClicks]
+  return Array.from({ length: 56 }, (_, index) => ({
+    date: new Date(Date.UTC(2026, 7, 14 + index)).toISOString().slice(0, 10),
+    clicks: Math.floor(clicks[Math.floor(index / 7)]! / 7) + (index % 7 < clicks[Math.floor(index / 7)]! % 7 ? 1 : 0),
+    impressions: 1000,
+  }))
+}
+
 describe('classifyReachStage', () => {
   it('recognizes recent click recovery despite a longer decline', () => {
     const verdict = classifyReachStage({ impressions28d: 15065, clicks28d: 191, clicksPrior28d: 132, clicksPct28d: 44.7, clicksPct90d: -17, daily: observations(132, 191, 23292, 15065) })
@@ -44,6 +53,25 @@ describe('classifyReachStage', () => {
     const daily = observations(100, 100)
     daily[55]!.clicks += 200
     expect(classifyReachStage({ impressions28d: 28000, clicks28d: 300, daily }).stage).toBe('mixed')
+  })
+
+  it('requires three materially increased weeks before reporting growth', () => {
+    const spike = weeklyObservations([25, 25, 25, 25], [26, 26, 25, 83])
+    expect(classifyReachStage({ impressions28d: 28000, clicks28d: 160, daily: spike }).stage).toBe('mixed')
+
+    const sustained = weeklyObservations([25, 25, 25, 25], [32, 32, 32, 25])
+    expect(classifyReachStage({ impressions28d: 28000, clicks28d: 121, daily: sustained }).stage).toBe('growing')
+  })
+
+  it('uses recovery progressions for non-successful reach stages', () => {
+    const declining = classify(100, 60)
+    expect(declining.stage).toBe('declining')
+    expect(declining.progression).toMatchObject({ direction: 'escape', nextStage: 'plateaued' })
+    expect(declining.progression.pct).toBeLessThan(1)
+
+    expect(classify(100, 100).progression.direction).toBe('advance')
+    expect(classify(100, 115).progression.direction).toBe('advance')
+    expect(classify(100, 160).progression.direction).toBe('sustain')
   })
 
   it('uses measured impressions when clicks are sparse', () => {
