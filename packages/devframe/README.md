@@ -29,19 +29,30 @@ export default defineConfig({
 
 ## Nuxt
 
-Nuxt DevTools 4 hosts Vite DevTools docks. Add the plugin to Nuxt's Vite config:
+Nuxt DevTools 4 hosts the Search Console dock. Add the official Nuxt module:
 
 ```ts
 // nuxt.config.ts
-import { gscdump } from '@gscdump/devframe/vite'
-
 export default defineNuxtConfig({
+  modules: ['@gscdump/devframe/nuxt'],
   devtools: { enabled: true },
-  vite: {
-    plugins: [gscdump({ site: 'example.com' })],
+  gscdump: {
+    site: 'example.com',
   },
 })
 ```
+
+Use Nuxt 4.5 or later and Nuxt DevTools 4:
+
+```bash
+pnpm add -D @gscdump/devframe @nuxt/devtools@^4.0.0-beta.3
+```
+
+The module runs during development only. Set `gscdump.enabled: false` to skip it.
+If Nuxt DevTools is disabled, the module skips the dock too.
+Credentials stay on the dev server. Never put them in public runtime config.
+
+Setup guides: [Nuxt](https://gscdump.com/google-search-console/nuxt) and [Vite](https://gscdump.com/google-search-console/vite).
 
 ## Any devframe hub
 
