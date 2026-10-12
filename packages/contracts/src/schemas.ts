@@ -575,7 +575,7 @@ export const gscdumpAvailableSiteSchema = z.object({
   // Integer alias (`user_sites.int_id`) — the int JOIN key partners denormalize
   // into their own catalog namespaces. Present on registered sites.
   intId: z.number().nullable().optional(),
-  syncStatus: z.enum(['pending', 'syncing', 'synced', 'error']).nullable().optional(),
+  syncStatus: z.enum(['idle', 'pending', 'syncing', 'partial', 'synced', 'error']).nullable().optional(),
   syncProgress: z.object({
     completed: z.number(),
     failed: z.number().optional(),

@@ -35397,8 +35397,10 @@
                                 "anyOf": [
                                   {
                                     "enum": [
+                                      "idle",
                                       "pending",
                                       "syncing",
+                                      "partial",
                                       "synced",
                                       "error"
                                     ],
@@ -39240,8 +39242,10 @@
                                 "anyOf": [
                                   {
                                     "enum": [
+                                      "idle",
                                       "pending",
                                       "syncing",
+                                      "partial",
                                       "synced",
                                       "error"
                                     ],
