@@ -1,7 +1,6 @@
 import type { NuxtModule } from '@nuxt/schema'
 import type { GscdumpDevframeOptions } from './index'
 import { addVitePlugin, defineNuxtModule } from '@nuxt/kit'
-import { gscdump } from './vite'
 
 export interface ModuleOptions extends GscdumpDevframeOptions {
   /** Set false to skip the Search Console dock. */
@@ -30,7 +29,11 @@ const module: NuxtModule<ModuleOptions> = defineNuxtModule<ModuleOptions>({
     if (!enabled || !nuxt.options.dev || devtools === false || (typeof devtools === 'object' && devtools.enabled === false))
       return
 
-    addVitePlugin(() => gscdump(options))
+    addVitePlugin(async () => {
+      // Keep the optional DevTools peer out of skipped module paths.
+      const { gscdump } = await import('./vite')
+      return gscdump(options)
+    })
   },
 })
 
