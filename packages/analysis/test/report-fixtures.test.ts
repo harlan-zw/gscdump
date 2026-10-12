@@ -386,7 +386,7 @@ describe('growth report', () => {
     const { growthReport } = await import('../src/report/reports/growth')
     const out = await runReport(growthReport, { source, analyzers, ctx })
     expect(out.sections.map(s => s.id)).toEqual(['content-velocity', 'keyword-breadth', 'intent-atlas', 'long-tail'])
-    expect(out.sections[0]!.summary.magnitudeLabel).toContain('55 new keywords')
+    expect(out.sections[0]!.summary.magnitudeLabel).toContain('55 search queries first observed within this window')
     expect(out.sections[3]!.findings).toHaveLength(2)
     expect(out.sections[3]!.findings[0]!.entity.value).toBe('/a')
   })

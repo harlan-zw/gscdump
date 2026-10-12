@@ -38,9 +38,10 @@
   issueGroups: object
   severityOrder: object
 ./lifecycle:
-  analyticsStatusToSyncStatus: function
   findLifecycleSite: function
+  isLifecycleBackfillComplete: function
   lifecycleSiteToSyncStatus: function
+  resolveLifecycleBackfill: function
 ./partner:
   createPartnerClient: function
 ./partner-errors:

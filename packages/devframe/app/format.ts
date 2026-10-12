@@ -42,17 +42,25 @@ export function metricDelta(metric: Metric, current: MetricTotals, previous: Met
   if (now == null || before == null)
     return { _tag: 'None' }
   const diff = now - before
-  const direction = Math.abs(diff) < 1e-9 ? 'flat' : diff > 0 ? 'up' : 'down'
-  const improved = metric === 'position' ? diff < 0 : diff > 0
-  const good = direction === 'flat' ? null : improved
-  const sign = diff > 0 ? '+' : diff < 0 ? '-' : ''
-  if (metric === 'ctr')
-    return { _tag: 'Change', text: `${sign}${Math.abs(diff * 100).toFixed(1)} pts`, direction, good }
-  if (metric === 'position')
-    return { _tag: 'Change', text: `${sign}${Math.abs(diff).toFixed(1)}`, direction, good }
-  if (before === 0)
+  if (metric !== 'ctr' && metric !== 'position' && before === 0)
     return now === 0 ? { _tag: 'Change', text: '0%', direction: 'flat', good: null } : { _tag: 'Change', text: 'New', direction: 'up', good: true }
-  return { _tag: 'Change', text: `${sign}${Math.abs((diff / before) * 100).toFixed(0)}%`, direction, good }
+  // Round first, so the arrow and colour never disagree with the text: a change
+  // that shows as +0% is flat.
+  const shown = metric === 'ctr'
+    ? Number((diff * 100).toFixed(1))
+    : metric === 'position'
+      ? Number(diff.toFixed(1))
+      : Math.round((diff / before) * 100)
+  const direction = shown === 0 ? 'flat' : shown > 0 ? 'up' : 'down'
+  const improved = metric === 'position' ? shown < 0 : shown > 0
+  const good = direction === 'flat' ? null : improved
+  const sign = shown > 0 ? '+' : shown < 0 ? '-' : ''
+  const magnitude = Math.abs(shown)
+  if (metric === 'ctr')
+    return { _tag: 'Change', text: `${sign}${magnitude.toFixed(1)} pts`, direction, good }
+  if (metric === 'position')
+    return { _tag: 'Change', text: `${sign}${magnitude.toFixed(1)}`, direction, good }
+  return { _tag: 'Change', text: `${sign}${magnitude}%`, direction, good }
 }
 
 const dayFormat = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })

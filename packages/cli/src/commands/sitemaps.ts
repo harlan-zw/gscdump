@@ -1,3 +1,5 @@
+import process from 'node:process'
+import { sitemapInspectQueryV1Schema } from '@gscdump/contracts/v1'
 import { defineCommand } from 'citty'
 import { fetchSitemap } from 'gscdump/sites'
 import { sitemapsCommandMeta } from '../command-meta'
@@ -220,6 +222,40 @@ const urlsCommand = defineCommand({
   },
 })
 
+const inspectCommand = defineCommand({
+  meta: { name: 'inspect', description: 'Read provider evidence for one exact Sitemap URL (hosted)' },
+  args: {
+    ...OUTPUT_ARGS,
+    ...HOSTED_ARGS,
+    url: { type: 'positional', required: true, description: 'Exact Sitemap URL' },
+    engine: { type: 'string', default: 'google', description: 'Search Engine: google or bing' },
+  },
+  async run({ args }) {
+    const { json } = applyOutputMode(args)
+    const query = sitemapInspectQueryV1Schema.parse({ searchEngine: args.engine, url: args.url })
+    const { client, site } = await hostedSitemapSite({ ...args, _: [] }, 'inspect')
+    const { data } = await client.inspectSiteSitemap({ params: { siteId: site.siteId }, query })
+    if (data.state._tag === 'unavailable')
+      process.exitCode = 1
+    if (json) {
+      console.log(JSON.stringify(data, null, 2))
+      return
+    }
+    console.log(`${data.searchEngine}: ${data.sitemapUrl}`)
+    console.log(`Evidence: ${data.state._tag}`)
+    if (data.capture._tag === 'captured')
+      console.log(`Capture: ${data.capture.capturedAt} (${data.capture.source})`)
+    if (data.state._tag === 'unavailable')
+      console.log(`Reason: ${data.state.reason}`)
+    if (data.state._tag === 'listed') {
+      for (const [key, value] of Object.entries(data.state)) {
+        if (key !== '_tag')
+          console.log(`${key}: ${value ?? 'unknown'}`)
+      }
+    }
+  },
+})
+
 const currentCommand = defineCommand({
   meta: {
     name: 'current',
@@ -381,6 +417,7 @@ export const sitemapsCommand = defineCommand({
     discover: discoverCommand,
     urls: urlsCommand,
     current: currentCommand,
+    inspect: inspectCommand,
     history: historyCommand,
     membership: membershipCommand,
     lastmod: lastmodCommand,

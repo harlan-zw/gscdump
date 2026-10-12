@@ -224,6 +224,14 @@ describe('context', () => {
     expect(context._tag === 'Ready' && context.site.siteId).toBe('s_example')
   })
 
+  it('lets the panel pick a Site when the site option matches none', async () => {
+    const devframe = await boot({ apiKey: 'gsd_test', fetch: fakeGscdump({ sites: [EXAMPLE, OTHER] }).fetch, site: 'missing.dev' })
+
+    expect((await devframe.context())._tag).toBe('SiteRequired')
+    const picked = await devframe.context('s_other')
+    expect(picked._tag === 'Ready' && picked.site.siteId).toBe('s_other')
+  })
+
   it('uses the CLI Hosted login when no API key is set', async () => {
     await writeFile(join(configDir, 'authentication.json'), JSON.stringify({ _tag: 'Hosted', apiRoot: API, sessionId: 'cli-session' }))
     const gscdump = fakeGscdump({})

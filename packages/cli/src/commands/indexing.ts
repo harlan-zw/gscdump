@@ -69,7 +69,7 @@ const removeCommand = defineCommand({
       console.log(JSON.stringify(result, null, 2))
       return
     }
-    logger.success(`Removed: ${result.url}`)
+    logger.success(`Removal notification accepted: ${result.url}`)
     if (result.notifyTime)
       console.log(`  Notified: ${result.notifyTime}`)
   },

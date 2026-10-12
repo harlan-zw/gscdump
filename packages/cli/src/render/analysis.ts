@@ -6,6 +6,14 @@ import { barColumn, calendarBuckets, renderBars, renderShare, renderSparklines }
 import { renderTable, textLines } from './layout'
 import { finite, formatMetric, metricLabel } from './metrics'
 
+export const ANALYZER_DISPLAY: Record<string, { title: string, description: string }> = {
+  'zero-click': { title: 'Low-CTR queries', description: 'Find low-CTR search queries with high impressions and strong positions; clicks can be nonzero' },
+  'content-velocity': { title: 'Newly observed search queries', description: 'Count search queries first observed within the selected window, by week' },
+  'intent-atlas': { title: 'Shared-word query groups', description: 'Group search queries by shared words, without classifying Search Intent' },
+  'dark-traffic': { title: 'Clicks without reported queries', description: 'Compare page clicks with clicks attributed to reported search queries' },
+  'keyword-breadth': { title: 'Search queries per page', description: 'Count distinct reported search queries with impressions per page' },
+}
+
 export interface AnalysisDisplayContext {
   id: string
   site: string
@@ -85,7 +93,7 @@ export function renderAnalysis(result: AnalysisResult, context: AnalysisDisplayC
   const start = typeof meta.startDate === 'string' ? meta.startDate : context.start
   const end = typeof meta.endDate === 'string' ? meta.endDate : context.end
   const lines = [
-    ...textLines(`${parseGscSiteUrl(context.site).hostname} / ${context.id}`, options, 'accent'),
+    ...textLines(`${parseGscSiteUrl(context.site).hostname} / ${ANALYZER_DISPLAY[context.id]?.title ?? context.id}`, options, 'accent'),
     ...textLines(`${start} to ${end}`, options, 'muted'),
   ]
   if (context.previous)

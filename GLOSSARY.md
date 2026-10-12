@@ -66,8 +66,8 @@ flowchart LR
 | Coverage state | `COVERAGE_STATE_TAGS` in `@gscdump/contracts`; `parseCoverageState` in `gscdump` | `@gscdump/contracts`, `gscdump` | URL 1—1 Coverage state per inspection | "coverage state" |
 | Coverage ladder | `COVERAGE_LADDER` in `@gscdump/contracts` | `@gscdump/contracts` | Coverage ladder 1—4 Coverage state | "coverage ladder" |
 | Watched URL | `partner.sites.indexing.watched.*`; `WATCHED_URL_LIMIT` | `@gscdump/contracts` | Site 1—N Watched URL, at most 50 | "watched URL" |
-| Checkpoint | `watchedUrlCheckpointSchema` | `@gscdump/contracts` | Watched URL 1—N Checkpoint, newest 12 returned | "checkpoint" |
-| Capture | `indexingCaptureSchema` | `@gscdump/contracts` | Indexing summary 1—1 Capture | "capture" |
+| Watched URL inspection | `watchedUrlCheckpointSchema`; `checkpoints` | `@gscdump/contracts` | Watched URL 1—N Watched URL inspection, newest 12 returned | "Watched URL inspection" |
+| Count freshness | `indexingCaptureSchema`; `capture` | `@gscdump/contracts` | Indexing summary 1—1 Count freshness | "count freshness" |
 | Team | `gscdumpTeamRowSchema` | `contracts/partner` | Team 1—N Site | "team" |
 | Engine | `packages/engine` + 3 adapters | `@gscdump/engine` | Engine 1—1 Driver | not surfaced |
 | Driver | (runtime handle) | `@gscdump/engine` | — | not surfaced |
@@ -77,7 +77,7 @@ flowchart LR
 | Report | `report/reports/*` | `analysis/report` | Report 1—N Section | "report" (`gscdump report`, `run-report`) |
 | Section | inline `id:` in each report | `analysis/report` | Section 1—1 Analyzer run | "finding" / section id in `ReportResult` |
 | Rollup | `u_<u>/<s>/rollups/<id>` | `engine/rollups` | Site 1—N Rollup | "rollup" (`store rollups`) |
-| Entity | per-site entity stores | `engine/entities` | Site 1—N Entity | not surfaced |
+| Entity | per-site entity stores | `engine/entities` | Site 1—N Entity | "saved URL inspections" or "Indexing API metadata" in `entities` help |
 | Canonical Query | `query_canonical` | `analysis` (`normalizeQuery`) | Query N—1 Canonical Query | not surfaced |
 | Query Dimension | `query_dim` | `engine/entities` | Site 1—1 Query Dimension | not surfaced |
 | Manifest authority | `ManifestStore` / R2 HEAD pointer | `engine` | (siteId, table, searchType) 1—1 Manifest | not surfaced |
@@ -87,6 +87,10 @@ flowchart LR
 | Trajectory | `analyzeTrajectory`; `trajectory` Analyzer in `@gscdump/analysis` | `analysis/analyzers` | Site 1—1 Trajectory per read of its record | "trajectory" (`analyze trajectory`) |
 
 ## Usage
+
+Google's discovery, crawling, rendering, indexing, and serving name separate Search processes. Use these platform terms when explaining Google.
+Indexing Evidence records a dated observation of those processes. A Submission Receipt records notification acceptance or rejection.
+Neither one establishes a publication-to-indexing deadline. A gscdump sync or export moves data; it does not run Google's Search processes.
 
 - Use Analyzer in prose. `<tool>` is the existing CLI positional label; MCP also uses the protocol noun "tool".
 - Analyzer, Report, and Section IDs use separate namespaces. `brand` can name both an Analyzer and a Report.
@@ -131,8 +135,8 @@ the `@gscdump/analysis/registry` export.
 **Casing:** `Analyzer` in prose, `analyzer` in identifiers, kebab-case ids (`striking-distance`).
 
 ### Report
-**Is:** an intent-keyed composition of Analyzers returning a `ReportResult` of
-bounded Sections plus next steps.
+**Is:** a composition of Analyzers that answers a question about search traffic.
+It returns a `ReportResult` with bounded Sections of findings.
 **Use for:** the `gscdump report` command, the `list-reports`/`run-report` MCP tools,
 `@gscdump/analysis/report`, the eight IDs in README Reports.
 **Never:** analysis run, digest, summary, audit.
@@ -147,8 +151,10 @@ bounded Sections plus next steps.
 Analyzer, Report, and Section IDs use separate namespaces.
 
 ### Site
-**Is:** one Google Search Console property, keyed by `siteId` / `siteUrl`
-(`sc-domain:example.com` or `https://example.com/`).
+**Is:** in Local Google access, one Google Search Console property, keyed by `siteId` / `siteUrl`.
+A property can be a Domain property (`sc-domain:example.com`) or a URL-prefix property (`https://example.com/`).
+In Hosted access, a Site is the exact registered host, associated with a Search Console property.
+A Domain property can include several hosts. Hosted Site registration does not grant access to every host in that property.
 **Use for:** `--site`, `siteUrl` in every MCP tool input, `site_id` in the
 SQLite multi-tenant path, `gscdump/tenant`, the `sites` CLI command.
 **Never:** domain, host, tenant (Team is the tenant), account.
@@ -156,7 +162,8 @@ SQLite multi-tenant path, `gscdump/tenant`, the `sites` CLI command.
 Use "Google Search Console property" only to explain the Google term for a Site.
 
 ### Mode
-**Is:** who runs the sync and where the record lives. Two values: Local and Hosted.
+**Is:** which credentials and API path the CLI uses. Two values: Local and Hosted.
+Store reads work in either Mode. The CLI runs on the user's machine in either Mode.
 **Use for:** CLI docs, the packaged skill, `--mode` help text, and auth errors.
 **Never:** deployment, access type, "the CLI" or "the platform" as a mode label.
 **Casing:** `Local` and `Hosted` as labels; `local` and `hosted` mid-sentence.
@@ -164,13 +171,13 @@ Use "Google Search Console property" only to explain the Google term for a Site.
 **Identifiers:** `--mode local` and `--mode hosted`; the authentication tags are `Local` and `Hosted`. The CLI rejects `cloud`.
 
 ### Local
-**Is:** the CLI on the user's machine with the user's own Google keys. The Store holds the record.
+**Is:** Google access with the user's own Google keys. The Store holds the saved search history.
 **Use for:** CLI authentication with a service account first, or an OAuth client second.
 **Never:** BYOK, Bring Your Own Keys, self-hosted, "local access without your own keys".
 No Local request uses gscdump's OAuth client or Google quota.
 
 ### Hosted
-**Is:** gscdump.com runs the sync and keeps the record. The CLI in Hosted mode reads that record. An explicit `indexing inspect --yes` request asks the platform for new Google URL Inspections within its shared quota.
+**Is:** gscdump.com runs the sync and keeps the record. The CLI in Hosted mode reads that record. An explicit `indexing inspect --yes` request asks the platform for new Google URL Inspections within its shared quota. `sitemaps inspect --engine google` reads one Sitemap live through the platform. That read uses Google's API quota, without spending URL Inspections. Bing Sitemap inspection reads dated stored evidence.
 **Use for:** the SDK and CLI paths that reach `gscdump.com/api`.
 **Never:** Cloud, cloud mode, the cloud, Pro.
 
@@ -190,7 +197,7 @@ A Trajectory reads every day it is given, not a 28 or 90 day window. It says whi
 
 ### Coverage state
 **Is:** the tagged Google verdict for one URL, parsed from the `coverageState` prose of one URL Inspection.
-**Use for:** `COVERAGE_STATE_TAGS`, `parseCoverageState`, `coverageStates` counts in the indexing trend, and the `coverageState` field of a Checkpoint.
+**Use for:** `COVERAGE_STATE_TAGS`, `parseCoverageState`, `coverageStates` counts in the indexing trend, and the `coverageState` field of a Watched URL inspection.
 **Never:** indexing status, coverage answer, index status history (as a name for the daily counts per state).
 **Casing:** `Coverage state` in prose, `coverageState` in identifiers, snake_case tags (`crawled_not_indexed`).
 The first four tags form the Coverage ladder. The rest are exclusions Google reports beside it. `unrecognized` holds prose no tag maps yet, and `not_reported` holds an inspection with no coverage prose.
@@ -208,20 +215,49 @@ A Coverage state is Google's verdict only. Indexing Evidence is a dated observat
 **Never:** tracked URL, pinned URL, watchlist, panel.
 **Casing:** `Watched URL` in prose, `watchedUrl` in identifiers.
 
-### Checkpoint
+### Watched URL inspection
 **Is:** one recorded inspection result for a Watched URL: `checkedAt`, the Coverage state, Google's coverage text, the verdict, and the last crawl time.
 **Use for:** `watchedUrlCheckpointSchema` and the `checkpoints` array on a Watched URL, newest first.
 **Never:** snapshot (Entity snapshots keep that word), history entry, inspection record.
-**Casing:** `Checkpoint` in prose, `checkpoint` in identifiers.
-A Checkpoint exists only for a Watched URL. A stored URL Inspection verdict for any other URL is not a Checkpoint.
+**Casing:** `Watched URL inspection` in prose. Existing `checkpoint` identifiers remain fixed.
+This scheduled history exists only for a Watched URL. Other saved URL Inspection verdicts remain separate.
 
-### Capture
+### Count freshness
 **Is:** the capture time and freshness of the indexing evidence behind a summary: when gscdump counted the verdicts, the oldest and newest verdict, and the share older than 7 and 30 days.
 **Use for:** `capture` on the indexing summary and diagnostics, and `capturedAt` on a trend day. `capture.source` is `stored` or `live`. `capture.scope` says which URLs the counts cover.
 **Never:** asOf, snapshot, report date (as names for the capture time).
-**Casing:** `Capture` in prose, `capture` in identifiers.
+**Casing:** `Count freshness` in displayed indexing summaries. Existing `capture` identifiers remain fixed.
 **Source values:** `stored` means the counts gscdump saved on a daily run. `live` means gscdump counted during this request. Use `stored`, never `snapshot`, for the first value.
+Neither source value means a new Google URL Inspection ran. Always distinguish the count time from the inspection dates.
 The field name `source` overlaps the Source term. It stays until a wider rename.
+
+### Search query
+**Is:** the phrase a person used in Google Search, represented by the Google `query` dimension.
+**Use for:** search analytics rows and reported query counts. Qualify SQL query when discussing a data request.
+Existing `keyword` fields and Analyzer IDs remain compatibility identifiers.
+
+### Analyzer display names
+The IDs below stay fixed. Use these task names in displayed explanations and Report titles.
+
+| Existing ID | Display name | Meaning |
+| --- | --- | --- |
+| `zero-click` | Low-CTR queries | High-impression search queries with strong positions and low CTR. Clicks can be nonzero. |
+| `content-velocity` | Newly observed search queries | Queries first observed within the selected window, grouped by week. This does not measure publishing pace. |
+| `intent-atlas` | Shared-word query groups | Groups formed from shared query words. This does not classify Search Intent. |
+| `dark-traffic` | Clicks without reported queries | Page clicks minus clicks attributed to reported search queries. This does not identify a traffic source. |
+| `keyword-breadth` | Search queries per page | Distinct reported queries with impressions per page. The count does not establish topical authority or ranking vulnerability. |
+
+### Analyzer reference
+**Is:** an Analyzer ID and parameters attached to a Report Section.
+**Use for:** explaining the existing `artifact` field and `ReportSectionArtifact` type.
+It is not a file or a complete rerun request. Supply the original Site and window separately.
+
+### Indexing assessment
+**Is:** a heuristic classification of available inspection and crawl observations.
+The existing `healthy` tag means no warning threshold was exceeded. Missing URL counts cannot establish indexing health.
+The existing `quality_rejection` tag combines crawled-not-indexed and soft-404 observations. It does not establish a quality cause.
+The existing `not_indexed` classification starts at 30% of known URLs, with over 50 affected URLs.
+Known URLs are the supplied denominator, not proof of every URL on the Site.
 
 ## Internal terms
 
@@ -267,6 +303,8 @@ _Avoid_: aggregate, summary, snapshot (collides with **Entity** snapshots).
 
 **Entity**:
 Per-site slow-changing state, point-lookup-by-id — URL inspections, sitemap snapshots, indexing-metadata events, the query dimension. Distinct family from time-series facts.
+Use the concrete data name in CLI help: saved URL inspections or Google Indexing API metadata.
+The `entities` command keeps its name. Its metadata contains notification times, which do not prove Google indexed a URL.
 _Avoid_: record (overloaded), object.
 
 **Sitemap document reader** (`sitemapd`):
@@ -423,11 +461,31 @@ check are banned; words that did not are recorded in Open questions instead.
 | GSC account | Site or Team | "account" collides with Google account vs partner Team |
 | bare `engine` or `source` as a public search discriminator | Search Engine | Both words already name package concepts |
 | indexing status as a public evidence noun | Indexing Evidence | It collides with pipeline state and hides observation uncertainty |
-| snapshot (as the value of `capture.source`) | stored | Entity snapshots keep the word `snapshot`. The Capture source value is `stored` |
+| snapshot (as the value of `capture.source`) | stored | Entity snapshots keep the word `snapshot`. The fixed `capture.source` value is `stored` |
 | funnel, pipeline, rung (as names for the Coverage ladder) | Coverage ladder | The Coverage ladder is the four ordered Coverage states. "pipeline state" keeps its other meaning |
 | tracked URL, pinned URL, watchlist | Watched URL | One name for the URL gscdump re-inspects every 7 days |
-| asOf (for the capture time of indexing counts) | Capture | `capturedAt` names the time. Consumers outside this repository may still print `asOf` |
+| asOf (for the capture time of indexing counts) | Count freshness | `capturedAt` names the count time. Existing contract field names stay fixed |
 | BYOK, Bring Your Own Keys, self-hosted (as a mode) | Local | gscdump.com ADR-0012 names the mode. `resolveBYOK` stays an internal identifier |
 | Cloud, cloud mode, `--mode cloud` | Hosted, `--mode hosted` | gscdump.com ADR-0012 names the mode. The CLI rejects `cloud` |
 | powerful, seamless, robust, blazing | (cut) | Marketing filler |
 | traffic trend (as a name for the whole-record classification) | Trajectory | Trajectory is one classification with named tags. A `trend` field elsewhere keeps its own meaning |
+
+### Site Triage
+
+**Is:** A deterministic comparison of search reach and saved indexing observations.
+**Reach labels:** Growing, Declining, Stable, Mixed trend, Emerging, and Waiting for data.
+Stable requires flat measured clicks and impressions across complete periods and at least three paired weeks.
+Known zero clicks can be Stable when both periods contain at least 1000 impressions.
+Emerging describes sparse observations, not Site age.
+Valid sparse early history can be Emerging. Malformed supplied observations or a mismatched reporting date require Waiting for data.
+Growing and Declining require meaningful changes across at least three paired weeks.
+Opposing measured click and impression directions produce Mixed trend when both baselines are measurable.
+Every Mixed trend verdict has null reach progression. Opposing directions appear in the summary with both measured changes.
+Clicks otherwise lead when their baseline is measurable. Sparse clicks permit impressions-based Growing or Declining.
+An impressions-based Declining comparison requires at least 1000 impressions in the prior period.
+Period comparisons for Growing and Declining require at least 20% change and 20 clicks or 200 impressions.
+At least three paired weeks must each change by 20% and 5 clicks or 50 impressions.
+A sustained impressions collapse also produces Declining. Low CTR alone does not establish decay.
+**Stored names:** Version 4 plateaued renders Stable. Older plateaued records require a fresh classification.
+The quality_rejection tag records crawled-not-indexed or soft-404 observations. It does not establish a quality cause.
+**Ratified by:** Harlan's deterministic Site status and Brundlefly naming review request, 12 October 2026.

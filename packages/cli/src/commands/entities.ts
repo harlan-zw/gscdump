@@ -60,7 +60,7 @@ async function readUrlList(opts: { file?: string }): Promise<string[]> {
 const showSubCommand = defineCommand({
   meta: {
     name: 'show',
-    description: 'Print the latest inspection record for a URL from the local entity store',
+    description: 'Read the latest saved URL inspection from the Store',
   },
   args: {
     ...OUTPUT_ARGS,
@@ -104,7 +104,7 @@ const showSubCommand = defineCommand({
 const indexingSnapshotSubCommand = defineCommand({
   meta: {
     name: 'snapshot',
-    description: 'Fetch Indexing API metadata (latest update/remove per URL) and persist to the local entity store',
+    description: 'Save the latest Google Indexing API update and removal notification times for each URL to the Store',
   },
   args: {
     site: {
@@ -203,7 +203,7 @@ const indexingSnapshotSubCommand = defineCommand({
 const indexingSubCommand = defineCommand({
   meta: {
     name: 'indexing',
-    description: 'Snapshot Indexing API metadata per URL',
+    description: 'Save Google Indexing API notification times for URLs',
   },
   subCommands: {
     snapshot: indexingSnapshotSubCommand,

@@ -1,19 +1,13 @@
-// v3 site triage: two orthogonal axes behind one headline.
+// Site triage: two independent axes behind one headline.
 //
 //   maturity branch → ( REACH stage  ×  HEALTH stage )
 //
-// REACH answers "is the site winning organic visibility, and if not, why" —
-// because a low-reach site's CAUSE (new / decayed / faded / quality-suppressed)
-// IS the diagnosis. HEALTH answers "can Google crawl + index the pages that
-// SHOULD be indexed", purpose-aware (pSEO expects a long non-indexed tail;
-// event sites expect retired pages). The headline picks the dominant axis: a
-// real, non-purpose-expected HEALTH blocker wins, otherwise REACH leads and the
-// other axis is an evidence sub-line.
-//
-// Soft quality violations (Google crawls a page then refuses to index it) are
-// NOT exposed by the Search Console API — no Manual Actions / Security Issues
-// endpoint exists — so `quality_rejection` is inferred from crawled-not-indexed
-// share. See docs/search-console-stage-v2-audit.md §10.
+// REACH classifies observed search visibility. HEALTH applies warning thresholds
+// to supplied inspection and crawl observations, with purpose-aware exclusions.
+// These heuristics do not establish the cause of a visibility or indexing change.
+// A HEALTH warning leads the headline; otherwise REACH leads.
+// `quality_rejection` is a preserved public tag for crawled-not-indexed and
+// soft-404 observations. Neither state establishes a quality violation.
 
 import type { SearchConsoleStageIssue } from './search-console-stage'
 import { countSearchConsoleIssues, formatSearchConsoleCount } from './search-console-signals'
@@ -23,15 +17,17 @@ export type ReachStage
   = | 'emerging' // observed, with too little current reach for a comparative claim
     | 'growing' // established + trending up
     | 'plateaued' // established + flat
+    | 'mixed' // reliable recent signals do not establish one direction
+    | 'insufficient_data' // missing or incomplete comparison observations
     | 'declining' // established + sustained drop (still alive)
-    | 'faded' // had real reach, recent window collapsed vs its own peak (spike→died)
-    | 'decayed' // old, used to rank, eroded to staleness (impressions linger, clicks gone)
+    | 'faded' // Stored legacy tag. New sustained visibility collapses use declining.
+    | 'decayed' // Legacy tag for current impressions with very low CTR after prior visibility.
 
 export type HealthStage
   = | 'healthy'
     | 'crawl_faults' // real 5xx / broken links on pages that matter
-    | 'quality_rejection' // Google crawled then refused — soft quality / AI-spam suppression
-    | 'not_indexed' // Discovered and Crawled, currently not indexed together dominate the known URLs
+    | 'quality_rejection' // Legacy tag for a high crawled-not-indexed or soft-404 share; not a causal diagnosis.
+    | 'not_indexed' // Discovered, crawled-not-indexed and soft-404 observations meet the warning threshold.
 
 export interface TriageEvidence {
   label: string
@@ -47,7 +43,7 @@ export interface TriageEvidence {
  *    (crawl_faults/quality_rejection). `pct` = inverse distance: closer to passing ⇒ higher.
  *  - `sustain` — already good (growing/healthy). `nextStage` null, `pct` 1, framed as momentum.
  *
- * `gapLabel` is always a concrete count (pages/clicks/points), never a bare %.
+ * `gapLabel` gives a count toward the target or explains why progression is unavailable.
  */
 export interface StageProgression {
   nextStage: ReachStage | HealthStage | null
@@ -64,7 +60,8 @@ export interface ReachVerdict {
   summary: string
   primaryAction: string
   evidence: TriageEvidence[]
-  progression: StageProgression
+  /** Null when mixed observations provide no meaningful next-stage target. */
+  progression: StageProgression | null
 }
 
 export interface HealthVerdict {
@@ -76,6 +73,8 @@ export interface HealthVerdict {
 }
 
 export interface SiteTriage {
+  /** Absent on stored verdicts produced before complete-period classification. */
+  algorithmVersion?: 4
   reach: ReachVerdict
   health: HealthVerdict
   /** Which axis leads the dashboard headline. */
@@ -83,20 +82,24 @@ export interface SiteTriage {
 }
 
 export interface SiteTriageInput {
+  /** Last complete reporting date of the current 28-day period. */
+  periodEnd?: string | null
+  /** Date-ascending, complete daily observations ending at the stable reporting date. */
+  daily?: Array<{ date: string, clicks: number, impressions: number }> | null
   // ── maturity + reach (GSC, lag-trimmed windows) ──
   /** Impressions over the trailing 28 days — the maturity tier. */
   impressions28d?: number | null
-  /** Lifetime-ish impressions (trailing 12 months) — separates new from decayed/faded. */
+  /** Legacy aggregate retained in stored caller inputs. Daily observations determine reach. */
   impressions12m?: number | null
-  /** Absolute clicks over the trailing 28 days — for the clicks≪impressions decay tell. */
+  /** Absolute clicks over the trailing 28 days, checked against daily observations when supplied. */
   clicks28d?: number | null
   clicksPct90d?: number | null
   clicksPct28d?: number | null
-  /** Absolute prior-28d clicks — gates decline so a % crash on trivial traffic isn't a false decline. */
+  /** Legacy prior aggregate. Daily observations supply the comparison baseline. */
   clicksPrior28d?: number | null
   impressionsPct90d?: number | null
   positionDelta90d?: number | null
-  /** Latest complete week ÷ 90d peak week (lag-trimmed). <0.2 = faded (spike→died). */
+  /** Recent three-week maximum divided by the median of four prior weeks. */
   livenessRatio?: number | null
   // ── health (indexing reasons + crawl audit + purpose) ──
   totalUrls?: number | null
@@ -110,47 +113,35 @@ export interface SiteTriageInput {
 
 // ── thresholds (docs §10; derived from the 12-site distribution) ──
 const MIN_GROWTH_IMPRESSIONS_28D = 1000
-const ESTABLISHED_IMPRESSIONS_28D = 20000
-const MIN_HISTORY_IMPRESSIONS = 500
-const GROWTH_CLICKS_PCT = 10
-const GROWTH_IMPRESSIONS_PCT = 20
-const DECLINE_CLICKS_PCT = -10
-const MIN_DECLINE_PRIOR_CLICKS = 50
-const FADED_LIVENESS = 0.2 // recent week <20% of peak week
-const DECAY_CTR = 0.005 // clicks/impressions below this on an established base = eroded relevance
 // crawl_faults floor sits between scripts.nuxt.com (9 server errors, tolerable) and
 // newworldartists.net (137, broken); 3% share catches large-site breakage.
 const HARD_BLOCK_FLOOR = 10
 const HARD_BLOCK_SHARE = 0.03
-// quality_rejection: Google crawled then refused a large share.
+// Preserved quality_rejection category: observed not-indexed share, not an inferred cause.
 const REJECT_SHARE = 0.3
 const REJECT_MIN = 50
 
 /**
- * Reach liveness: latest complete week ÷ peak rolling-7d week over a daily
- * impressions series (typically the trailing 90 days). `<0.2` means recent
- * impressions have collapsed versus the site's own peak (spike→died) — the
- * signal a period-vs-prior delta cannot see. Trailing zero-impression days
- * (GSC reporting lag) are trimmed before the latest-week sum. Returns null when
- * the series is too short to judge.
+ * Compare three complete recent weeks with the median of four prior weeks.
+ * The caller excludes reporting lag by date before supplying the daily series.
+ * Known zero-impression days remain observations. Sparse baselines return null.
  */
-export function reachLivenessRatio(daily: Array<{ impressions: number }> | null | undefined): number | null {
-  if (!daily || daily.length < 14)
+export function reachLivenessRatio(daily: Array<{ date?: string, impressions: number }> | null | undefined): number | null {
+  if (!daily || daily.length < 49)
     return null
-  const series = daily.map(d => d.impressions)
-  while (series.length && series[series.length - 1] === 0)
-    series.pop()
-  if (series.length < 14)
+  const observations = daily.slice(-49)
+  if (observations.some(row => row.date != null)
+    && !completeDates(observations.map(row => ({ date: row.date ?? '' })))) {
     return null
-  const rolling7 = (end: number): number => {
-    let sum = 0
-    for (let i = Math.max(0, end - 6); i <= end; i++) sum += series[i]!
-    return sum
   }
-  const latestWeek = rolling7(series.length - 1)
-  let peakWeek = 0
-  for (let i = 6; i < series.length; i++) peakWeek = Math.max(peakWeek, rolling7(i))
-  return peakWeek > 0 ? latestWeek / peakWeek : null
+  const series = observations.map(d => d.impressions)
+  if (series.some(value => !Number.isFinite(value) || value < 0))
+    return null
+  const weeks = Array.from({ length: 7 }, (_, index) =>
+    series.slice(index * 7, (index + 1) * 7).reduce((sum, value) => sum + value, 0))
+  const baselineWeeks = weeks.slice(0, 4).sort((a, b) => a - b)
+  const baseline = (baselineWeeks[1]! + baselineWeeks[2]!) / 2
+  return baseline >= 250 ? Math.max(...weeks.slice(4)) / baseline : null
 }
 
 function clamp01(n: number): number {
@@ -179,21 +170,6 @@ function advance(
 }
 
 /**
- * `escape` progression for an off-ramp where a larger value is better but the
- * site is below an exit threshold (declining clicks %, faded liveness, decayed CTR).
- * `pct` = value/target clamped — closer to the exit ⇒ higher. Negative values floor at 0.
- */
-function escapeToward(
-  nextStage: ReachStage | HealthStage,
-  metric: string,
-  value: number,
-  target: number,
-  gapLabel: string,
-): StageProgression {
-  return { nextStage, metric, value, target, pct: clamp01(value / target), gapLabel, direction: 'escape' }
-}
-
-/**
  * `escape` progression for a "reduce" gate where a SMALLER value passes
  * (faults, rejection share). `pct` = inverse distance: at/under target ⇒ 1,
  * at 2× target ⇒ 0, linear between.
@@ -209,6 +185,17 @@ function escapeReduce(
   return { nextStage, metric, value, target, pct, gapLabel, direction: 'escape' }
 }
 
+/** `escape` progression for an off-ramp where a larger value is better. */
+function escapeToward(
+  nextStage: ReachStage | HealthStage,
+  metric: string,
+  value: number,
+  target: number,
+  gapLabel: string,
+): StageProgression {
+  return { nextStage, metric, value, target, pct: clamp01(value / target), gapLabel, direction: 'escape' }
+}
+
 /** `sustain` progression: already good (growing/healthy). Full bar, framed as momentum. */
 function sustain(metric: string, value: number, gapLabel: string): StageProgression {
   return { nextStage: null, metric, value, target: value, pct: 1, gapLabel, direction: 'sustain' }
@@ -220,20 +207,20 @@ function sustain(metric: string, value: number, gapLabel: string): StageProgress
 
 const HEALTH_COPY: Record<HealthStage, Pick<HealthVerdict, 'summary' | 'primaryAction'>> = {
   healthy: {
-    summary: 'Google can crawl and index the pages that should be indexed.',
-    primaryAction: 'No indexing cleanup needed — focus on reach.',
+    summary: 'Available observations do not exceed the indexing warning thresholds.',
+    primaryAction: 'Review inspection coverage and freshness before deciding whether indexing needs attention.',
   },
   crawl_faults: {
-    summary: 'Real access faults (server errors / broken links) are capping otherwise-indexable pages.',
+    summary: 'Available observations show access faults or broken links above the warning threshold.',
     primaryAction: 'Fix the 5xx and broken URLs; return 410/404 for pages you retire on purpose.',
   },
   not_indexed: {
-    summary: 'Google has not indexed most known URLs. It queued many without a crawl, and it crawled others and left them out.',
-    primaryAction: 'Link to the queued URLs from pages Google already indexed, and consolidate or improve the crawled ones.',
+    summary: 'Saved inspections show a substantial share of known URLs are discovered or crawled but not indexed.',
+    primaryAction: 'Inspect affected URLs and check discovery, responses, and canonical URLs before choosing changes.',
   },
   quality_rejection: {
-    summary: 'Google is crawling pages and refusing to index them — a soft quality signal it never reports explicitly.',
-    primaryAction: 'Consolidate or improve the rejected pages, or noindex the thin/low-value set.',
+    summary: 'Saved inspections show many crawled or soft-404 URLs are not indexed. These states do not establish a quality cause.',
+    primaryAction: 'Inspect affected URLs and check their content, responses, and canonical URLs before choosing changes.',
   },
 }
 
@@ -274,31 +261,28 @@ export function classifyHealthStage(input: SiteTriageInput): HealthVerdict {
         'access faults',
         hardBlocks,
         faultTarget,
-        `${formatSearchConsoleCount(hardBlocks)} faults — fix ~${formatSearchConsoleCount(toFix)} to clear the gate`,
+        `${formatSearchConsoleCount(hardBlocks)} faults. About ${formatSearchConsoleCount(toFix)} fewer would meet the warning threshold.`,
       ),
     }
   }
 
-  // Soft quality rejection: Google spent crawl budget then declined. soft_404
-  // (thin/empty) counts here, not as a hard fault. Applies even to pSEO.
+  // This legacy category combines observed not-indexed states. Neither state proves a quality cause.
   const rejectPool = crawledNotIndexed + softFound
   if (totalUrls > 0 && rejectPool > REJECT_MIN && rejectPool / totalUrls >= REJECT_SHARE) {
     const share = rejectPool / totalUrls
-    // Pages to clear so the remaining rejected share drops just under REJECT_SHARE.
-    const toClear = Math.max(0, Math.ceil(rejectPool - REJECT_SHARE * totalUrls))
     return {
       stage: 'quality_rejection',
       ...HEALTH_COPY.quality_rejection,
       evidence: [
-        { label: 'Crawled, then refused', value: formatSearchConsoleCount(rejectPool) },
+        { label: 'Crawled not indexed or soft 404', value: formatSearchConsoleCount(rejectPool) },
         { label: 'Share of known URLs', value: `${(share * 100).toFixed(0)}%` },
       ],
       progression: escapeReduce(
         'healthy',
-        'crawled-rejected share',
+        'crawled-not-indexed or soft-404 share',
         share,
         REJECT_SHARE,
-        `${(share * 100).toFixed(0)}% rejected — improve/consolidate ~${formatSearchConsoleCount(toClear)} pages to clear`,
+        `${(share * 100).toFixed(0)}% of known URLs. This classification applies at 30% or more, with over 50 affected URLs.`,
       ),
     }
   }
@@ -309,13 +293,12 @@ export function classifyHealthStage(input: SiteTriageInput): HealthVerdict {
   const notIndexedPool = rejectPool + discoveredNotIndexed
   if (totalUrls > 0 && notIndexedPool > REJECT_MIN && notIndexedPool / totalUrls >= REJECT_SHARE) {
     const share = notIndexedPool / totalUrls
-    const toClear = Math.max(0, Math.ceil(notIndexedPool - REJECT_SHARE * totalUrls))
     return {
       stage: 'not_indexed',
       ...HEALTH_COPY.not_indexed,
       evidence: [
         { label: 'Discovered, currently not indexed', value: formatSearchConsoleCount(discoveredNotIndexed) },
-        { label: 'Crawled, currently not indexed', value: formatSearchConsoleCount(rejectPool) },
+        { label: 'Crawled not indexed or soft 404', value: formatSearchConsoleCount(rejectPool) },
         { label: 'Share of known URLs', value: `${(share * 100).toFixed(0)}%` },
       ],
       progression: escapeReduce(
@@ -323,7 +306,7 @@ export function classifyHealthStage(input: SiteTriageInput): HealthVerdict {
         'not-indexed share',
         share,
         REJECT_SHARE,
-        `${(share * 100).toFixed(0)}% not indexed. Get ~${formatSearchConsoleCount(toClear)} URLs indexed to clear the gate`,
+        `${(share * 100).toFixed(0)}% of known URLs. This classification applies at 30% or more, with over 50 affected URLs.`,
       ),
     }
   }
@@ -331,8 +314,16 @@ export function classifyHealthStage(input: SiteTriageInput): HealthVerdict {
   return {
     stage: 'healthy',
     ...HEALTH_COPY.healthy,
+    ...(totalUrls <= 0
+      ? {
+          summary: 'No known URL count is available to assess indexing.',
+          primaryAction: 'Collect URL Inspection results before assessing indexing.',
+        }
+      : {}),
     evidence: [],
-    progression: sustain('indexing health', 1, 'Indexable pages are getting indexed — no gate blocking reach.'),
+    progression: sustain('indexing health', 1, totalUrls <= 0
+      ? 'Indexing assessment unavailable without a known URL count.'
+      : 'No warning threshold exceeded in available observations. This does not confirm every URL is indexed.'),
   }
 }
 
@@ -342,164 +333,187 @@ export function classifyHealthStage(input: SiteTriageInput): HealthVerdict {
 
 const REACH_COPY: Record<ReachStage, Pick<ReachVerdict, 'summary' | 'primaryAction'>> = {
   emerging: {
-    summary: 'Search Console is ready. Search visibility is still limited.',
-    primaryAction: 'Improve discovery and indexing, then build on pages that earn impressions.',
+    summary: 'Search observations are too sparse to establish a click trend.',
+    primaryAction: 'Review pages and queries with recorded impressions before choosing further work.',
   },
   growing: {
-    summary: 'Discoverable, indexed-enough, and trending up. The next work is expansion, not cleanup.',
-    primaryAction: 'Expand: striking-distance pages, content gaps, authority.',
+    summary: 'Search clicks or impressions rose across two complete 28-day periods and at least three paired weeks.',
+    primaryAction: 'Review growing pages and relevant search queries for further opportunities.',
   },
   plateaued: {
-    summary: 'Established but flat — visibility is steady, not compounding.',
-    primaryAction: 'Refresh top pages and open a new content cluster to restart growth.',
+    summary: 'Clicks and impressions changed by no more than 10% across two complete 28-day periods.',
+    primaryAction: 'Review page and query changes before choosing further work.',
+  },
+  mixed: {
+    summary: 'Recent search observations do not show a consistent direction.',
+    primaryAction: 'Compare clicks, impressions, and weekly changes before choosing further work.',
+  },
+  insufficient_data: {
+    summary: 'Complete daily observations are unavailable for two consecutive 28-day periods.',
+    primaryAction: 'Collect complete search data before assessing the trend.',
   },
   declining: {
-    summary: 'Established visibility is genuinely falling versus the previous period.',
+    summary: 'Search traffic fell across the recent complete reporting periods.',
     primaryAction: 'Investigate the losing pages, recent releases, and competitor moves before expanding.',
   },
   faded: {
-    summary: 'The site had real reach that has collapsed — it spiked and is now near-invisible in search.',
-    primaryAction: 'Diagnose the drop (quality, deindexing, lost rankings) — the 90-day total hides it; look at the recent week.',
+    summary: 'Recent weekly impressions are below 20% of the peak week in the supplied history.',
+    primaryAction: 'Compare the recent week with the peak. Investigate affected queries, pages, and inspection results.',
   },
   decayed: {
-    summary: 'Still shows for old terms but earns almost no clicks — the content has aged out of relevance.',
-    primaryAction: 'Refresh the decayed top pages, or mark the site low-priority if it is no longer maintained.',
+    summary: 'The Site still earns impressions, but its observed 28-day CTR is below 0.5%.',
+    primaryAction: 'Review queries, positions, and search appearance before deciding whether pages need changes.',
   },
 }
 
-function reach(stage: ReachStage, evidence: TriageEvidence[], progression: StageProgression): ReachVerdict {
+function reach(stage: ReachStage, evidence: TriageEvidence[], progression: StageProgression | null): ReachVerdict {
   return { stage, ...REACH_COPY[stage], evidence, progression }
 }
 
+interface Comparison { current: number, prior: number, pct: number | null, upWeeks: number, downWeeks: number, flatWeeks: number }
+
+function compareWeeks(values: number[], weeklyMinimumChange: number): Comparison {
+  const weeks = Array.from({ length: 8 }, (_, index) =>
+    values.slice(index * 7, (index + 1) * 7).reduce((sum, value) => sum + value, 0))
+  const prior = weeks.slice(0, 4).reduce((sum, value) => sum + value, 0)
+  const current = weeks.slice(4).reduce((sum, value) => sum + value, 0)
+  const materiallyChanged = (value: number, baseline: number, sign: 1 | -1): boolean =>
+    sign * (value - baseline) >= Math.max(baseline * 0.2, weeklyMinimumChange)
+  return {
+    current,
+    prior,
+    pct: prior > 0 ? (current / prior - 1) * 100 : null,
+    upWeeks: weeks.slice(4).filter((value, index) => materiallyChanged(value, weeks[index]!, 1)).length,
+    downWeeks: weeks.slice(4).filter((value, index) => materiallyChanged(value, weeks[index]!, -1)).length,
+    flatWeeks: weeks.slice(4).filter((value, index) => Math.abs(value - weeks[index]!) <= weeks[index]! * 0.1).length,
+  }
+}
+
+type Direction = 'up' | 'down' | 'flat' | 'unclear'
+
+function measuredDirection(comparison: Comparison, minimumChange: number): Direction {
+  const { pct, current, prior, upWeeks, downWeeks } = comparison
+  if (pct == null)
+    return current === 0 && prior === 0 ? 'flat' : 'unclear'
+  const delta = current - prior
+  if (delta >= prior * 0.2 && delta >= minimumChange && upWeeks >= 3)
+    return 'up'
+  if (delta <= -prior * 0.2 && delta <= -minimumChange && downWeeks >= 3)
+    return 'down'
+  if (Math.abs(delta) <= prior * 0.1)
+    return 'flat'
+  return 'unclear'
+}
+
+/** Require real, consecutive dates. Missing rows are not invented zeroes. */
+function completeDates(daily: Array<{ date: string }>): boolean {
+  return daily.every((row, index) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(row.date))
+      return false
+    const timestamp = Date.parse(row.date)
+    return Number.isFinite(timestamp)
+      && new Date(timestamp).toISOString().slice(0, 10) === row.date
+      && (index === 0 || timestamp - Date.parse(daily[index - 1]!.date) === 86400000)
+  })
+}
+
 export function classifyReachStage(input: SiteTriageInput): ReachVerdict {
-  const imp28d = input.impressions28d ?? 0
-  const imp12m = input.impressions12m ?? null
-  const clicks28d = input.clicks28d ?? null
-  const clicks90dPct = input.clicksPct90d ?? null
-  const clicks28dPct = input.clicksPct28d ?? null
-  const priorClicks = input.clicksPrior28d ?? null
-  const imp90dPct = input.impressionsPct90d ?? null
-  const posDelta = input.positionDelta90d ?? null
-  const liveness = input.livenessRatio ?? null
-
-  const hadRealReach = (imp12m ?? imp28d) > MIN_HISTORY_IMPRESSIONS
-  const hasGrowthEvidence = imp28d >= MIN_GROWTH_IMPRESSIONS_28D
-  const isGrowing = hasGrowthEvidence && (
-    (clicks90dPct != null && clicks90dPct > GROWTH_CLICKS_PCT)
-    || (imp90dPct != null && imp90dPct > GROWTH_IMPRESSIONS_PCT && posDelta != null && posDelta < 0)
-  )
-
-  // Faded: a real-reach site whose latest week collapsed vs its own peak. This
-  // is the spike→died case the 90d-vs-prior delta cannot see.
-  if (hadRealReach && liveness != null && liveness < FADED_LIVENESS && !isGrowing) {
-    const FADED_RECOVERY = 0.5
-    return reach(
-      'faded',
-      [{ label: 'Recent week vs peak', value: `${(liveness * 100).toFixed(0)}%` }],
-      escapeToward(
-        'growing',
-        'recent week vs peak (liveness)',
-        liveness,
-        FADED_RECOVERY,
-        `recent week is ${(liveness * 100).toFixed(0)}% of peak — revive toward ~50%`,
-      ),
-    )
+  const impressions = input.impressions28d
+  const evidence: TriageEvidence[] = impressions != null && Number.isFinite(impressions) && impressions >= 0
+    ? [{ label: 'Impressions (28d)', value: formatSearchConsoleCount(impressions) }]
+    : []
+  const unavailable = (): ReachVerdict => reach('insufficient_data', evidence, {
+    nextStage: null,
+    metric: 'search data',
+    value: 0,
+    target: 56,
+    pct: 0,
+    gapLabel: 'Two complete 28-day periods are required.',
+    direction: 'advance',
+  })
+  if (impressions == null || !Number.isFinite(impressions) || impressions < 0)
+    return unavailable()
+  const daily = input.daily?.slice(-56)
+  if (daily && (!completeDates(daily) || daily.some(row =>
+    !Number.isFinite(row.clicks) || row.clicks < 0 || !Number.isFinite(row.impressions) || row.impressions < 0)
+  || (input.periodEnd != null && daily.at(-1)?.date !== input.periodEnd))) {
+    return unavailable()
+  }
+  if (!daily || daily.length < 56) {
+    if (impressions < MIN_GROWTH_IMPRESSIONS_28D) {
+      return reach('emerging', evidence, advance('growing', '28d impressions', impressions, MIN_GROWTH_IMPRESSIONS_28D, 'Build enough search visibility to measure a trend.'))
+    }
+    return unavailable()
+  }
+  const clicks = compareWeeks(daily.map(row => row.clicks), 5)
+  const visibility = compareWeeks(daily.map(row => row.impressions), 50)
+  // A failed or mismatched aggregate window cannot be repaired by silently using another period.
+  if (visibility.current !== impressions || (input.clicks28d != null && clicks.current !== input.clicks28d))
+    return unavailable()
+  const clicksDirection = measuredDirection(clicks, 20)
+  const impressionsDirection = measuredDirection(visibility, 200)
+  const comparisonEvidence: TriageEvidence[] = [
+    ...evidence,
+    { label: 'Clicks (28d)', value: formatSearchConsoleCount(clicks.current) },
+    ...(clicks.pct != null ? [{ label: 'Clicks 28d', value: pctStr(clicks.pct) }] : []),
+    ...(visibility.pct != null ? [{ label: 'Impressions 28d', value: pctStr(visibility.pct) }] : []),
+  ]
+  const growthTarget = Math.ceil(Math.max(clicks.prior * 1.2, clicks.prior + 20, 50))
+  const growthProgression = advance('growing', '28d clicks', clicks.current, growthTarget, `About ${formatSearchConsoleCount(Math.max(0, growthTarget - clicks.current))} more clicks would meet the growth count threshold. Growth also requires three materially increased paired weeks.`)
+  const opposingDirections = (clicksDirection === 'up' && impressionsDirection === 'down')
+    || (clicksDirection === 'down' && impressionsDirection === 'up')
+  if (clicks.prior >= 50 && visibility.prior >= 1000 && opposingDirections) {
+    return {
+      ...reach('mixed', comparisonEvidence, null),
+      summary: `Clicks ${pctStr(clicks.pct!)}; impressions ${pctStr(visibility.pct!)}. These measured directions oppose each other.`,
+    }
   }
 
-  // Genuine decline: both windows down with a meaningful baseline to fall from.
-  const isDeclining = clicks90dPct != null && clicks90dPct < DECLINE_CLICKS_PCT
-    && clicks28dPct != null && clicks28dPct < DECLINE_CLICKS_PCT
-    && priorClicks != null && priorClicks >= MIN_DECLINE_PRIOR_CLICKS
-  if (isDeclining) {
-    // Off-ramp recovery: the exit is 90d clicks climbing back above the decline
-    // floor (−10%). value/target keep the signed metric the UI displays; pct is
-    // inverse distance on the drop magnitude — at −10% ⇒ 1, at −20% ⇒ 0, so a
-    // −12% site reads nearly-out and a −85% site reads far.
-    return reach(
-      'declining',
-      [
-        { label: 'Clicks 90d', value: pctStr(clicks90dPct!) },
-        { label: 'Clicks 28d', value: pctStr(clicks28dPct!) },
-      ],
-      {
-        nextStage: 'plateaued',
-        metric: '90d clicks change',
-        value: clicks90dPct!,
-        target: DECLINE_CLICKS_PCT,
-        pct: clamp01(2 - Math.abs(clicks90dPct!) / Math.abs(DECLINE_CLICKS_PCT)),
-        gapLabel: `down ${pctStr(clicks90dPct!)} (90d) — recover clicks above ${pctStr(DECLINE_CLICKS_PCT)} to exit`,
-        direction: 'escape',
-      },
-    )
+  if (clicks.prior >= 50 && clicksDirection === 'down') {
+    const recoveryTarget = Math.ceil(clicks.prior * 0.9)
+    return reach('declining', comparisonEvidence, escapeToward(
+      'plateaued',
+      '28d clicks',
+      clicks.current,
+      recoveryTarget,
+      `About ${formatSearchConsoleCount(Math.max(0, recoveryTarget - clicks.current))} more clicks would bring this period within 10% of the previous period.`,
+    ))
   }
-
-  if (isGrowing) {
-    const clickGrowth = clicks90dPct != null && clicks90dPct > GROWTH_CLICKS_PCT
-    const growthPct = clickGrowth ? clicks90dPct : (imp90dPct ?? clicks90dPct ?? 0)
-    const growthMetric = clickGrowth ? '90d clicks growth' : '90d impressions growth'
-    const growthLabel = clickGrowth
-      ? `${pctStr(clicks90dPct!)} 90d clicks — comfortably growing; defend & expand`
-      : `${pctStr(growthPct)} 90d impressions — comfortably growing; defend & expand`
-    return reach(
-      'growing',
-      [
-        ...(clicks90dPct != null ? [{ label: 'Clicks 90d', value: pctStr(clicks90dPct) }] : []),
-        ...(imp90dPct != null ? [{ label: 'Impressions 90d', value: pctStr(imp90dPct) }] : []),
-      ],
-      sustain(growthMetric, growthPct, growthLabel),
-    )
+  if (clicks.prior >= 50 && clicks.current >= 50 && clicksDirection === 'up') {
+    return reach('growing', comparisonEvidence, sustain('28d clicks growth', clicks.pct!, 'Clicks rose by at least 20% and 20 clicks in three or more paired weeks.'))
   }
-
-  // Decayed: established lifetime base, not growing, impressions linger but
-  // clicks have evaporated (aged-out content ranking for stale/low-intent terms).
-  const ctr = clicks28d != null && imp28d > 0 ? clicks28d / imp28d : null
-  if (hadRealReach && imp28d >= MIN_GROWTH_IMPRESSIONS_28D && ctr != null && ctr < DECAY_CTR) {
-    return reach(
-      'decayed',
-      [
-        { label: 'Impressions (28d)', value: formatSearchConsoleCount(imp28d) },
-        { label: 'Clicks (28d)', value: formatSearchConsoleCount(clicks28d ?? 0) },
-      ],
-      escapeToward(
-        'growing',
-        'CTR (clicks/impressions)',
-        ctr,
-        DECAY_CTR,
-        `${(ctr * 100).toFixed(2)}% CTR on ${formatSearchConsoleCount(imp28d)} impressions — refresh content toward ~${(DECAY_CTR * 100).toFixed(1)}%`,
-      ),
-    )
+  const liveness = reachLivenessRatio(daily)
+  if (liveness != null && liveness < 0.2) {
+    return {
+      ...reach('declining', comparisonEvidence, escapeToward('plateaued', 'recent weekly impressions', liveness, 0.2, 'Raise recent weekly impressions to at least 20% of the prior baseline.')),
+      summary: 'Impressions stayed below 20% of the prior weekly baseline for three consecutive weeks.',
+    }
   }
-
-  // Sites with enough reach advance through measured growth.
-  const growthVal = clicks90dPct ?? 0
-  const growthGap = Math.max(0, GROWTH_CLICKS_PCT - growthVal)
-  const growthProgression = (stage: 'emerging' | 'plateaued'): StageProgression => advance(
-    'growing',
-    '90d clicks growth',
-    growthVal,
-    GROWTH_CLICKS_PCT,
-    clicks90dPct != null
-      ? `${pctStr(growthVal)} 90d clicks — need ${pctStr(growthGap)} more to clear the +${GROWTH_CLICKS_PCT}% growth bar`
-      : `${stage === 'plateaued' ? 'flat' : 'rising'} — reach +${GROWTH_CLICKS_PCT}% 90d clicks growth to break into growing`,
-  )
-
-  // Established + neither up nor down → plateaued; small-but-real → emerging.
-  if (imp28d >= ESTABLISHED_IMPRESSIONS_28D)
-    return reach('plateaued', [{ label: 'Impressions (28d)', value: formatSearchConsoleCount(imp28d) }], growthProgression('plateaued'))
-  if (imp28d < MIN_GROWTH_IMPRESSIONS_28D) {
-    return reach(
-      'emerging',
-      [{ label: 'Impressions (28d)', value: formatSearchConsoleCount(imp28d) }],
-      advance(
-        'growing',
+  if (clicksDirection === 'flat' && impressionsDirection === 'flat' && clicks.flatWeeks >= 3 && visibility.flatWeeks >= 3
+    && ((clicks.prior >= 50 && clicks.current >= 50) || (visibility.prior >= 1000 && visibility.current >= 1000))) {
+    if (clicks.prior < 50 || clicks.current < 50) {
+      const target = Math.ceil(Math.max(visibility.prior * 1.2, visibility.prior + 200))
+      return reach('plateaued', comparisonEvidence, advance('growing', '28d impressions', visibility.current, target, `About ${formatSearchConsoleCount(Math.max(0, target - visibility.current))} more impressions would meet the growth count threshold. Growth also requires three materially increased paired weeks.`))
+    }
+    return reach('plateaued', comparisonEvidence, growthProgression)
+  }
+  if (clicks.prior < 50 || clicks.current < 50) {
+    if (visibility.prior >= 1000 && impressionsDirection === 'down') {
+      const recoveryTarget = Math.ceil(visibility.prior * 0.9)
+      return reach('declining', comparisonEvidence, escapeToward(
+        'plateaued',
         '28d impressions',
-        imp28d,
-        MIN_GROWTH_IMPRESSIONS_28D,
-        `${formatSearchConsoleCount(imp28d)} impressions in 28 days. Build enough visibility to measure growth reliably.`,
-      ),
-    )
+        visibility.current,
+        recoveryTarget,
+        `About ${formatSearchConsoleCount(Math.max(0, recoveryTarget - visibility.current))} more impressions would bring this period within 10% of the previous period.`,
+      ))
+    }
+    if (visibility.prior >= 1000 && visibility.current >= 1000 && impressionsDirection === 'up') {
+      return reach('growing', comparisonEvidence, sustain('28d impressions growth', visibility.pct!, 'Impressions rose by at least 20% and 200 impressions in three or more paired weeks.'))
+    }
+    return reach('emerging', comparisonEvidence, advance('growing', '28d clicks', Math.min(clicks.prior, clicks.current), 50, 'At least 50 clicks in each period are required to compare click trends.'))
   }
-  return reach('plateaued', [{ label: 'Impressions (28d)', value: formatSearchConsoleCount(imp28d) }], growthProgression('plateaued'))
+  return reach('mixed', comparisonEvidence, null)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -512,5 +526,5 @@ export function classifySiteTriage(input: SiteTriageInput): SiteTriage {
   // A real, (already purpose-adjusted) health blocker explains/over-rides the
   // reach story and takes the headline; otherwise reach leads.
   const headline: 'reach' | 'health' = health.stage === 'healthy' ? 'reach' : 'health'
-  return { reach: reachVerdict, health, headline }
+  return { algorithmVersion: 4, reach: reachVerdict, health, headline }
 }

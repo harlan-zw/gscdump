@@ -34,7 +34,7 @@ function captureLines(capture: Capture | undefined): string[] {
     unrecorded: 'an unrecorded scope',
   }[capture.scope]
   const lines = [
-    `Counted ${capture.capturedAt} from stored URL Inspection verdicts (${capture.source}).`,
+    `${capture.source === 'live' ? 'Counted during this request' : 'Saved daily count'} at ${capture.capturedAt}, from stored URL Inspection verdicts.`,
     `The counts cover ${scope}.`,
     `Verdicts inspected between ${capture.oldestVerdictAt ?? 'unknown'} and ${capture.newestVerdictAt ?? 'unknown'}.`,
   ]
@@ -81,8 +81,8 @@ export const indexingSummaryCommand = defineCommand({
       for (const line of renderTable(data.trend.map(ladderRow), [
         { key: 'date', label: 'Date', numeric: true },
         { key: 'unknown_to_google', label: 'Unknown', numeric: true },
-        { key: 'discovered_not_indexed', label: 'Discovered', numeric: true },
-        { key: 'crawled_not_indexed', label: 'Crawled', numeric: true },
+        { key: 'discovered_not_indexed', label: 'Discovered, not indexed', numeric: true },
+        { key: 'crawled_not_indexed', label: 'Crawled, not indexed', numeric: true },
         { key: 'indexed', label: 'Indexed', numeric: true },
         { key: 'capturedAt', label: 'Counted (UTC)' },
       ], options)) {

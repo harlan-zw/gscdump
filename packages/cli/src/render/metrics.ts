@@ -6,6 +6,14 @@ interface Metric {
 }
 
 const METRICS: Record<string, Metric> = {
+  query: { label: 'Search query', unit: 'count' },
+  keyword: { label: 'Search query', unit: 'count' },
+  keywordCount: { label: 'Search queries', unit: 'count' },
+  newKeywords: { label: 'First observed queries', unit: 'count' },
+  totalKeywords: { label: 'Reported queries', unit: 'count' },
+  darkClicks: { label: 'Clicks without queries', unit: 'count' },
+  darkPercent: { label: 'Click gap share', unit: 'share' },
+  attributedClicks: { label: 'Clicks with queries', unit: 'count' },
   clicks: { label: 'Clicks', unit: 'count' },
   impressions: { label: 'Impressions', unit: 'count' },
   totalClicks: { label: 'Clicks', unit: 'count' },

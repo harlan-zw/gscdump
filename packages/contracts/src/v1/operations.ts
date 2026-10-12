@@ -87,7 +87,7 @@ import {
   createGscdumpV1BrowserSchemas,
   GSCDUMP_V1_ANALYTICS_DIMENSIONS,
 } from './browser'
-import { googleSubmissionReceiptV1Schemas, googleSubmitV1Schema, indexingApiGrantUpdateV1Schema, indexingApiGrantV1Schemas } from './google-indexing'
+import { googleSubmissionReceiptV1Schemas, googleSubmitV1Schema, indexingApiGrantUpdateV1Schema, indexingApiGrantV1Schemas, siteIndexingApiGrantV1Schemas } from './google-indexing'
 import {
   defineHttpOperation,
   defineHttpSurface,
@@ -116,6 +116,7 @@ import {
   REALTIME_V1_EVENT_SEMANTICS,
 } from './realtime'
 import { gscdumpV1OperationRoute, gscdumpV1Surface } from './route-catalog'
+import { sitemapEvidenceV1Schemas, sitemapInspectQueryV1Schema } from './sitemap-evidence'
 import { sitemapSubmissionV1Schemas, sitemapSubmitResultV1Schemas } from './sitemap-submission'
 import { GSCDUMP_HTTP_V1_VERSION } from './version'
 
@@ -412,12 +413,14 @@ export function createGscdumpV1Protocol() {
   const indexNowSubmissionResponse = defineSuccessResponse(defineResponseObject({ submissionReceipt: indexNowSubmissionReceiptV1Schemas.producer }, { submissionReceipt: indexNowSubmissionReceiptV1Schemas.client }), partnerResponseMeta)
   const indexNowSubmissionReceiptsResponse = defineSuccessResponse(defineResponseObject({ submissionReceipts: z.array(indexNowSubmissionReceiptV1Schemas.producer), pagination: bingIndexingEvidencePagination.producer }, { submissionReceipts: z.array(indexNowSubmissionReceiptV1Schemas.client), pagination: bingIndexingEvidencePagination.client }), partnerResponseMeta)
   const indexingApiGrantResponse = defineSuccessResponse(indexingApiGrantV1Schemas, partnerResponseMeta)
+  const siteIndexingApiGrantResponse = defineSuccessResponse(siteIndexingApiGrantV1Schemas, partnerResponseMeta)
   const googleSubmissionResponse = defineSuccessResponse(defineResponseObject({ submissionReceipt: googleSubmissionReceiptV1Schemas.producer }, { submissionReceipt: googleSubmissionReceiptV1Schemas.client }), partnerResponseMeta)
   const googleSubmissionReceiptsResponse = defineSuccessResponse(defineResponseObject({ submissionReceipts: z.array(googleSubmissionReceiptV1Schemas.producer), pagination: bingIndexingEvidencePagination.producer }, { submissionReceipts: z.array(googleSubmissionReceiptV1Schemas.client), pagination: bingIndexingEvidencePagination.client }), partnerResponseMeta)
   const bingSitesResponse = defineSuccessResponse(bingSitesV1Schemas, partnerResponseMeta)
   const bingLinkResponse = defineSuccessResponse(bingLinkResultV1Schemas, partnerResponseMeta)
   const bingAuthorizationResponse = defineSuccessResponse(bingAuthorizationV1Schemas, partnerResponseMeta)
   const bingSitemapSubmitResponse = defineSuccessResponse(bingSitemapSubmitResultV1Schemas, partnerResponseMeta)
+  const sitemapEvidenceResponse = defineSuccessResponse(sitemapEvidenceV1Schemas, partnerResponseMeta)
   const sitemapSubmissionResponse = defineSuccessResponse(sitemapSubmissionV1Schemas, partnerResponseMeta)
   const sitemapSubmitResponse = defineSuccessResponse(sitemapSubmitResultV1Schemas, partnerResponseMeta)
   const indexingTransition = defineResponseObject({
@@ -1553,6 +1556,19 @@ export function createGscdumpV1Protocol() {
         lifecycle: { introduced: '5.1.0' },
         docs: { summary: 'Revoke Indexing API grant', description: 'Revokes the grant at Google, then deletes it.', tags: ['Indexing'], examples: { request: { params: { userId: 'u_01' } }, response: { data: { _tag: 'missing' }, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } } } },
       }),
+      getSiteIndexingApiGrant: defineHttpOperation({
+        ...gscdumpV1OperationRoute('partner.sites.indexing.google.grant.get'),
+        visibility: 'public',
+        semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
+        auth: { credentials: ['partner_key'], scopes: ['indexing:read'], ownership: [{ credential: 'partner_key', rule: 'authorized_site' }] },
+        request: { params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }), query: null, headers: requestHeaders, body: null },
+        responses: { 200: siteIndexingApiGrantResponse },
+        errors: partnerSiteErrors,
+        errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [{ type: 'site.indexing', idFrom: 'params.siteId' }], changes: [] },
+        lifecycle: { introduced: '5.8.0' },
+        docs: { summary: 'Get Site Indexing API grant', description: 'Returns the Indexing API grant a Google Submission for this Site uses, without naming its Google account.', tags: ['Indexing'], examples: { request: { params: { siteId: 's_01' } }, response: { data: { _tag: 'granted', grantedAt: '2026-10-01T00:00:00.000Z' }, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } } } },
+      }),
       createSiteGoogleSubmission: defineHttpOperation({
         ...gscdumpV1OperationRoute('partner.sites.indexing.google.submissions.create'),
         visibility: 'public',
@@ -1954,6 +1970,42 @@ export function createGscdumpV1Protocol() {
                   syncStatus: 'synced',
                   sitemapScope: { excludedCount: 0, duplicateCount: 0 },
                 },
+              },
+              meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
+            },
+          },
+        },
+      }),
+      inspectSiteSitemap: defineHttpOperation({
+        ...gscdumpV1OperationRoute('partner.sites.sitemaps.inspect'),
+        visibility: 'public',
+        semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
+        auth: {
+          credentials: ['user_key', 'partner_key'],
+          scopes: ['sitemaps:read'],
+          ownership: [
+            { credential: 'user_key', rule: 'authorized_site' },
+            { credential: 'partner_key', rule: 'authorized_site' },
+          ],
+        },
+        request: { params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }), query: sitemapInspectQueryV1Schema, headers: requestHeaders, body: null },
+        responses: { 200: sitemapEvidenceResponse },
+        errors: partnerSiteErrors,
+        errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [{ type: 'site.sitemaps', idFrom: 'params.siteId' }], changes: [] },
+        lifecycle: { introduced: '5.9.0' },
+        docs: {
+          summary: 'Inspect a Sitemap',
+          description: 'Reads provider evidence for one exact Sitemap URL. Google uses a live read. Bing uses its dated stored read. Missing means the provider did not list that exact Sitemap at Capture time. Unavailable never means missing. This operation submits nothing.',
+          tags: ['Sitemaps'],
+          examples: {
+            request: { params: { siteId: 's_01' }, query: { searchEngine: 'google', url: 'https://example.com/sitemap-old.xml' } },
+            response: {
+              data: {
+                searchEngine: 'google',
+                sitemapUrl: 'https://example.com/sitemap-old.xml',
+                capture: { _tag: 'captured', source: 'live', capturedAt: '2026-10-08T02:00:00.000Z' },
+                state: { _tag: 'listed', lastSubmitted: null, lastDownloaded: null, isPending: true, errors: 0, warnings: 0, urlCount: null },
               },
               meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
             },
@@ -4082,6 +4134,7 @@ export function createGscdumpV1Protocol() {
       bingLinkResponse,
       bingAuthorizationResponse,
       bingSitemapSubmitResponse,
+      sitemapEvidenceResponse,
       sitemapSubmissionResponse,
       sitemapSubmitResponse,
       lifecycleResponse,

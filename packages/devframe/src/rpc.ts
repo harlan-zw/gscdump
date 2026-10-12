@@ -23,7 +23,7 @@ export function createRpcFunctions(reader: GscdumpReader) { // eslint-disable-li
       name: 'get-context',
       type: 'query',
       jsonSerializable: true,
-      handler: (preferredSiteId?: string | null): Promise<GscdumpContext> => reader.context(preferredSiteId ?? null),
+      handler: (preferredSiteId?: string | null, pageUrl?: string | null): Promise<GscdumpContext> => reader.context(preferredSiteId ?? null, pageUrl ?? null),
     }),
     defineRpcFunction({
       name: 'get-page-stats',

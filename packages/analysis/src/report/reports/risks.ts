@@ -20,7 +20,7 @@ const DEFAULT_MAX = 5
 
 export const risksReport = defineReport<RisksReportParams>({
   id: 'risks',
-  description: 'Decay, cannibalization, dark-traffic and device-gap risks vs prior period.',
+  description: 'Traffic decline, competing pages, clicks without reported queries, and device differences vs prior period.',
   defaultPeriod: 'last-28d',
   defaultComparison: 'prev-period',
   argsSpec: {
@@ -43,7 +43,7 @@ export const risksReport = defineReport<RisksReportParams>({
       sections: [
         buildDecaySection(results.decay, max),
         buildCannibalizationSection(results.cannibalization, max),
-        buildDarkTrafficSection(results['dark-traffic'], max),
+        buildUnattributedClicksSection(results['dark-traffic'], max),
         buildDeviceGapSection(results['device-gap'], max),
       ],
     }
@@ -125,7 +125,7 @@ interface DarkTrafficRow {
   darkPercent: number
 }
 
-function buildDarkTrafficSection(res: AnalysisResult | undefined, max: number): ReportSection {
+function buildUnattributedClicksSection(res: AnalysisResult | undefined, max: number): ReportSection {
   const rows = reportRows<DarkTrafficRow>(res)
     .sort((a, b) => b.darkClicks - a.darkClicks)
   const kept = rows.slice(0, max)
@@ -136,9 +136,9 @@ function buildDarkTrafficSection(res: AnalysisResult | undefined, max: number): 
   }))
   return {
     id: 'dark-traffic',
-    title: 'Dark traffic',
+    title: 'Clicks without reported queries',
     severity: kept.length ? 'low' : 'info',
-    summary: { magnitudeLabel: `${Math.round(totalDark)} unattributed clicks` },
+    summary: { magnitudeLabel: `${Math.round(totalDark)} clicks without reported queries across ${kept.length} shown pages` },
     findings,
     truncated: truncation(resultTotal(res, rows.length), kept.length),
     coverage: sectionCoverage(res),

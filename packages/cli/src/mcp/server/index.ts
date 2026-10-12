@@ -358,7 +358,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
   registerTool(
     'request-indexing',
     {
-      description: 'Request Google to index or remove a URL via the Indexing API',
+      description: 'Send a URL update or removal notification to Google. Acceptance does not confirm indexing or removal.',
       inputSchema: requestIndexingInput.shape,
     },
     async (args) => {
@@ -370,7 +370,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
   registerTool(
     'get-indexing-status',
     {
-      description: 'Get indexing status metadata for a URL',
+      description: 'Read the latest Google Indexing API notification times for a URL. Use inspect-url for URL Inspection results.',
       inputSchema: getIndexingStatusInput.shape,
     },
     async (args) => {
@@ -382,7 +382,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
   registerTool(
     'batch-request-indexing',
     {
-      description: 'Batch request indexing for multiple URLs with rate limiting',
+      description: 'Send Google Indexing API notifications for multiple URLs with rate limiting. Acceptance does not confirm indexing.',
       inputSchema: batchRequestIndexingInput.shape,
     },
     async (args) => {

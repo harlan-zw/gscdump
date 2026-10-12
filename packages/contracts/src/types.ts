@@ -483,7 +483,7 @@ export interface GscdumpAvailableSite {
   siteId?: string
   /** Integer alias (`user_sites.int_id`) — the int JOIN key partners denormalize into their own catalog namespaces. Present on registered sites. */
   intId?: number | null
-  syncStatus?: 'pending' | 'syncing' | 'synced' | 'error' | null
+  syncStatus?: 'idle' | 'pending' | 'syncing' | 'partial' | 'synced' | 'error' | null
   syncProgress?: { completed: number, failed?: number, total: number, percent: number }
   lastSyncAt?: number | null
   newestDateSynced?: string | null
@@ -507,7 +507,7 @@ export interface GscdumpSiteRegistration {
   intId?: number | null
   /** Team-scoped catalog identifier (`user_sites.catalog_site_id`). Echoes caller input or defaults to `intId`. */
   catalogSiteId?: number | null
-  status: 'idle' | 'pending' | 'syncing' | 'synced' | 'error'
+  status: 'idle' | 'pending' | 'syncing' | 'partial' | 'synced' | 'error'
   message?: string
   existing?: boolean
   indexingEligible?: boolean

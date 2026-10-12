@@ -83,8 +83,8 @@ describe('analyzer plan snapshots', () => {
       ...PARAM_OVERRIDES[id],
       type: id as AnalysisParams['type'],
     }
-    // PageRank uses executed graph fixtures in pagerank.test.ts.
-    if (variants.sql && id !== 'bipartite-pagerank') {
+    // PageRank and data queries use executed graph and paging fixtures.
+    if (variants.sql && !['bipartite-pagerank', 'data-query', 'data-detail'].includes(id)) {
       it(`sql plan: ${id}`, () => {
         expect(variants.sql!.build(params, { adapter: pgResolverAdapter })).toMatchSnapshot()
       })

@@ -343,7 +343,11 @@
   REALTIME_V1_RESOURCE_TYPES: object
   resolveHttpOperation: function
   serializeContractDocument: function
+  siteIndexingApiGrantV1Schema: object
+  siteIndexingApiGrantV1Schemas: object
+  sitemapEvidenceV1Schemas: object
   sitemapGrantHolderV1Schemas: object
+  sitemapInspectQueryV1Schema: object
   sitemapSubmissionStateV1Schemas: object
   sitemapSubmissionV1Schemas: object
   sitemapSubmitResultV1Schemas: object
@@ -408,7 +412,11 @@
   listHttpOperations: function
   parseGoogleSubmissionRefusal: function
   resolveHttpOperation: function
+  siteIndexingApiGrantV1Schema: object
+  siteIndexingApiGrantV1Schemas: object
+  sitemapEvidenceV1Schemas: object
   sitemapGrantHolderV1Schemas: object
+  sitemapInspectQueryV1Schema: object
   sitemapSubmissionStateV1Schemas: object
   sitemapSubmissionV1Schemas: object
   sitemapSubmitResultV1Schemas: object

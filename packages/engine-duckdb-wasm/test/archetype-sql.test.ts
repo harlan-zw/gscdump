@@ -94,7 +94,6 @@ describe('compileArchetypeSql', () => {
       limit: 100,
     }
     const noOffset = compileArchetypeSql(base)
-    expect(noOffset.sql).toContain('ORDER BY clicks DESC LIMIT ?')
     expect(noOffset.sql).not.toContain('OFFSET')
 
     const withOffset = compileArchetypeSql({ ...base, offset: 50 })
@@ -227,7 +226,6 @@ describe('compileArchetypeSql', () => {
     expect(c.sql).toContain('SUM(clicks_desktop) AS clicks')
     expect(c.sql).toContain('SUM(impressions_desktop) AS impressions')
     expect(c.sql).toContain('SELECT device, clicks, impressions FROM')
-    expect(c.sql).toContain('ORDER BY impressions DESC LIMIT ?')
   })
 
   it('6b — multi-series-stacked-daily: non-device series still groups by date + dim', () => {

@@ -22,6 +22,13 @@ describe('google Indexing API hosted client', () => {
     expect(result.data).toEqual(grant)
     expect(fetch).toHaveBeenCalledWith('/api/_gscdump/partner/v1/users/u_1/indexing/google/grant', expect.objectContaining({ method: 'PATCH' }))
   })
+  it('reads the grant a Submission for this Site uses', async () => {
+    const grant = { _tag: 'granted', grantedAt: '2026-10-01T00:00:00.000Z' }
+    const { fetch, client: sdk } = client(grant)
+    const result = await sdk.getSiteIndexingApiGrant({ params: { siteId: 's_1' } })
+    expect(result.data).toEqual(grant)
+    expect(fetch).toHaveBeenCalledWith('/api/_gscdump/partner/v1/sites/s_1/indexing/google/grant', expect.objectContaining({ method: 'GET' }))
+  })
   it('refuses a batch before transport', async () => {
     const { fetch, client: sdk } = client({ submissionReceipt: receipt })
     // @ts-expect-error the protocol takes one URL per Submission

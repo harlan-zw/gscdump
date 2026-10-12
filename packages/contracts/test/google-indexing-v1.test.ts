@@ -1,4 +1,4 @@
-import { googleSubmissionReceiptV1Schemas, googleSubmitV1Schema, indexingApiGrantV1Schemas, parseGoogleSubmissionRefusal } from '@gscdump/contracts/v1'
+import { googleSubmissionReceiptV1Schemas, googleSubmitV1Schema, indexingApiGrantV1Schemas, parseGoogleSubmissionRefusal, siteIndexingApiGrantV1Schemas } from '@gscdump/contracts/v1'
 import { describe, expect, it } from 'vitest'
 
 const receipt = { id: 'gi_1', url: 'https://example.com/jobs/1', createdAt: '2026-10-01T00:00:00.000Z', updatedAt: '2026-10-01T00:00:00.000Z', attempts: 1 }
@@ -33,5 +33,19 @@ describe('google Indexing API wire boundary', () => {
   it('returns null for a refusal that is not a Google Submission refusal', () => {
     expect(parseGoogleSubmissionRefusal({ reason: 'site_allowance', limit: 3 })).toBeNull()
     expect(parseGoogleSubmissionRefusal(null)).toBeNull()
+  })
+})
+
+describe('site Indexing API grant wire boundary', () => {
+  it('names a granted Site without the grantor\'s Google account', () => {
+    expect(siteIndexingApiGrantV1Schemas.producer.parse({ _tag: 'granted', grantedAt: '2026-10-01T00:00:00.000Z' })).toEqual({ _tag: 'granted', grantedAt: '2026-10-01T00:00:00.000Z' })
+    expect(siteIndexingApiGrantV1Schemas.producer.safeParse({ _tag: 'granted', grantedAt: '2026-10-01T00:00:00.000Z', googleEmail: 'owner@example.com' }).success).toBe(false)
+    expect(siteIndexingApiGrantV1Schemas.producer.safeParse({ _tag: 'reauthorization-required', googleEmail: 'owner@example.com' }).success).toBe(false)
+  })
+  it('reads a partner without a usable Indexing API client as unavailable', () => {
+    expect(siteIndexingApiGrantV1Schemas.producer.parse({ _tag: 'unavailable' })).toEqual({ _tag: 'unavailable' })
+  })
+  it('lets a client read a grant state from a newer host', () => {
+    expect(siteIndexingApiGrantV1Schemas.client.safeParse({ _tag: 'missing', newField: 1 }).success).toBe(true)
   })
 })
