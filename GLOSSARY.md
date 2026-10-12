@@ -480,7 +480,7 @@ Emerging describes sparse observations, not Site age.
 Valid sparse early history can be Emerging. Malformed supplied observations or a mismatched reporting date require Waiting for data.
 Growing and Declining require meaningful changes across at least three paired weeks.
 Opposing measured click and impression directions produce Mixed trend when both baselines are measurable.
-Mixed trend from opposing directions has null reach progression and describes both measured directions in its summary.
+Every Mixed trend verdict has null reach progression. Opposing directions appear in the summary with both measured changes.
 Clicks otherwise lead when their baseline is measurable. Sparse clicks permit impressions-based Growing or Declining.
 An impressions-based Declining comparison requires at least 1000 impressions in the prior period.
 Period comparisons for Growing and Declining require at least 20% change and 20 clicks or 200 impressions.

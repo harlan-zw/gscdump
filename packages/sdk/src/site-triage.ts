@@ -60,7 +60,7 @@ export interface ReachVerdict {
   summary: string
   primaryAction: string
   evidence: TriageEvidence[]
-  /** Null when opposing measured directions provide no meaningful next-stage target. */
+  /** Null when mixed observations provide no meaningful next-stage target. */
   progression: StageProgression | null
 }
 
@@ -513,7 +513,7 @@ export function classifyReachStage(input: SiteTriageInput): ReachVerdict {
     }
     return reach('emerging', comparisonEvidence, advance('growing', '28d clicks', Math.min(clicks.prior, clicks.current), 50, 'At least 50 clicks in each period are required to compare click trends.'))
   }
-  return reach('mixed', comparisonEvidence, growthProgression)
+  return reach('mixed', comparisonEvidence, null)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

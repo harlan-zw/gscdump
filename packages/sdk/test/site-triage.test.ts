@@ -52,7 +52,7 @@ describe('classifyReachStage', () => {
   })
 
   it('includes the absolute click growth floor in progression targets', () => {
-    const verdict = classify(50, 60)
+    const verdict = classify(50, 50)
     expect(verdict.progression?.target).toBe(70)
     expect(verdict.progression?.pct).toBeLessThan(1)
     expect(classify(50, 70).stage).toBe('growing')
@@ -80,7 +80,9 @@ describe('classifyReachStage', () => {
   it('requires growth to persist beyond one spike week', () => {
     const daily = observations(100, 100)
     daily[55]!.clicks += 200
-    expect(classifyReachStage({ impressions28d: 28000, clicks28d: 300, daily }).stage).toBe('mixed')
+    const verdict = classifyReachStage({ impressions28d: 28000, clicks28d: 300, daily })
+    expect(verdict.stage).toBe('mixed')
+    expect(verdict.progression).toBeNull()
   })
 
   it('requires three materially increased weeks before reporting growth', () => {
@@ -98,7 +100,7 @@ describe('classifyReachStage', () => {
     expect(declining.progression?.pct).toBeLessThan(1)
 
     expect(classify(100, 100).progression?.direction).toBe('advance')
-    expect(classify(100, 115).progression?.direction).toBe('advance')
+    expect(classify(100, 115).progression).toBeNull()
     expect(classify(100, 160).progression?.direction).toBe('sustain')
   })
 
