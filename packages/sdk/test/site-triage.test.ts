@@ -1,53 +1,109 @@
 import { describe, expect, it } from 'vitest'
-import { classifyHealthStage, classifyReachStage } from '../src/site-triage'
+import { classifyHealthStage, classifyReachStage, reachLivenessRatio } from '../src/site-triage'
+
+function observations(priorClicks: number, currentClicks: number, priorImpressions = 28000, currentImpressions = 28000) {
+  const distribute = (total: number, index: number) => Math.floor(total / 28) + (index % 28 < total % 28 ? 1 : 0)
+  return Array.from({ length: 56 }, (_, index) => ({
+    date: new Date(Date.UTC(2026, 7, 14 + index)).toISOString().slice(0, 10),
+    clicks: distribute(index < 28 ? priorClicks : currentClicks, index),
+    impressions: distribute(index < 28 ? priorImpressions : currentImpressions, index),
+  }))
+}
+
+function classify(prior: number, current: number, priorImpressions = 28000, impressions28d = 28000) {
+  return classifyReachStage({ impressions28d, clicks28d: current, daily: observations(prior, current, priorImpressions, impressions28d) })
+}
 
 describe('classifyReachStage', () => {
-  it('classifies observed low-volume search data as emerging', () => {
-    const verdict = classifyReachStage({
-      impressions28d: 14,
-      impressions12m: 7,
-      clicksPct90d: 100,
-    })
-
-    expect(verdict.stage).toBe('emerging')
-    expect(verdict.evidence).toContainEqual({ label: 'Impressions (28d)', value: '14' })
-    expect(verdict.progression.metric).toBe('28d impressions')
-  })
-
-  it('classifies an observed zero-impression window as emerging', () => {
-    const verdict = classifyReachStage({
-      impressions28d: 0,
-      impressions12m: 0,
-    })
-
-    expect(verdict.stage).toBe('emerging')
-    expect(verdict.progression.metric).toBe('28d impressions')
-  })
-
-  it('requires meaningful current reach before claiming growth', () => {
-    const verdict = classifyReachStage({
-      impressions28d: 14,
-      impressions12m: 20_000,
-      clicksPct90d: 100,
-    })
-
-    expect(verdict.stage).toBe('emerging')
-  })
-
-  it('renders signed evidence and uses the metric that actually drove growth', () => {
-    const verdict = classifyReachStage({
-      impressions28d: 50000,
-      impressions12m: 100000,
-      clicksPct90d: -5,
-      impressionsPct90d: 30,
-      positionDelta90d: -1,
-    })
-
+  it('recognizes recent click recovery despite a longer decline', () => {
+    const verdict = classifyReachStage({ impressions28d: 15065, clicks28d: 191, clicksPrior28d: 132, clicksPct28d: 44.7, clicksPct90d: -17, daily: observations(132, 191, 23292, 15065) })
     expect(verdict.stage).toBe('growing')
-    expect(verdict.evidence.find(evidence => evidence.label === 'Clicks 90d')?.value).toBe('-5%')
-    expect(verdict.evidence.find(evidence => evidence.label === 'Impressions 90d')?.value).toBe('+30%')
-    expect(verdict.progression.metric).toBe('90d impressions growth')
-    expect(verdict.progression.gapLabel).toContain('+30% 90d impressions')
+    expect(verdict.evidence).toContainEqual({ label: 'Clicks 28d', value: '+45%' })
+  })
+
+  it('does not claim strong growth from nine extra clicks', () => {
+    expect(classify(16, 25, 1541, 1450).stage).toBe('emerging')
+  })
+
+  it('does not infer decay from low CTR on steady traffic', () => {
+    expect(classify(100, 100, 50000, 50000).stage).toBe('plateaued')
+  })
+
+  it.each([[100, 160, 'growing'], [100, 60, 'declining'], [100, 100, 'plateaued'], [100, 115, 'mixed']])(
+    'compares %i prior clicks with %i current clicks',
+    (prior, current, expected) => {
+      expect(classify(prior as number, current as number).stage).toBe(expected)
+    },
+  )
+
+  it('keeps conflicting flat-click and rising-impression signals separate from stability', () => {
+    expect(classify(100, 100, 10000, 15000).stage).toBe('mixed')
+  })
+
+  it('requires growth to persist beyond one spike week', () => {
+    const daily = observations(100, 100)
+    daily[55]!.clicks += 200
+    expect(classifyReachStage({ impressions28d: 28000, clicks28d: 300, daily }).stage).toBe('mixed')
+  })
+
+  it('uses measured impressions when clicks are sparse', () => {
+    const verdict = classify(2, 3, 1000, 1600)
+    expect(verdict.stage).toBe('growing')
+    expect(verdict.progression.metric).toBe('28d impressions growth')
+  })
+
+  it('does not turn sparse click percentages into decline', () => {
+    expect(classify(3, 0).stage).toBe('emerging')
+  })
+
+  it('includes the exact growth boundary without floating-point rounding errors', () => {
+    expect(classify(100, 120).stage).toBe('growing')
+  })
+
+  it('does not infer stability from changes that cancel across volatile weeks', () => {
+    const daily = observations(280, 280)
+    for (let index = 28; index < 56; index++)
+      daily[index]!.clicks = index < 42 ? 0 : 20
+    expect(classifyReachStage({ daily, impressions28d: 28000 }).stage).toBe('mixed')
+  })
+
+  it('refuses a complete series that ends before the requested reporting date', () => {
+    expect(classifyReachStage({ daily: observations(100, 150), impressions28d: 28000, periodEnd: '2026-10-09' }).stage).toBe('insufficient_data')
+  })
+
+  it('keeps observed low-volume traffic distinct from missing data', () => {
+    expect(classifyReachStage({ impressions28d: 14 }).stage).toBe('emerging')
+    expect(classifyReachStage({ impressions28d: 0 }).stage).toBe('emerging')
+    expect(classifyReachStage({}).stage).toBe('insufficient_data')
+    expect(classifyReachStage({ impressions28d: 28000 }).stage).toBe('insufficient_data')
+  })
+
+  it.each(['missing', 'duplicate', 'negative', 'mismatch'])('refuses a %s daily comparison', (defect) => {
+    const daily = observations(100, 150)
+    if (defect === 'missing')
+      daily.splice(20, 1)
+    if (defect === 'duplicate')
+      daily[20]!.date = daily[19]!.date
+    if (defect === 'negative')
+      daily[20]!.clicks = -1
+    expect(classifyReachStage({ daily, impressions28d: defect === 'mismatch' ? 29000 : 28000 }).stage).toBe('insufficient_data')
+  })
+})
+
+describe('complete-window reach liveness', () => {
+  it('retains genuine trailing zero-impression weeks', () => {
+    const daily = [...Array.from({ length: 28 }, () => ({ impressions: 100 })), ...Array.from({ length: 21 }, () => ({ impressions: 0 }))]
+    expect(reachLivenessRatio(daily)).toBe(0)
+  })
+
+  it('does not mistake one large spike for an established baseline', () => {
+    const daily = Array.from({ length: 56 }, (_, i) => ({ impressions: i === 0 ? 10000 : 10 }))
+    expect(reachLivenessRatio(daily)).toBeNull()
+  })
+
+  it('recognizes a sustained visibility collapse with known zeroes', () => {
+    const daily = observations(0, 0, 2800, 0)
+    expect(classifyReachStage({ daily, impressions28d: 0 }).stage).toBe('declining')
   })
 })
 

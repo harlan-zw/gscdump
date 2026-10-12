@@ -469,3 +469,15 @@ check are banned; words that did not are recorded in Open questions instead.
 | Cloud, cloud mode, `--mode cloud` | Hosted, `--mode hosted` | gscdump.com ADR-0012 names the mode. The CLI rejects `cloud` |
 | powerful, seamless, robust, blazing | (cut) | Marketing filler |
 | traffic trend (as a name for the whole-record classification) | Trajectory | Trajectory is one classification with named tags. A `trend` field elsewhere keeps its own meaning |
+
+### Site Triage
+
+**Is:** A deterministic comparison of search reach and saved indexing observations.
+**Reach labels:** Growing, Declining, Stable, Mixed trend, Emerging, and Waiting for data.
+Stable requires flat measured clicks and impressions. Emerging describes sparse observations, not Site age.
+Growing and Declining require meaningful changes across at least three paired weeks.
+Clicks lead when their baseline is measurable. Sparse clicks permit an impressions-based growth classification.
+A sustained impressions collapse also produces Declining. Low CTR alone does not establish decay.
+**Stored names:** Version 4 plateaued renders Stable. Older plateaued records require a fresh classification.
+The quality_rejection tag records crawled-not-indexed or soft-404 observations. It does not establish a quality cause.
+**Ratified by:** Harlan's deterministic Site status and Brundlefly naming review request, 12 October 2026.
