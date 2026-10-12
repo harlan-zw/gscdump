@@ -7,6 +7,8 @@
  */
 
 export { isCommitRateLimited, isCommitServerError, isCommitTransient } from './catalog'
+export { mergeIcebergManifests } from './manifest-merge'
+export type { MergeIcebergManifestsOptions, MergeIcebergManifestsResult } from './manifest-merge'
 export { sweepUncommittedOrphans } from './orphan-sweep'
 
 export type {

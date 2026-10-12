@@ -33,6 +33,7 @@
   isCommitRateLimited: function
   isCommitServerError: function
   isCommitTransient: function
+  mergeIcebergManifests: function
   sweepUncommittedOrphans: function
 ./provisioning:
   adoptCatalog: function
