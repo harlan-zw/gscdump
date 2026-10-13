@@ -43,6 +43,7 @@ import {
   gscdumpTeamRoleSchema,
   gscdumpTopAssociationResponseSchema,
   gscdumpUserRegistrationSchema,
+  indexingSitemapFilterShape,
   indexingUrlsResponseSchema,
   partnerSitemapActionResponseSchema,
   partnerSitemapActionSchema,
@@ -54,6 +55,7 @@ import {
   partnerTeamMemberRoleResponseSchema,
   partnerTeamMembersResponseSchema,
   partnerTeamRenamedResponseSchema,
+  refineIndexingSitemapFilter,
   registerPartnerSiteSchema,
   registerPartnerUserSchema,
   renamePartnerTeamSchema,
@@ -247,7 +249,8 @@ export function createGscdumpV1Protocol() {
   const calendarDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'expected YYYY-MM-DD')
   const indexingSummaryQuery = z.strictObject({
     days: integerQuery(z.number().int().min(1).max(90), /^(?:[1-9]|[1-8]\d|90)$/).optional(),
-  })
+    ...indexingSitemapFilterShape,
+  }).superRefine(refineIndexingSitemapFilter)
   const indexingUrlsQuery = z.strictObject({
     limit: integerQuery(z.number().int().min(1).max(500), /^(?:[1-9]|[1-9]\d|[1-4]\d{2}|500)$/).optional(),
     offset: integerQuery(z.number().int().min(0), /^(?:0|[1-9]\d*)$/).optional(),
@@ -260,7 +263,8 @@ export function createGscdumpV1Protocol() {
       z.literal('0'),
       z.literal('false'),
     ]).optional(),
-  })
+    ...indexingSitemapFilterShape,
+  }).superRefine(refineIndexingSitemapFilter)
   const bingIndexingEvidenceQuery = z.strictObject({
     limit: integerQuery(z.number().int().min(1).max(500), /^(?:[1-9]|[1-9]\d|[1-4]\d{2}|500)$/).optional(),
     offset: integerQuery(z.number().int().min(0), /^(?:0|[1-9]\d*)$/).optional(),
@@ -287,7 +291,8 @@ export function createGscdumpV1Protocol() {
   const indexingDiagnosticsQuery = z.strictObject({
     sampleIssues: z.union([z.string(), z.array(z.string())]).optional(),
     sampleLimit: integerQuery(z.number().int().min(1).max(25), /^(?:[1-9]|1\d|2[0-5])$/).optional(),
-  })
+    ...indexingSitemapFilterShape,
+  }).superRefine(refineIndexingSitemapFilter)
   const sitemapChangesQuery = z.strictObject({
     days: integerQuery(z.number().int().min(1).max(90), /^(?:[1-9]|[1-8]\d|90)$/).optional(),
   })
@@ -1302,7 +1307,7 @@ export function createGscdumpV1Protocol() {
         lifecycle: { introduced: '1.0.0' },
         docs: {
           summary: 'Get site indexing summary',
-          description: 'Returns indexing coverage, trend, and inspection signal totals.',
+          description: 'Returns indexing coverage, trend, and inspection signal totals. A Sitemap filter returns no trend or changes.',
           tags: ['Indexing'],
           examples: {
             request: { params: { siteId: 's_01' }, query: { days: 28 } },

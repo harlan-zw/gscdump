@@ -1,6 +1,6 @@
 import type { PartnerFetch } from '../src/client'
 import { createPartnerClient } from '../src/client'
-import { dataQuery, indexingDiagnosticsQuery } from '../src/hosted-query'
+import { dataQuery, indexingDiagnosticsQuery, indexingUrlsQuery } from '../src/hosted-query'
 
 const analysisSourcesResponse = {
   siteId: 's_1',
@@ -80,6 +80,16 @@ describe('createPartnerClient', () => {
     })
     expect(indexingDiagnosticsQuery({ sampleIssues: ['not_found', 'soft_404', 'not_found'] })).toEqual({
       sampleIssues: 'not_found,soft_404',
+    })
+  })
+
+  it('forwards an indexing Sitemap filter in one order', () => {
+    expect(indexingDiagnosticsQuery({ excludeFeedpath: ['https://example.com/b.xml', ' https://example.com/a.xml', 'https://example.com/b.xml'] })).toEqual({
+      excludeFeedpath: ['https://example.com/a.xml', 'https://example.com/b.xml'],
+    })
+    expect(indexingUrlsQuery({ limit: 5, feedpath: 'https://example.com/a.xml' })).toEqual({
+      limit: 5,
+      feedpath: ['https://example.com/a.xml'],
     })
   })
 

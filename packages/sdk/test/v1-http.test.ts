@@ -275,6 +275,38 @@ describe('@gscdump/sdk/v1 HTTP executor', () => {
     })
   })
 
+  it('sends an indexing Sitemap filter as repeated query values', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>(async (request) => {
+      expect(request).toBe('/api/_gscdump/partner/v1/sites/s_site/indexing/urls?excludeFeedpath=https%3A%2F%2Fexample.com%2Fa.xml&excludeFeedpath=https%3A%2F%2Fexample.com%2Fb.xml&limit=5')
+      return jsonResponse({
+        data: {
+          urls: [],
+          pagination: { total: 0, limit: 5, offset: 0, hasMore: false },
+          meta: { siteUrl: 'sc-domain:example.com', status: 'all', issue: null },
+        },
+        meta: { requestId: 'req_urls', surface: 'partner', version: '1.0' },
+      })
+    })
+    const client = createGscdumpV1Client({ apiRoot: '/api/_gscdump', credential: 'user_secret', fetch })
+
+    await client.listSiteIndexingUrls({
+      params: { siteId: 's_site' },
+      query: { limit: 5, excludeFeedpath: ['https://example.com/a.xml', 'https://example.com/b.xml'] },
+    })
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('refuses an indexing read that names both Sitemap filter keys before it fetches', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>()
+    const client = createGscdumpV1Client({ apiRoot: '/api/_gscdump', credential: 'user_secret', fetch })
+
+    await expect(client.getSiteIndexingDiagnostics({
+      params: { siteId: 's_site' },
+      query: { feedpath: 'https://example.com/a.xml', excludeFeedpath: 'https://example.com/b.xml' },
+    })).rejects.toMatchObject({ code: 'request_validation', details: { location: 'query' } })
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
   it('parses the stable error envelope into one tagged error', async () => {
     const client = createGscdumpV1Client({
       credential: 'partner_secret',

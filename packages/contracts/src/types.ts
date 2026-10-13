@@ -245,7 +245,18 @@ export interface IndexingDiagnostics {
   }
 }
 
-export interface IndexingDiagnosticsParams {
+/**
+ * The Sitemap filter on the indexing summary, URL and diagnostics reads. Send
+ * one key at most. `feedpath` counts only URLs that the named Sitemaps list.
+ * `excludeFeedpath` counts only URLs that some other live Sitemap lists. Each
+ * value is a Sitemap URL or a path on the Site's host.
+ */
+export interface IndexingSitemapFilterParams {
+  feedpath?: string | string[]
+  excludeFeedpath?: string | string[]
+}
+
+export interface IndexingDiagnosticsParams extends IndexingSitemapFilterParams {
   sampleIssues?: string[] | string
   sampleLimit?: number
 }
@@ -1093,7 +1104,7 @@ export interface DataDetailOptions {
   searchType?: GscSearchType
 }
 
-export interface IndexingUrlsParams {
+export interface IndexingUrlsParams extends IndexingSitemapFilterParams {
   limit?: number
   offset?: number
   status?: GscdumpIndexingUrlStatus

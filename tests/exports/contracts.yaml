@@ -110,6 +110,7 @@
   gscVerificationTokenResponseSchema: object
   hasOptionalIndexingScope: function
   hasRequiredAnalyticsScope: function
+  INDEXING_SITEMAP_FILTER_MAX_FEEDS: number
   indexingCaptureSchema: object
   indexingDiagnosticsParamsSchema: object
   indexingDiagnosticsSchema: object
@@ -120,6 +121,7 @@
   indexingInspectResultSchema: object
   indexingIssueSchema: object
   indexingNextActions: object
+  indexingSitemapFilterShape: object
   indexingStatuses: object
   indexingUrlRowSchema: object
   indexingUrlsParamsSchema: object
@@ -160,6 +162,7 @@
   querySourceModes: object
   RECORD_READ_REFUSAL_REASONS: object
   recordReadRefusalSchema: object
+  refineIndexingSitemapFilter: function
   registerPartnerSiteSchema: object
   registerPartnerUserSchema: object
   renamePartnerTeamSchema: object
