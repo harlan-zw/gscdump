@@ -11816,7 +11816,7 @@
     },
     "/api/partner/v1/sites/{siteId}/indexing": {
       "get": {
-        "description": "Returns indexing coverage, trend, and inspection signal totals.",
+        "description": "Returns indexing coverage, trend, and inspection signal totals. A Sitemap filter returns no trend or changes.",
         "operationId": "partner.sites.indexing.get",
         "parameters": [
           {
@@ -11842,6 +11842,54 @@
                 {
                   "pattern": "^(?:[1-9]|[1-8]\\d|90)$",
                   "type": "string"
+                }
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "excludeFeedpath",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 2048,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "items": {
+                    "maxLength": 2048,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "maxItems": 50,
+                  "minItems": 1,
+                  "type": "array"
+                }
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "feedpath",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 2048,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "items": {
+                    "maxLength": 2048,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "maxItems": 50,
+                  "minItems": 1,
+                  "type": "array"
                 }
               ]
             }
@@ -15387,6 +15435,54 @@
             "schema": {
               "pattern": "^s_[\\w-]+$",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "excludeFeedpath",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 2048,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "items": {
+                    "maxLength": 2048,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "maxItems": 50,
+                  "minItems": 1,
+                  "type": "array"
+                }
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "feedpath",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 2048,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "items": {
+                    "maxLength": 2048,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "maxItems": 50,
+                  "minItems": 1,
+                  "type": "array"
+                }
+              ]
             }
           },
           {
@@ -20046,6 +20142,54 @@
                 {
                   "const": "false",
                   "type": "string"
+                }
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "excludeFeedpath",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 2048,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "items": {
+                    "maxLength": 2048,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "maxItems": 50,
+                  "minItems": 1,
+                  "type": "array"
+                }
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "feedpath",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 2048,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "items": {
+                    "maxLength": 2048,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "maxItems": 50,
+                  "minItems": 1,
+                  "type": "array"
                 }
               ]
             }

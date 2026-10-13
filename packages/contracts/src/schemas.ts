@@ -888,6 +888,43 @@ export const gscdumpSitemapChangesResponseSchema = z.object({
   generation: z.lazy(() => gscdumpSitemapGenerationSchema).nullable(),
 }).loose()
 
+/** The most Sitemaps one indexing read can name in `feedpath` or `excludeFeedpath`. */
+export const INDEXING_SITEMAP_FILTER_MAX_FEEDS = 50
+
+const indexingSitemapFeedpathsSchema = z.union([
+  z.string().min(1).max(2048),
+  z.array(z.string().min(1).max(2048)).min(1).max(INDEXING_SITEMAP_FILTER_MAX_FEEDS),
+])
+
+/**
+ * The Sitemap filter on the indexing summary, URL and diagnostics reads.
+ *
+ * Without a filter, a read counts each inspected URL that any live Sitemap
+ * lists. `feedpath` counts only URLs that the named Sitemaps list.
+ * `excludeFeedpath` counts only URLs that some other live Sitemap lists. Each
+ * value is a Sitemap URL as `partner.sites.sitemaps.urls.get` reports its
+ * `feedpath`, or a path on the Site's host. A filter can only remove URLs from a
+ * read, so a filtered count never exceeds the unfiltered count.
+ */
+export const indexingSitemapFilterShape = {
+  feedpath: indexingSitemapFeedpathsSchema.optional(),
+  excludeFeedpath: indexingSitemapFeedpathsSchema.optional(),
+}
+
+/** Refuse a read that names both `feedpath` and `excludeFeedpath`. */
+export function refineIndexingSitemapFilter(
+  value: { feedpath?: unknown, excludeFeedpath?: unknown },
+  ctx: z.RefinementCtx,
+): void {
+  if (value.feedpath !== undefined && value.excludeFeedpath !== undefined) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['excludeFeedpath'],
+      message: 'Send feedpath or excludeFeedpath, not both.',
+    })
+  }
+}
+
 export const indexingUrlsParamsSchema = z.object({
   limit: z.number().optional(),
   offset: z.number().optional(),
@@ -897,12 +934,14 @@ export const indexingUrlsParamsSchema = z.object({
   // Opt out of the total COUNT(*) full-scan; only `0`/`false` are meaningful
   // (the endpoint treats any other value as "want count").
   count: z.union([z.literal(0), z.literal(false)]).optional(),
-}).optional()
+  ...indexingSitemapFilterShape,
+}).superRefine(refineIndexingSitemapFilter).optional()
 
 export const indexingDiagnosticsParamsSchema = z.object({
   sampleIssues: z.union([z.string(), z.array(z.string())]).optional(),
   sampleLimit: z.number().min(1).max(25).optional(),
-}).optional()
+  ...indexingSitemapFilterShape,
+}).superRefine(refineIndexingSitemapFilter).optional()
 
 export const gscdumpIndexingResponseSchema = z.object({
   trend: z.array(z.object({

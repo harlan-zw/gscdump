@@ -3,6 +3,7 @@ import type {
   DataDetailOptions,
   DataQueryOptions,
   IndexingDiagnosticsParams,
+  IndexingSitemapFilterParams,
   IndexingUrlsParams,
   SourceInfoOptions,
 } from '@gscdump/contracts'
@@ -122,8 +123,24 @@ export function dataDetailQuery(state: BuilderStateWire, options?: DataDetailOpt
   return query
 }
 
-export function indexingUrlsQuery(params: IndexingUrlsParams = {}): Record<string, string | number> {
-  const query: Record<string, string | number> = {}
+type IndexingQuery = Record<string, string | number | string[]>
+
+function sortedFeedpaths(value: string | string[]): string[] {
+  return [...new Set((Array.isArray(value) ? value : [value]).map(item => item.trim()).filter(Boolean))].sort()
+}
+
+/** Forward the Sitemap filter as repeated query values, in a stable order for request de-dupe. */
+function indexingSitemapFilterQuery(params: IndexingSitemapFilterParams): IndexingQuery {
+  const query: IndexingQuery = {}
+  if (params.feedpath !== undefined)
+    query.feedpath = sortedFeedpaths(params.feedpath)
+  if (params.excludeFeedpath !== undefined)
+    query.excludeFeedpath = sortedFeedpaths(params.excludeFeedpath)
+  return query
+}
+
+export function indexingUrlsQuery(params: IndexingUrlsParams = {}): IndexingQuery {
+  const query: IndexingQuery = indexingSitemapFilterQuery(params)
   if (params.limit != null)
     query.limit = params.limit
   if (params.offset != null)
@@ -141,8 +158,8 @@ export function indexingUrlsQuery(params: IndexingUrlsParams = {}): Record<strin
   return query
 }
 
-export function indexingDiagnosticsQuery(params: IndexingDiagnosticsParams = {}): Record<string, string | number> {
-  const query: Record<string, string | number> = {}
+export function indexingDiagnosticsQuery(params: IndexingDiagnosticsParams = {}): IndexingQuery {
+  const query: IndexingQuery = indexingSitemapFilterQuery(params)
   if (params.sampleIssues) {
     query.sampleIssues = Array.isArray(params.sampleIssues)
       ? [...new Set(params.sampleIssues.map(item => String(item).trim()).filter(Boolean))].sort().join(',')

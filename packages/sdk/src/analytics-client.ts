@@ -10,6 +10,7 @@ import type {
   IndexingInspectRateLimited,
   IndexingInspectRequest,
   IndexingInspectResponse,
+  IndexingSitemapFilterParams,
   IndexingUrlsResponse,
   IndexingUrlStatus,
   InspectionHistoryResponse,
@@ -33,6 +34,9 @@ import {
   withDefaultSearchType,
 } from './hosted-query'
 import { createHostedRequester } from './request'
+
+/** The analytics app routes take no Sitemap filter; only the partner reads count by Sitemap. */
+type AnalyticsIndexingDiagnosticsParams = Omit<IndexingDiagnosticsParams, keyof IndexingSitemapFilterParams>
 
 export type AnalyticsFetch = HostedFetch
 export type AnalyticsHeaders = HostedHeaders
@@ -59,7 +63,7 @@ export interface AnalyticsClient {
   getInspections: (siteId: string) => Promise<InspectionIndex>
   getInspectionHistory: (siteId: string, hash: string) => Promise<InspectionHistoryResponse>
   getIndexingUrls: (siteId: string, params?: { limit?: number, offset?: number, status?: IndexingUrlStatus, issue?: string, search?: string }) => Promise<IndexingUrlsResponse>
-  getIndexingDiagnostics: (siteId: string, params?: IndexingDiagnosticsParams) => Promise<IndexingDiagnostics>
+  getIndexingDiagnostics: (siteId: string, params?: AnalyticsIndexingDiagnosticsParams) => Promise<IndexingDiagnostics>
   requestIndexingInspect: (siteId: string, body: IndexingInspectRequest) => Promise<IndexingInspectResponse | IndexingInspectRateLimited>
   getCountries: (siteId: string, range: { start: string, end: string }) => Promise<CountriesResponse>
   getSearchAppearance: (siteId: string, range: { start: string, end: string }) => Promise<SearchAppearanceResponse>
@@ -122,7 +126,7 @@ export function createAnalyticsClient(options: AnalyticsClientOptions = {}): Ana
       const endpoint = analyticsEndpoints.getIndexingUrls
       return request<IndexingUrlsResponse>(endpoint.path(siteId), { method: endpoint.method, query: indexingUrlsQuery(params) }, endpoint.response)
     },
-    getIndexingDiagnostics(siteId: string, params: IndexingDiagnosticsParams = {}) {
+    getIndexingDiagnostics(siteId: string, params: AnalyticsIndexingDiagnosticsParams = {}) {
       const endpoint = analyticsEndpoints.getIndexingDiagnostics
       const parsed = shouldValidate('request') ? endpoint.query.parse(params) : params
       return request<IndexingDiagnostics>(endpoint.path(siteId), { method: endpoint.method, query: indexingDiagnosticsQuery(parsed) }, endpoint.response)
