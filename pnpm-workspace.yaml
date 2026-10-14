@@ -43,6 +43,7 @@ overrides:
   '@nuxt/kit': 4.5.2
   '@nuxt/schema': 4.5.2
   '@types/node>undici-types': ^7.29.1
+  changelogithub>changelogen: 0.6.2
   hono: ^4.13.9
   tinyexec: ^1.3.1
 
