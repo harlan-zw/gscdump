@@ -146,6 +146,9 @@ catalogs:
     aws4fetch:
       specifier: ^1.0.20
       version: 1.0.20
+    changelogithub:
+      specifier: 15.0.5
+      version: 15.0.5
     drizzle-orm:
       specifier: 1.0.0-rc.4
       version: 1.0.0-rc.4
@@ -339,7 +342,7 @@ importers:
         specifier: catalog:dev-build
         version: 12.3.0
       changelogithub:
-        specifier: 15.0.5
+        specifier: 'catalog:'
         version: 15.0.5(magicast@0.5.4)
       eslint:
         specifier: catalog:dev-lint

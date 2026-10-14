@@ -35,7 +35,7 @@
     "@types/node": "catalog:",
     "@typescript/native": "catalog:dev-build",
     "bumpp": "catalog:dev-build",
-    "changelogithub": "15.0.5",
+    "changelogithub": "catalog:",
     "eslint": "catalog:dev-lint",
     "gscdump": "workspace:*",
     "js-yaml": "catalog:",
