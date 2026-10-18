@@ -28,9 +28,10 @@ import type {
   WriteResult,
 } from '../storage'
 import { decompress as decompressZstd } from 'fzstd'
-import { parquetMetadata, parquetMetadataAsync, parquetReadObjects, parquetSchema } from 'hyparquet'
+import { parquetMetadata, parquetMetadataAsync, parquetReadObjects, parquetSchema, readOffsetIndex } from 'hyparquet'
 import { ByteWriter, ParquetWriter, parquetWriteRows } from 'hyparquet-writer'
 import { SCHEMAS, TABLE_METADATA } from '../schema'
+import { parquetRangeCache } from './parquet-range-cache'
 
 // 25k rows/group keeps a typical day file in 2-10 row groups so DuckDB's
 // stats-based row-group pruning has something to skip. The hyparquet-writer
@@ -607,6 +608,18 @@ export interface ParquetRangeSource {
 }
 
 export interface DecodeParquetGroupsOptions extends DecodeParquetOptions {
+  /**
+   * Opt-in windows for flat scalar groups whose designated, selected columns
+   * have offset indexes and no dictionary encoding. Ineligible groups retain
+   * the original physical-group read, so targetRows is not a hard batch limit.
+   * Windows still decode complete overlapping pages, not a bounded heap size.
+   */
+  indexedRowWindow?: {
+    targetRows: number
+    requiredIndexedColumns: readonly string[]
+    /** Per eligible group; 0 disables caching. Default 0, maximum 2 MiB/128 entries. */
+    rangeCacheBytes?: number
+  }
   limits?: {
     /** Footer bytes before deserialization. Default 1 MiB. */
     maxMetadataBytes?: number
@@ -628,6 +641,7 @@ export interface DecodeParquetGroupsOptions extends DecodeParquetOptions {
  * read-ahead is started. Missing/corrupt/range-error input throws; it is not empty.
  */
 export async function* decodeParquetRowGroups(file: ParquetRangeSource, opts: DecodeParquetGroupsOptions = {}): AsyncGenerator<Row[]> {
+  const indexedWindow = indexedWindowPolicy(opts.indexedRowWindow)
   const maxMetadataBytes = streamLimit(opts.limits?.maxMetadataBytes, 1024 * 1024, 'maxMetadataBytes')
   const maxRowGroupRows = streamLimit(opts.limits?.maxRowGroupRows, ROW_GROUP_SIZE, 'maxRowGroupRows')
   const maxRowGroupBytes = streamLimit(opts.limits?.maxRowGroupBytes, 16 * 1024 * 1024, 'maxRowGroupBytes')
@@ -676,10 +690,111 @@ export async function* decodeParquetRowGroups(file: ParquetRangeSource, opts: De
   }
   if (!Number.isSafeInteger(totalRows) || BigInt(totalRows) !== metadata.num_rows)
     throw new Error('parquet stream row-count metadata mismatch')
-  yield* decodeGroupsFromMetadata(bounded, metadata, opts)
+  yield* decodeGroupsFromMetadata(bounded, metadata, opts, indexedWindow && { ...indexedWindow, maxReadBytes })
 }
 
-async function* decodeGroupsFromMetadata(file: AsyncBuffer, metadata: Awaited<ReturnType<typeof parquetMetadataAsync>>, opts: DecodeParquetOptions): AsyncGenerator<Row[]> {
+interface IndexedWindowPolicy {
+  targetRows: number
+  requiredIndexedColumns: string[]
+  rangeCacheBytes: number
+}
+
+function indexedWindowPolicy(policy: DecodeParquetGroupsOptions['indexedRowWindow']): IndexedWindowPolicy | undefined {
+  if (policy === undefined)
+    return undefined
+  const { targetRows, requiredIndexedColumns, rangeCacheBytes = 0 } = policy
+  if (!Number.isSafeInteger(targetRows) || targetRows < 1
+    || !Array.isArray(requiredIndexedColumns) || requiredIndexedColumns.length < 1 || requiredIndexedColumns.length > 64
+    || requiredIndexedColumns.some(name => typeof name !== 'string' || name.length === 0)
+    || !Number.isSafeInteger(rangeCacheBytes) || rangeCacheBytes < 0 || rangeCacheBytes > 2 * 1024 * 1024) {
+    throw new RangeError('invalid indexedRowWindow policy')
+  }
+  return { targetRows, requiredIndexedColumns: [...new Set<string>(requiredIndexedColumns)], rangeCacheBytes }
+}
+
+// Cached byte views must not escape in decoded binary/nested values. Keep this
+// deliberately narrower than all formats accepted by the unchanged decoder.
+function windowScalar(element: SchemaElement): boolean {
+  if (element.num_children || element.repetition_type === 'REPEATED')
+    return false
+  const converted = element.converted_type
+  const logical = element.logical_type?.type
+  // The pinned reader's default utf8=true also converts unannotated BYTE_ARRAY
+  // to strings. FIXED_LEN_BYTE_ARRAY and object-producing annotations stay out.
+  if (element.type === 'BYTE_ARRAY')
+    return (!converted || converted === 'UTF8') && (!logical || logical === 'STRING')
+  return ['BOOLEAN', 'INT32', 'INT64', 'INT96', 'FLOAT', 'DOUBLE'].includes(element.type ?? '')
+    && (!converted || ['DATE', 'TIME_MILLIS', 'TIME_MICROS', 'TIMESTAMP_MILLIS', 'TIMESTAMP_MICROS', 'UINT_8', 'UINT_16', 'UINT_32', 'UINT_64', 'INT_8', 'INT_16', 'INT_32', 'INT_64'].includes(converted))
+    && (!logical || ['DATE', 'TIME', 'TIMESTAMP', 'INTEGER'].includes(logical))
+}
+
+type IndexedWindow = IndexedWindowPolicy & { maxReadBytes: number }
+type ParquetMetadata = Awaited<ReturnType<typeof parquetMetadataAsync>>
+
+function indexedGroup(group: ParquetMetadata['row_groups'][number], names: Set<string>, columns: string[] | undefined, fileBytes: number, policy: IndexedWindow): boolean {
+  if (group.columns.length !== names.size || new Set(group.columns.map(col => col.meta_data?.path_in_schema[0])).size !== names.size
+    || group.columns.some(col => col.meta_data?.path_in_schema.length !== 1 || !names.has(col.meta_data.path_in_schema[0]!))) {
+    return false
+  }
+  return policy.requiredIndexedColumns.every((name) => {
+    if (columns && !columns.includes(name))
+      return false
+    const matches = group.columns.filter(col => col.meta_data?.path_in_schema[0] === name)
+    if (matches.length !== 1)
+      return false
+    const chunk = matches[0]!
+    const meta = chunk.meta_data!
+    if ((meta.dictionary_page_offset !== undefined && meta.dictionary_page_offset !== null)
+      || meta.encodings.some(encoding => encoding === 'PLAIN_DICTIONARY' || encoding === 'RLE_DICTIONARY')) {
+      return false
+    }
+    const start = Number(chunk.offset_index_offset)
+    const length = chunk.offset_index_length
+    return Number.isSafeInteger(start) && start >= 4 && Number.isSafeInteger(length) && length! > 0
+      && length! <= policy.maxReadBytes && Number.isSafeInteger(start + length!) && start + length! <= fileBytes
+  })
+}
+
+async function validateWindowIndexes(file: AsyncBuffer, group: ParquetMetadata['row_groups'][number], columns: string[] | undefined, hasFilter: boolean): Promise<void> {
+  // The underlying reader trusts page row offsets and can otherwise pad shifted
+  // values with undefined. Validate structure once before any window is emitted.
+  // Filters may read columns omitted from projection, so include all indexes
+  // in that case. This is not physical page-header/row-count verification.
+  for (const column of group.columns) {
+    const meta = column.meta_data!
+    if (columns && !hasFilter && !columns.includes(meta.path_in_schema[0]!))
+      continue
+    if (!column.offset_index_offset || !column.offset_index_length)
+      continue
+    const start = Number(column.offset_index_offset)
+    const bytes = await file.slice(start, start + column.offset_index_length)
+    const pages = readOffsetIndex({ view: new DataView(bytes), offset: 0 }).page_locations
+    const groupRows = Number(group.num_rows)
+    const dataStart = Number(meta.data_page_offset)
+    const columnStart = Number(meta.dictionary_page_offset ?? meta.data_page_offset)
+    const columnEnd = columnStart + Number(meta.total_compressed_size)
+    if (!pages.length || pages.length > groupRows || !Number.isSafeInteger(dataStart) || dataStart < 4
+      || !Number.isSafeInteger(columnStart) || columnStart < 4 || !Number.isSafeInteger(columnEnd) || columnEnd > file.byteLength) {
+      throw new Error('parquet stream invalid offset index')
+    }
+    let previousRow = -1
+    let previousEnd = dataStart
+    for (const [index, page] of pages.entries()) {
+      const row = Number(page.first_row_index)
+      const offset = Number(page.offset)
+      const size = page.compressed_page_size
+      if (!Number.isSafeInteger(row) || row <= previousRow || row >= groupRows || (index === 0 && row !== 0)
+        || !Number.isSafeInteger(offset) || offset < previousEnd || !Number.isSafeInteger(size) || size < 1
+        || !Number.isSafeInteger(offset + size) || offset + size > columnEnd) {
+        throw new Error('parquet stream invalid offset index')
+      }
+      previousRow = row
+      previousEnd = offset + size
+    }
+  }
+}
+
+async function* decodeGroupsFromMetadata(file: AsyncBuffer, metadata: ParquetMetadata, opts: DecodeParquetOptions, indexedWindow?: IndexedWindow): AsyncGenerator<Row[]> {
   const tree = parquetSchema(metadata)
   // Columns the reader can decode into `Date` values. This adapter passes no
   // custom parsers, so the set is closed: DATE and TIMESTAMP logical types
@@ -700,27 +815,40 @@ async function* decodeGroupsFromMetadata(file: AsyncBuffer, metadata: Awaited<Re
   // A nested schema can surface decoded values under keys the top-level
   // elements don't name; fall back to scanning every key there.
   const normalizeColumns: readonly string[] | null = nested ? null : dateColumns
+  const windowSchema = indexedWindow && !nested && present.size === tree.children.length
+    && tree.children.every(child => windowScalar(child.element))
   let groupStart = 0
   for (const group of metadata.row_groups) {
     const groupEnd = groupStart + Number(group.num_rows)
     const rowStart = Math.max(groupStart, opts.rowStart ?? 0)
     const rowEnd = Math.min(groupEnd, opts.rowEnd ?? Infinity)
     if (rowStart < rowEnd) {
-      const rows = await parquetReadObjects({
-        file,
-        // Catalog compaction writes ZSTD. Keep decoding pure JS for Workers.
-        compressors: { ZSTD: input => decompressZstd(input) },
-        // Chunk offsets remain absolute. Row selection becomes local to this
-        // group so the reader does not rescan every group for each request.
-        metadata: { ...metadata, row_groups: [group], num_rows: group.num_rows },
-        columns,
-        rowStart: rowStart - groupStart,
-        rowEnd: rowEnd - groupStart,
-        useOffsetIndex: rowStart > groupStart || rowEnd < groupEnd,
-        // Preserve bloom and page-index pruning for filtered reads.
-        ...(opts.filter ? { filter: opts.filter, useBloomFilters: true, usePageIndex: true } : {}),
-      })
-      yield normalizeDecodedDates(rows as Row[], normalizeColumns)
+      const window = windowSchema && indexedWindow && indexedGroup(group, present, columns, file.byteLength, indexedWindow) ? indexedWindow : undefined
+      const cached = window?.rangeCacheBytes ? parquetRangeCache(file, window.rangeCacheBytes) : undefined
+      try {
+        if (window)
+          await validateWindowIndexes(cached?.file ?? file, group, columns, !!opts.filter)
+        for (let start = rowStart; start < rowEnd;) {
+          const end = Math.min(rowEnd, start + (window?.targetRows ?? rowEnd - rowStart))
+          const rows = await parquetReadObjects({
+            file: cached?.file ?? file,
+            // Catalog compaction writes ZSTD. Keep decoding pure JS for Workers.
+            compressors: { ZSTD: input => decompressZstd(input) },
+            // Chunk offsets remain absolute. Row selection becomes local to this
+            // group so the reader does not rescan every group for each request.
+            metadata: { ...metadata, row_groups: [group], num_rows: group.num_rows },
+            columns,
+            rowStart: start - groupStart,
+            rowEnd: end - groupStart,
+            useOffsetIndex: start > groupStart || end < groupEnd,
+            // Preserve bloom and page-index pruning for filtered reads.
+            ...(opts.filter ? { filter: opts.filter, useBloomFilters: true, usePageIndex: true } : {}),
+          })
+          yield normalizeDecodedDates(rows as Row[], normalizeColumns)
+          start = end
+        }
+      }
+      finally { cached?.close() }
     }
     groupStart = groupEnd
   }

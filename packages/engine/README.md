@@ -43,10 +43,48 @@ This supports a counting/digest pass followed by a separately coordinated
 fixed-length upload, without the codec owning transport or commit semantics.
 
 `decodeParquetRowGroups({ byteLength, slice }, options)` reads exact byte ranges
-and yields one physical row group at a time. The caller must pin every range
+and by default yields one physical row group at a time. The caller must pin every range
 to the same immutable object or ETag. It preserves the existing date, column
 projection, row-window and filter behavior. An absent, corrupt, oversized or
 incompletely read file throws; only valid empty Parquet yields no rows.
+
+The range reader alone accepts an optional `indexedRowWindow` policy:
+
+```ts
+decodeParquetRowGroups(pinnedObject, {
+  indexedRowWindow: {
+    targetRows: 1000,
+    requiredIndexedColumns: ['query', 'url'],
+    rangeCacheBytes: 2 * 1024 * 1024,
+  },
+})
+```
+
+Each group uses windows only when all designated columns are present, selected,
+have usable offset-index descriptors, and have no dictionary encoding. The
+schema must contain only flat scalar/UTF8/date fields; binary, nested and other
+unsupported schemas retain the original group read. Ineligible groups use the
+original uncached path, so `targetRows` is a target rather than a hard batch
+limit. Include every potentially large column in `requiredIndexedColumns`.
+All existing physical-group admission limits still apply.
+
+Before emitting an eligible group's first window, the reader checks index
+structure for projected columns, or all indexed columns when a filter may need
+unprojected fields: row zero, increasing row positions, ordered nonoverlapping
+page ranges and physical column bounds. A failure throws without falling back
+after partial output. This assumes metadata row offsets agree with physical
+page contents; it does not independently verify page-header row counts or
+detect every deliberately consistent but false index.
+
+The optional range cache defaults to zero, allows at most 2 MiB of payload and
+128 entries, and lives only through one eligible group. It is cleared on
+completion, error or iterator return; another pass rereads the pinned object.
+It does not cache decoded rows or provide publication/ETag coordination. Windows
+can otherwise reread overlapping pages and substantially increase range I/O.
+They still decode whole boundary pages, and dictionaries in other columns can
+still allocate in full. These options do not bound decompressed page sizes or
+the total heap; the unchanged fallback also retains its existing memory costs.
+Buffered decoders, encoders and all omitted-option behavior remain unchanged.
 
 Both APIs have configurable admission limits. The encoder bounds producer
 batch rows/value bytes, output group rows/value bytes, retained descriptor counts
