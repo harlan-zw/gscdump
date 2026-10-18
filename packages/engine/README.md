@@ -30,6 +30,35 @@ different publications produce different bytes. It must retain and replay the
 exact encoded bytes for retries; this option does not provide publication or
 recovery coordination itself.
 
+For a bounded, already ordered source, `/hyparquet` also exports
+`encodeParquetRowBatches(batches, options, write)`. It consumes sync or async
+batches, coerces the declared `columns` with the same physical types as the
+array encoder, and emits one Parquet file through an awaited byte callback.
+It does not sort, deduplicate, retry, or publish an object. The callback borrows
+its bytes until its promise settles; copy a chunk if retaining it. The caller
+must abort/discard the entire destination on any error, including an error
+while writing the footer. Reopening the same immutable source with identical
+options produces identical bytes regardless of producer batch boundaries.
+This supports a counting/digest pass followed by a separately coordinated
+fixed-length upload, without the codec owning transport or commit semantics.
+
+`decodeParquetRowGroups({ byteLength, slice }, options)` reads exact byte ranges
+and yields one physical row group at a time. The caller must pin every range
+to the same immutable object or ETag. It preserves the existing date, column
+projection, row-window and filter behavior. An absent, corrupt, oversized or
+incompletely read file throws; only valid empty Parquet yields no rows.
+
+Both APIs have configurable admission limits. The encoder bounds producer
+batch rows/value bytes, output group rows/value bytes, retained descriptor counts
+and scalar bytes (including statistics), and the current encoded group/footer
+buffer. The decoder checks footer size,
+descriptor count, declared group rows/uncompressed bytes, and every range request.
+The default decoder accepts the existing encoder's 25,000-row groups. These
+limits do not establish a Worker heap guarantee: caller-retained rows, codec
+transient allocations, footer descriptors, and concurrent requests still use
+memory. Metadata limits are not protection against malicious Parquet contents.
+The existing array APIs and their default bytes are unchanged.
+
 ## Subpath exports
 
 | Subpath | Purpose |

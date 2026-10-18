@@ -126,7 +126,9 @@
   filesystemStats: function
 ./hyparquet:
   createHyparquetCodec: function
+  decodeParquetRowGroups: function
   decodeParquetToRows: function
+  encodeParquetRowBatches: function
   encodeRowsToParquet: function
   encodeRowsToParquetFlex: function
 ./iceberg:
