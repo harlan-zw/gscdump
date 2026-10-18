@@ -31,6 +31,7 @@ import { decompress as decompressZstd } from 'fzstd'
 import { parquetMetadata, parquetMetadataAsync, parquetReadObjects, parquetSchema, readOffsetIndex } from 'hyparquet'
 import { ByteWriter, ParquetWriter, parquetWriteRows } from 'hyparquet-writer'
 import { SCHEMAS, TABLE_METADATA } from '../schema'
+import { parquetDecodeBudget } from './parquet-decode-budget'
 import { parquetRangeCache } from './parquet-range-cache'
 
 // 25k rows/group keeps a typical day file in 2-10 row groups so DuckDB's
@@ -631,6 +632,13 @@ export interface DecodeParquetGroupsOptions extends DecodeParquetOptions {
     maxRowGroups?: number
     /** Maximum individual range request. Default 16 MiB. */
     maxReadBytes?: number
+    /**
+     * Optional cumulative source-range + SNAPPY-output bytes per physical group,
+     * including all indexed windows. Charged before reads/output allocation;
+     * cache hits do not allocate another range. Deliberately conservative, not
+     * total JS heap. ZSTD refuses only with this option. Omission is unchanged.
+     */
+    maxReadAndDecompressBytes?: number
   }
 }
 
@@ -642,6 +650,9 @@ export interface DecodeParquetGroupsOptions extends DecodeParquetOptions {
  */
 export async function* decodeParquetRowGroups(file: ParquetRangeSource, opts: DecodeParquetGroupsOptions = {}): AsyncGenerator<Row[]> {
   const indexedWindow = indexedWindowPolicy(opts.indexedRowWindow)
+  const maxReadAndDecompressBytes = opts.limits?.maxReadAndDecompressBytes === undefined
+    ? undefined
+    : streamLimit(opts.limits.maxReadAndDecompressBytes, 0, 'maxReadAndDecompressBytes')
   const maxMetadataBytes = streamLimit(opts.limits?.maxMetadataBytes, 1024 * 1024, 'maxMetadataBytes')
   const maxRowGroupRows = streamLimit(opts.limits?.maxRowGroupRows, ROW_GROUP_SIZE, 'maxRowGroupRows')
   const maxRowGroupBytes = streamLimit(opts.limits?.maxRowGroupBytes, 16 * 1024 * 1024, 'maxRowGroupBytes')
@@ -690,7 +701,7 @@ export async function* decodeParquetRowGroups(file: ParquetRangeSource, opts: De
   }
   if (!Number.isSafeInteger(totalRows) || BigInt(totalRows) !== metadata.num_rows)
     throw new Error('parquet stream row-count metadata mismatch')
-  yield* decodeGroupsFromMetadata(bounded, metadata, opts, indexedWindow && { ...indexedWindow, maxReadBytes })
+  yield* decodeGroupsFromMetadata(bounded, metadata, opts, indexedWindow && { ...indexedWindow, maxReadBytes }, maxReadAndDecompressBytes)
 }
 
 interface IndexedWindowPolicy {
@@ -794,7 +805,7 @@ async function validateWindowIndexes(file: AsyncBuffer, group: ParquetMetadata['
   }
 }
 
-async function* decodeGroupsFromMetadata(file: AsyncBuffer, metadata: ParquetMetadata, opts: DecodeParquetOptions, indexedWindow?: IndexedWindow): AsyncGenerator<Row[]> {
+async function* decodeGroupsFromMetadata(file: AsyncBuffer, metadata: ParquetMetadata, opts: DecodeParquetOptions, indexedWindow?: IndexedWindow, maxReadAndDecompressBytes?: number): AsyncGenerator<Row[]> {
   const tree = parquetSchema(metadata)
   // Columns the reader can decode into `Date` values. This adapter passes no
   // custom parsers, so the set is closed: DATE and TIMESTAMP logical types
@@ -824,16 +835,18 @@ async function* decodeGroupsFromMetadata(file: AsyncBuffer, metadata: ParquetMet
     const rowEnd = Math.min(groupEnd, opts.rowEnd ?? Infinity)
     if (rowStart < rowEnd) {
       const window = windowSchema && indexedWindow && indexedGroup(group, present, columns, file.byteLength, indexedWindow) ? indexedWindow : undefined
-      const cached = window?.rangeCacheBytes ? parquetRangeCache(file, window.rangeCacheBytes) : undefined
+      const budget = maxReadAndDecompressBytes === undefined ? undefined : parquetDecodeBudget(file, maxReadAndDecompressBytes)
+      const groupFile = budget?.file ?? file
+      const cached = window?.rangeCacheBytes ? parquetRangeCache(groupFile, window.rangeCacheBytes) : undefined
       try {
         if (window)
-          await validateWindowIndexes(cached?.file ?? file, group, columns, !!opts.filter)
+          await validateWindowIndexes(cached?.file ?? groupFile, group, columns, !!opts.filter)
         for (let start = rowStart; start < rowEnd;) {
           const end = Math.min(rowEnd, start + (window?.targetRows ?? rowEnd - rowStart))
           const rows = await parquetReadObjects({
-            file: cached?.file ?? file,
+            file: cached?.file ?? groupFile,
             // Catalog compaction writes ZSTD. Keep decoding pure JS for Workers.
-            compressors: { ZSTD: input => decompressZstd(input) },
+            compressors: budget?.compressors ?? { ZSTD: input => decompressZstd(input) },
             // Chunk offsets remain absolute. Row selection becomes local to this
             // group so the reader does not rescan every group for each request.
             metadata: { ...metadata, row_groups: [group], num_rows: group.num_rows },
@@ -848,7 +861,10 @@ async function* decodeGroupsFromMetadata(file: AsyncBuffer, metadata: ParquetMet
           start = end
         }
       }
-      finally { cached?.close() }
+      finally {
+        budget?.close()
+        cached?.close()
+      }
     }
     groupStart = groupEnd
   }
