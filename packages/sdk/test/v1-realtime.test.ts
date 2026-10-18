@@ -854,6 +854,130 @@ describe('@gscdump/sdk/v1 realtime state machine', () => {
     expect(client.getSnapshot().error?.code).toBe('heartbeat_stale')
   })
 
+  it('keeps delivered pongs live while an authoritative resync is pending', async () => {
+    const runtime = new FakeRuntime()
+    const store = new MemoryCursorStore(null)
+    const errors: string[] = []
+    let finishRead!: () => void
+    const pendingRead = new Promise<void>((resolve) => {
+      finishRead = resolve
+    })
+    const client = createGscdumpRealtimeV1Client({
+      runtime,
+      cursorStore: store,
+      ticketProvider: () => ticket(runtime, '0'),
+      applyEvent: async () => {},
+      resync: () => pendingRead,
+      onObservation: (observation) => {
+        if (observation.type === 'error')
+          errors.push(observation.error.code)
+      },
+    })
+    await client.start()
+    const socket = runtime.sockets[0]!
+    socket.onSend = (value) => {
+      if (value === 'ping')
+        socket.message('pong')
+    }
+    socket.open()
+    socket.message(ready(runtime, '0'))
+    await settle()
+    await runtime.advance(100_000)
+
+    expect(socket.sent.filter(value => value === 'ping')).toHaveLength(4)
+    expect(errors).toEqual([])
+    expect(socket.closes).toEqual([])
+    expect(runtime.sockets).toHaveLength(1)
+    expect(store.saves).toEqual([])
+    expect(ackSequences(socket)).toEqual([])
+    expect(client.getSnapshot().freshness).toBe('resyncing')
+
+    finishRead()
+    await settle()
+    expect(store.value).toEqual({ streamId: STREAM, sequence: '0' })
+    await runtime.advance(0)
+    expect(runtime.sockets).toHaveLength(2)
+    client.stop()
+  })
+
+  it('handles pongs during slow effects without acknowledging or reordering application events', async () => {
+    const runtime = new FakeRuntime()
+    const store = new MemoryCursorStore({ streamId: STREAM, sequence: '0' })
+    const effects: string[] = []
+    let finishEffect!: () => void
+    const pendingEffect = new Promise<void>((resolve) => {
+      finishEffect = resolve
+    })
+    const client = createGscdumpRealtimeV1Client({
+      runtime,
+      cursorStore: store,
+      ticketProvider: () => ticket(runtime, '0'),
+      applyEvent: async (event) => {
+        effects.push(event.id)
+        if (event.id === 'evt_1')
+          await pendingEffect
+      },
+      resync: async () => {},
+    })
+    await client.start()
+    const socket = runtime.sockets[0]!
+    socket.onSend = (value) => {
+      if (value === 'ping')
+        socket.message('pong')
+    }
+    socket.open()
+    socket.message(ready(runtime, '0'))
+    await settle()
+    socket.message(durableEvent('1'))
+    socket.message(durableEvent('2'))
+    await settle()
+    await runtime.advance(100_000)
+
+    expect(effects).toEqual(['evt_1'])
+    expect(ackSequences(socket)).toEqual([])
+    expect(store.saves).toEqual([])
+    expect(socket.closes).toEqual([])
+    expect(client.getSnapshot().error).toBeNull()
+
+    finishEffect()
+    await settleUntil(() => ackSequences(socket).length === 2)
+    expect(effects).toEqual(['evt_1', 'evt_2'])
+    expect(ackSequences(socket)).toEqual(['1', '2'])
+    expect(store.saves.map(cursor => cursor.sequence)).toEqual(['1', '2'])
+    client.stop()
+  })
+
+  it('does not treat pongs from an obsolete socket as current liveness', async () => {
+    const runtime = new FakeRuntime()
+    const client = createGscdumpRealtimeV1Client({
+      runtime,
+      cursorStore: new MemoryCursorStore({ streamId: STREAM, sequence: '0' }),
+      ticketProvider: () => ticket(runtime, '0'),
+      applyEvent: async () => {},
+      resync: async () => {},
+    })
+    await client.start()
+    const first = runtime.sockets[0]!
+    first.open()
+    first.message(ready(runtime, '0'))
+    await settle()
+    const obsoleteMessage = first.onmessage!
+    first.serverClose(1012)
+    await runtime.advance(500)
+    const current = runtime.sockets[1]!
+    current.open()
+    current.message(ready(runtime, '0'))
+    await settle()
+    for (let index = 0; index < 2; index++) {
+      await runtime.advance(25_000)
+      obsoleteMessage({ data: 'pong' })
+    }
+    await runtime.advance(25_000)
+    expect(client.getSnapshot().error?.code).toBe('heartbeat_stale')
+    expect(current.closes).toHaveLength(1)
+    client.stop()
+  })
+
   it('enforces terminal and retrying close policy, including framed Retry-After', async () => {
     const terminalRuntime = new FakeRuntime()
     const terminalClient = createGscdumpRealtimeV1Client({
