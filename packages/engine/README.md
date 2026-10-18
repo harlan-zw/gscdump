@@ -21,8 +21,8 @@ The CLI installs this peer. Browser consumers use `@gscdump/engine-duckdb-wasm`.
 The package includes `hyparquet` and `hyparquet-writer` for JavaScript Parquet encoding and decoding.
 
 The `/hyparquet` encoders accept optional `fileMetadata: Record<string, string>`:
-pass it as the third argument to `encodeRowsToParquet`, or in the options for
-`encodeRowsToParquetFlex`. Metadata is stored in the file footer, not as fact
+use `encodeRowsToParquet(table, rows, { fileMetadata })`, or include it in the
+options for `encodeRowsToParquetFlex`. Metadata is stored in the file footer, not as fact
 columns, including for empty files. Keys are sorted for deterministic encoding;
 omitting metadata or passing an empty object preserves the existing bytes.
 A publication coordinator can supply a unique identifier so identical rows from
