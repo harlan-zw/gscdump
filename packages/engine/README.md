@@ -86,6 +86,30 @@ still allocate in full. These options do not bound decompressed page sizes or
 the total heap; the unchanged fallback also retains its existing memory costs.
 Buffered decoders, encoders and all omitted-option behavior remain unchanged.
 
+The range reader can also opt into `limits.maxReadAndDecompressBytes`. This is a
+**cumulative buffer-work budget for each physical group**, shared across all its
+indexed windows and concurrent column reads. It charges requested source-range
+bytes before dispatch and SNAPPY output bytes before allocating the fixed-size
+output buffer. Cache hits do not allocate another range, while repeated
+decompression still consumes budget. Group indexes are included; the initial
+footer has its separate metadata limit. Raw/uncompressed pages and V2 levels
+are covered by the range charge, so compressed data is deliberately counted
+twice. Earlier charges are never refunded, including after a failed read. Failure
+or iterator return closes the budget, preventing new work and rejecting late
+range results. It cannot physically cancel already dispatched reads: the range
+source interface has no cancellation hook.
+
+ZSTD decompression refuses under this option: the current allocating decoder
+can allocate from its frame header before checking the Parquet output size.
+Without the option, ZSTD and all existing decoding behavior remain unchanged.
+The budget does not measure JavaScript strings, expanded values, row containers,
+internal prefetch or dictionary/page stitching copies, codec working state or
+caller-retained batches. It is
+not a total heap bound or protection against all malformed Parquet contents.
+It can reject valid files that previously decoded, particularly old files whose
+writer understated uncompressed footer sizes. Callers must preserve those files
+and choose their own explicit retry/repair policy; refusal is never empty data.
+
 Both APIs have configurable admission limits. The encoder bounds producer
 batch rows/value bytes, output group rows/value bytes, retained descriptor counts
 and scalar bytes (including statistics), and the current encoded group/footer
