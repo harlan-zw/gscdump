@@ -28,8 +28,8 @@ import type {
   WriteResult,
 } from '../storage'
 import { decompress as decompressZstd } from 'fzstd'
-import { parquetMetadataAsync, parquetReadObjects, parquetSchema } from 'hyparquet'
-import { ByteWriter, parquetWriteRows } from 'hyparquet-writer'
+import { parquetMetadata, parquetMetadataAsync, parquetReadObjects, parquetSchema } from 'hyparquet'
+import { ByteWriter, ParquetWriter, parquetWriteRows } from 'hyparquet-writer'
 import { SCHEMAS, TABLE_METADATA } from '../schema'
 
 // 25k rows/group keeps a typical day file in 2-10 row groups so DuckDB's
@@ -342,6 +342,194 @@ export function encodeRowsToParquetFlex(rows: readonly Row[], opts: EncodeFlexOp
   return encodeOrderedRows(sorted, columns, rowGroupSize, opts.fileMetadata)
 }
 
+export interface EncodeParquetBatchesOptions extends EncodeParquetOptions {
+  /** Output schema and column order. Input rows must already be ordered/deduplicated. */
+  columns: readonly ColumnDef[]
+  /** Maximum rows per output group. Default 25000, matching the array codec. */
+  rowGroupSize?: number
+  limits?: {
+    /** Refuse a producer batch with more rows. Default 25000. */
+    maxBatchRows?: number
+    /** Conservative scalar-value bytes per producer batch. Default 8 MiB. */
+    maxBatchBytes?: number
+    /** Split groups at this conservative scalar-value budget. Default 2 MiB. */
+    maxRowGroupBytes?: number
+    /** Bound retained footer/index descriptors. Default 4096. */
+    maxRowGroups?: number
+    /** Bound retained descriptor/scalar bytes, including statistics. Default 8 MiB. */
+    maxRetainedMetadataBytes?: number
+    /** Bound the current encoded group or footer buffer. Default 8 MiB. */
+    maxOutputBufferBytes?: number
+  }
+}
+
+function streamLimit(value: number | undefined, fallback: number, name: string): number {
+  const limit = value ?? fallback
+  if (!Number.isSafeInteger(limit) || limit <= 0)
+    throw new RangeError(`parquet stream ${name} must be a positive safe integer`)
+  return limit
+}
+
+// Three bytes per UTF-16 code unit bounds UTF-8 without another encoded copy.
+// This measures scalar payload only, NOT V8 object/array or codec heap usage.
+function scalarBytes(value: unknown): number {
+  return typeof value === 'string' ? value.length * 3 + 8 : 16
+}
+
+// Count each newly retained public descriptor once, including untruncated
+// statistic strings. This is a conservative admission metric, not heap size.
+function retainedDescriptorBytes(value: unknown, remaining: number): number {
+  const seen = new Set<object>()
+  let bytes = 0
+  const visit = (value: unknown): void => {
+    if (value !== null && typeof value === 'object') {
+      if (seen.has(value))
+        return
+      seen.add(value)
+      bytes += 64
+      if (ArrayBuffer.isView(value) || value instanceof ArrayBuffer) {
+        bytes += value.byteLength
+      }
+      else {
+        for (const key in value) {
+          if (Object.hasOwn(value, key)) {
+            bytes += scalarBytes(key)
+            visit((value as Record<string, unknown>)[key])
+          }
+        }
+      }
+    }
+    else {
+      bytes += scalarBytes(value)
+    }
+    if (bytes > remaining)
+      throw new RangeError('parquet stream exceeds maxRetainedMetadataBytes')
+  }
+  visit(value)
+  return bytes
+}
+
+/**
+ * Encode ordered batches into ONE Parquet file with sequential backpressure.
+ * Group boundaries depend on rows/options, never producer batch boundaries.
+ * `write` borrows its bytes only until its returned promise settles; copy them
+ * if retaining them. This function does not close/commit a destination. On ANY
+ * rejection the caller must abort/discard the entire partial output, including
+ * after a footer callback failure. It performs no sorting, dedupe or retries.
+ * Memory includes one input batch, one group, and bounded footer descriptors.
+ */
+export async function encodeParquetRowBatches(
+  batches: AsyncIterable<readonly Row[]> | Iterable<readonly Row[]>,
+  opts: EncodeParquetBatchesOptions,
+  write: (chunk: Uint8Array) => Promise<void>,
+): Promise<WriteResult> {
+  const rowGroupSize = streamLimit(opts.rowGroupSize, ROW_GROUP_SIZE, 'rowGroupSize')
+  const maxBatchRows = streamLimit(opts.limits?.maxBatchRows, ROW_GROUP_SIZE, 'maxBatchRows')
+  const maxBatchBytes = streamLimit(opts.limits?.maxBatchBytes, 8 * 1024 * 1024, 'maxBatchBytes')
+  const maxRowGroupBytes = streamLimit(opts.limits?.maxRowGroupBytes, 2 * 1024 * 1024, 'maxRowGroupBytes')
+  const maxRowGroups = streamLimit(opts.limits?.maxRowGroups, 4096, 'maxRowGroups')
+  const maxRetainedMetadataBytes = streamLimit(opts.limits?.maxRetainedMetadataBytes, 8 * 1024 * 1024, 'maxRetainedMetadataBytes')
+  const maxOutputBufferBytes = streamLimit(opts.limits?.maxOutputBufferBytes, 8 * 1024 * 1024, 'maxOutputBufferBytes')
+  if (opts.columns.length === 0 || opts.columns.length > 64 || new Set(opts.columns.map(col => col.name)).size !== opts.columns.length)
+    throw new RangeError('parquet stream requires 1 to 64 uniquely named columns')
+  const codecs = opts.columns.map(col => ({ name: col.name, isDate: col.type === 'DATE', type: basicTypeFor(col.type), nullable: col.nullable }))
+  const schema = buildWriteSchema(opts.columns)
+  const metadataKeys = Object.keys(opts.fileMetadata ?? {}).sort()
+  let metadataBytes = 0
+  for (const key of metadataKeys) {
+    metadataBytes += scalarBytes(key) + scalarBytes(opts.fileMetadata![key])
+    if (metadataBytes > maxOutputBufferBytes)
+      throw new RangeError('parquet stream file metadata exceeds maxOutputBufferBytes')
+  }
+  let retainedMetadataBytes = retainedDescriptorBytes([schema, opts.fileMetadata], maxRetainedMetadataBytes)
+  const writer = new ByteWriter(Math.min(64 * 1024, maxOutputBufferBytes))
+  // ByteWriter's documented offset is global; index is the current buffer.
+  // No whole-file buffer is retained. Encoding is synchronous within a group,
+  // and the public ParquetWriter awaits flush before encoding another group.
+  writer.ensure = (size) => {
+    const required = writer.index + size
+    if (required > maxOutputBufferBytes)
+      throw new RangeError('parquet stream encoded group/footer exceeds maxOutputBufferBytes')
+    if (required > writer.buffer.byteLength) {
+      const next = new ArrayBuffer(Math.min(maxOutputBufferBytes, Math.max(required, writer.buffer.byteLength * 2)))
+      new Uint8Array(next).set(new Uint8Array(writer.buffer, 0, writer.index))
+      writer.buffer = next
+      writer.view = new DataView(next)
+    }
+  }
+  const flush = async (): Promise<void> => {
+    if (writer.index > 0)
+      await write(new Uint8Array(writer.buffer, 0, writer.index))
+    writer.index = 0
+  }
+  const output = Object.assign(writer, { flush, finish: flush })
+  const parquet = new ParquetWriter({
+    writer: output,
+    schema,
+    kvMetadata: metadataKeys.length ? metadataKeys.map(key => ({ key, value: opts.fileMetadata![key]! })) : undefined,
+  })
+  let values: unknown[][] = codecs.map(() => [])
+  let groupRows = 0
+  let groupBytes = 0
+  let groups = 0
+  let rowCount = 0
+  const flushGroup = async (): Promise<void> => {
+    if (!groupRows)
+      return
+    if (++groups > maxRowGroups)
+      throw new RangeError('parquet stream exceeds maxRowGroups')
+    const firstIndex = parquet.pendingIndexes.length
+    await parquet.write({
+      columnData: codecs.map((col, index) => ({ name: col.name, nullable: col.nullable, columnIndex: true, data: values[index]! })),
+      rowGroupSize: groupRows,
+    })
+    retainedMetadataBytes += retainedDescriptorBytes(
+      [parquet.row_groups[parquet.row_groups.length - 1], parquet.pendingIndexes.slice(firstIndex)],
+      maxRetainedMetadataBytes - retainedMetadataBytes,
+    )
+    values = codecs.map(() => [])
+    groupRows = 0
+    groupBytes = 0
+  }
+  try {
+    for await (const batch of batches) {
+      if (batch.length > maxBatchRows)
+        throw new RangeError('parquet stream exceeds maxBatchRows')
+      let batchBytes = 0
+      for (const row of batch) {
+        const converted = codecs.map(col => col.isDate ? toEpochDays(row[col.name]) : coerceValue(row[col.name], col.type))
+        const bytes = converted.reduce<number>((sum, value) => sum + scalarBytes(value), 0)
+        batchBytes += bytes
+        if (batchBytes > maxBatchBytes)
+          throw new RangeError('parquet stream exceeds maxBatchBytes')
+        if (bytes > maxRowGroupBytes)
+          throw new RangeError('parquet stream single row exceeds maxRowGroupBytes')
+        if (groupRows && (groupRows >= rowGroupSize || groupBytes + bytes > maxRowGroupBytes))
+          await flushGroup()
+        for (let index = 0; index < converted.length; index++)
+          values[index]!.push(converted[index])
+        groupRows++
+        groupBytes += bytes
+        rowCount++
+        if (groupRows === rowGroupSize)
+          await flushGroup()
+      }
+    }
+    await flushGroup()
+    await parquet.finish()
+    return { bytes: writer.offset, rowCount }
+  }
+  finally {
+    // Do not keep a rejected operation's group/footer alive via an error stack.
+    values = []
+    parquet.row_groups.length = 0
+    parquet.pendingIndexes.length = 0
+    writer.buffer = new ArrayBuffer(0)
+    writer.view = new DataView(writer.buffer)
+    writer.index = 0
+  }
+}
+
 // Adapt a Uint8Array to hyparquet's `AsyncBuffer` WITHOUT an upfront full-file
 // copy. hyparquet only ever reads the footer + the column chunks it needs, so
 // slicing lazily from the underlying ArrayBuffer (offset-corrected) copies just
@@ -409,6 +597,89 @@ async function* decodeParquetGroups(
     return
   const file = asyncBufferFromBytes(bytes)
   const metadata = await parquetMetadataAsync(file)
+  yield* decodeGroupsFromMetadata(file, metadata, opts)
+}
+
+/** A caller-owned, immutable/pinned object; ranges must return exactly the requested bytes. */
+export interface ParquetRangeSource {
+  byteLength: number
+  slice: (start: number, end?: number) => ArrayBuffer | Promise<ArrayBuffer>
+}
+
+export interface DecodeParquetGroupsOptions extends DecodeParquetOptions {
+  limits?: {
+    /** Footer bytes before deserialization. Default 1 MiB. */
+    maxMetadataBytes?: number
+    /** Includes the existing encoder's 25000-row groups. Default 25000. */
+    maxRowGroupRows?: number
+    /** Declared uncompressed bytes across all columns in one group. Default 16 MiB. */
+    maxRowGroupBytes?: number
+    /** Bound metadata descriptors. Default 4096. */
+    maxRowGroups?: number
+    /** Maximum individual range request. Default 16 MiB. */
+    maxReadBytes?: number
+  }
+}
+
+/**
+ * Pull one physical group at a time without downloading the complete object.
+ * The limits are admission bounds over Parquet metadata, not a memory-safety
+ * guarantee for malicious files or caller-retained batches. No cross-group
+ * read-ahead is started. Missing/corrupt/range-error input throws; it is not empty.
+ */
+export async function* decodeParquetRowGroups(file: ParquetRangeSource, opts: DecodeParquetGroupsOptions = {}): AsyncGenerator<Row[]> {
+  const maxMetadataBytes = streamLimit(opts.limits?.maxMetadataBytes, 1024 * 1024, 'maxMetadataBytes')
+  const maxRowGroupRows = streamLimit(opts.limits?.maxRowGroupRows, ROW_GROUP_SIZE, 'maxRowGroupRows')
+  const maxRowGroupBytes = streamLimit(opts.limits?.maxRowGroupBytes, 16 * 1024 * 1024, 'maxRowGroupBytes')
+  const maxRowGroups = streamLimit(opts.limits?.maxRowGroups, 4096, 'maxRowGroups')
+  const maxReadBytes = streamLimit(opts.limits?.maxReadBytes, 16 * 1024 * 1024, 'maxReadBytes')
+  if (!Number.isSafeInteger(file.byteLength) || file.byteLength < 12)
+    throw new RangeError('parquet stream requires a valid file length')
+  const bounded: AsyncBuffer = {
+    byteLength: file.byteLength,
+    async slice(start, end = file.byteLength) {
+      if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end < start || end > file.byteLength || end - start > maxReadBytes)
+        throw new RangeError('parquet stream range exceeds maxReadBytes or file bounds')
+      const bytes = await file.slice(start, end)
+      if (bytes.byteLength !== end - start)
+        throw new Error('parquet stream returned an incomplete range')
+      return bytes
+    },
+  }
+  const trailer = new DataView(await bounded.slice(file.byteLength - 8, file.byteLength))
+  if (trailer.getUint32(4, true) !== 0x31524150)
+    throw new Error('parquet stream invalid footer')
+  const metadataBytes = trailer.getUint32(0, true)
+  if (metadataBytes > maxMetadataBytes || metadataBytes + 12 > file.byteLength)
+    throw new RangeError('parquet stream footer exceeds maxMetadataBytes or file bounds')
+  const metadata = parquetMetadata(await bounded.slice(file.byteLength - metadataBytes - 8, file.byteLength))
+  if (metadata.row_groups.length > maxRowGroups || metadata.schema.length > 65)
+    throw new RangeError('parquet stream exceeds row-group/schema descriptor limits')
+  let totalRows = 0
+  for (const group of metadata.row_groups) {
+    if (group.columns.length > 64)
+      throw new RangeError('parquet stream exceeds column descriptor limits')
+    const rows = Number(group.num_rows)
+    if (group.columns.some(col => [col.meta_data?.total_uncompressed_size, col.meta_data?.total_compressed_size]
+      .some(size => !Number.isSafeInteger(Number(size)) || Number(size) < 0))) {
+      throw new RangeError('parquet stream invalid declared group bytes')
+    }
+    const uncompressed = group.columns.reduce((sum, col) => sum + Number(col.meta_data?.total_uncompressed_size ?? NaN), 0)
+    const compressed = group.columns.reduce((sum, col) => sum + Number(col.meta_data?.total_compressed_size ?? NaN), 0)
+    if (!Number.isSafeInteger(rows) || rows < 0 || rows > maxRowGroupRows)
+      throw new RangeError('parquet stream exceeds maxRowGroupRows')
+    if (!Number.isSafeInteger(uncompressed) || uncompressed < 0 || uncompressed > maxRowGroupBytes
+      || !Number.isSafeInteger(compressed) || compressed < 0 || compressed > maxRowGroupBytes) {
+      throw new RangeError('parquet stream declared group bytes exceed maxRowGroupBytes')
+    }
+    totalRows += rows
+  }
+  if (!Number.isSafeInteger(totalRows) || BigInt(totalRows) !== metadata.num_rows)
+    throw new Error('parquet stream row-count metadata mismatch')
+  yield* decodeGroupsFromMetadata(bounded, metadata, opts)
+}
+
+async function* decodeGroupsFromMetadata(file: AsyncBuffer, metadata: Awaited<ReturnType<typeof parquetMetadataAsync>>, opts: DecodeParquetOptions): AsyncGenerator<Row[]> {
   const tree = parquetSchema(metadata)
   // Columns the reader can decode into `Date` values. This adapter passes no
   // custom parsers, so the set is closed: DATE and TIMESTAMP logical types
