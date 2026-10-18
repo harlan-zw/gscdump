@@ -258,6 +258,7 @@ function encodeOrderedRows(
   rows: readonly Row[],
   columns: readonly ColumnDef[],
   rowGroupSize: number,
+  fileMetadata?: Readonly<Record<string, string>>,
 ): Uint8Array {
   // An explicit schema drives encoding (the writer looks each column up by name
   // in it), so DATE can be expressed as INT32 + converted_type DATE — something
@@ -290,18 +291,27 @@ function encodeOrderedRows(
     }
   }
   const writer = new ByteWriter()
+  const metadataKeys = Object.keys(fileMetadata ?? {}).sort()
+  const kvMetadata = metadataKeys.length > 0
+    ? metadataKeys.map(key => ({ key, value: fileMetadata![key]! }))
+    : undefined
   // ByteWriter is fully synchronous, so this returns void (no promise to await).
-  parquetWriteRows({ writer, rows: coercedRows(), columns: columnSpecs, schema, rowGroupSize })
+  parquetWriteRows({ writer, rows: coercedRows(), columns: columnSpecs, schema, rowGroupSize, kvMetadata })
   return new Uint8Array(writer.getBuffer())
 }
 
-export function encodeRowsToParquet(table: TableName, rows: readonly Row[]): Uint8Array {
-  const schema = SCHEMAS[table]
-  const sorted = sortRowsByClusterKey(table, rows)
-  return encodeOrderedRows(sorted, schema.columns, ROW_GROUP_SIZE)
+export interface EncodeParquetOptions {
+  /** File footer metadata, without adding fact columns. Keys are encoded in sorted order. */
+  fileMetadata?: Readonly<Record<string, string>>
 }
 
-export interface EncodeFlexOptions {
+export function encodeRowsToParquet(table: TableName, rows: readonly Row[], opts: EncodeParquetOptions = {}): Uint8Array {
+  const schema = SCHEMAS[table]
+  const sorted = sortRowsByClusterKey(table, rows)
+  return encodeOrderedRows(sorted, schema.columns, ROW_GROUP_SIZE, opts.fileMetadata)
+}
+
+export interface EncodeFlexOptions extends EncodeParquetOptions {
   /** Columns defining the output schema + order. */
   columns: readonly ColumnDef[]
   /** Sort key columns (subset of `columns` by name). Empty = preserve input order. */
@@ -329,7 +339,7 @@ export function encodeRowsToParquetFlex(rows: readonly Row[], opts: EncodeFlexOp
         }
         return 0
       })
-  return encodeOrderedRows(sorted, columns, rowGroupSize)
+  return encodeOrderedRows(sorted, columns, rowGroupSize, opts.fileMetadata)
 }
 
 // Adapt a Uint8Array to hyparquet's `AsyncBuffer` WITHOUT an upfront full-file
