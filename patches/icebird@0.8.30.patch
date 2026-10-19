@@ -1,3 +1,405 @@
+diff --git a/src/avro/avro.budget.js b/src/avro/avro.budget.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..c45cb863e7eb1274e02f3a80a4b92b0d9356f23f
+--- /dev/null
++++ b/src/avro/avro.budget.js
+@@ -0,0 +1,70 @@
++// Private, per-manifest-walk admission. No default policy and no global state.
++const fields = ['maxObjectBytes', 'maxTotalObjectBytes', 'maxManifests', 'maxEntries',
++  'maxInflatedBlockBytes', 'maxTotalInflatedBytes', 'maxValueBytes',
++  'maxDecodedValues', 'maxHeaderBytes', 'maxSchemaDepth']
++
++export function createAvroBudget(options) {
++  if (options === undefined) return undefined
++  if (!options || typeof options !== 'object' || Array.isArray(options)) throw new TypeError('Invalid manifest read limits')
++  const limits = {}
++  for (const key of Object.keys(options)) if (!fields.includes(key)) throw new TypeError(`Unknown manifest read limit: ${key}`)
++  for (const key of fields) {
++    const value = options[key]
++    if (!Number.isSafeInteger(value) || value <= 0) throw new RangeError(`Invalid manifest read limit: ${key}`)
++    limits[key] = value
++  }
++  if (limits.maxSchemaDepth > 128) throw new RangeError('Manifest schema depth must not exceed 128')
++  Object.freeze(limits)
++  const used = { objectBytes: 0, inflatedBytes: 0, manifests: 0, entries: 0, values: 0 }
++  let failed = false, failure
++  const check = () => { if (failed) throw failure }
++  const fail = error => { if (!failed) { failed = true; failure = error }; throw failure }
++  const bound = (value, max, label) => {
++    check()
++    if (!Number.isSafeInteger(value) || value < 0 || value > max) fail(new RangeError(`Manifest read limit exceeded: ${label}`))
++  }
++  const charge = (key, value, max) => { bound(value, max - used[key], key); used[key] += value }
++  return Object.freeze({
++    limits, check, fail, bound,
++    object(bytes) { bound(bytes, limits.maxObjectBytes, 'objectBytes'); charge('objectBytes', bytes, limits.maxTotalObjectBytes) },
++    records(count, kind) { charge(kind, count, kind === 'manifests' ? limits.maxManifests : limits.maxEntries) },
++    values(count) { charge('values', count, limits.maxDecodedValues) },
++    availableValues(count) { bound(count, limits.maxDecodedValues - used.values, 'values') },
++    inflateLimit() { check(); return Math.min(limits.maxInflatedBlockBytes, limits.maxTotalInflatedBytes - used.inflatedBytes) },
++    inflated(bytes) { bound(bytes, limits.maxInflatedBlockBytes, 'inflatedBlockBytes'); charge('inflatedBytes', bytes, limits.maxTotalInflatedBytes) },
++    schema(value) {
++      // Validate before recursively compiling. JSON itself was byte-bounded
++      // before JSON.parse; this is not a claim about the JSON parser's heap.
++      const stack = [{ value, depth: 0 }]
++      while (stack.length) {
++        const next = stack.pop()
++        bound(next.depth, limits.maxSchemaDepth, 'schemaDepth')
++        charge('values', 1, limits.maxDecodedValues)
++        if (next.value && typeof next.value === 'object') {
++          const keys = Object.keys(next.value)
++          bound(stack.length + keys.length, limits.maxDecodedValues - used.values, 'schemaValues')
++          for (const key of keys) stack.push({ value: next.value[key], depth: next.depth + 1 })
++        }
++      }
++    },
++  })
++}
++
++export function boundedBytes(reader, length, max) {
++  const budget = reader.budget
++  budget?.bound(length, max ?? budget.limits.maxValueBytes, 'valueBytes')
++  budget?.bound(reader.offset + length, reader.headerEnd ?? reader.view.byteLength, 'encodedBytes')
++  return new Uint8Array(reader.view.buffer, reader.view.byteOffset + reader.offset, length)
++}
++
++export function boundedLong(reader) {
++  let value = 0n
++  for (let shift = 0; shift < 70; shift += 7) {
++    reader.budget.bound(reader.offset + 1, reader.headerEnd ?? reader.view.byteLength, 'varintBytes')
++    const byte = reader.view.getUint8(reader.offset++)
++    if (shift === 63 && byte > 1) reader.budget.fail(new RangeError('Invalid Avro long'))
++    value |= BigInt(byte & 127) << BigInt(shift)
++    if (!(byte & 128)) return (value >> 1n) ^ -(value & 1n)
++  }
++  return reader.budget.fail(new RangeError('Invalid Avro long'))
++}
+diff --git a/src/avro/avro.metadata.js b/src/avro/avro.metadata.js
+index f700c135dffe2de32d9d8627add682182729edd3..e035b36121a4e15a4c7bccbcbac144c70419f80c 100644
+--- a/src/avro/avro.metadata.js
++++ b/src/avro/avro.metadata.js
+@@ -1,3 +1,5 @@
++import { boundedBytes, boundedLong } from './avro.budget.js'
++
+ const smallLongs = Array.from({ length: 128 }, (_, i) => BigInt(i >>> 1 ^ -(i & 1)))
+
+ /**
+@@ -5,6 +7,11 @@ const smallLongs = Array.from({ length: 128 }, (_, i) => BigInt(i >>> 1 ^ -(i &
+  * @returns {number} value
+  */
+ export function readZigZag(reader) {
++  if (reader.budget) {
++    const value = Number(boundedLong(reader))
++    if (!Number.isSafeInteger(value)) reader.budget.fail(new RangeError('Avro integer exceeds safe range'))
++    return value
++  }
+   let result = 0
+   let shift = 0
+   while (true) {
+@@ -23,6 +30,7 @@ export function readZigZag(reader) {
+  * @returns {bigint} value
+  */
+ export function readZigZagBigInt(reader) {
++  if (reader.budget) return boundedLong(reader)
+   // Decode the first four bytes without BigInt arithmetic.
+   const first = reader.view.getUint8(reader.offset++)
+   if (first < 128) return smallLongs[first]
+@@ -47,6 +55,21 @@ export function readZigZagBigInt(reader) {
+   }
+ }
+
++// A negative array/map count carries the encoded byte size of that block.
++// Default readers retain their historical behavior; bounded readers verify it.
++export function readBlockEnd(reader) {
++  const size = readZigZag(reader)
++  if (!reader.budget) return undefined
++  reader.budget.bound(size, reader.view.byteLength, 'containerBlockBytes')
++  const end = reader.offset + size
++  reader.budget.bound(end, reader.headerEnd ?? reader.view.byteLength, 'containerBlockEnd')
++  return end
++}
++
++export function checkBlockEnd(reader, end) {
++  if (end !== undefined && reader.offset !== end) reader.budget.fail(new RangeError('Avro container block length mismatch'))
++}
++
+ /**
+  * Read an Avro string from the DataReader
+  *
+@@ -56,7 +79,8 @@ export function readZigZagBigInt(reader) {
+  */
+ function readAvroString(reader) {
+   const length = readZigZag(reader)
+-  const bytes = new Uint8Array(reader.view.buffer, reader.view.byteOffset + reader.offset, length)
++  const bytes = boundedBytes(reader, length)
++  reader.budget?.values(1)
+   reader.offset += length
+   return new TextDecoder().decode(bytes)
+ }
+@@ -68,6 +92,8 @@ function readAvroString(reader) {
+  * @returns {{ metadata: Record<string, any>, syncMarker: Uint8Array }}
+  */
+ export function avroMetadata(reader) {
++  if (reader.budget) reader.headerEnd = Math.min(reader.view.byteLength, reader.offset + reader.budget.limits.maxHeaderBytes)
++  reader.budget?.bound(reader.offset + 4, reader.headerEnd, 'headerBytes')
+   // Check avro magic bytes "Obj\x01"
+   if (reader.view.getUint32(reader.offset) !== 0x4f626a01) {
+     throw new Error('avro invalid magic bytes')
+@@ -79,31 +105,38 @@ export function avroMetadata(reader) {
+   const metadata = {}
+   let mapCount = readZigZag(reader)
+   while (mapCount !== 0) {
++    let end
+     if (mapCount < 0) {
+       // Negative count signals a block with a byte count that we skip over
+       mapCount = -mapCount
+-      readZigZag(reader) // block byte count
++      end = readBlockEnd(reader)
+     }
++    reader.budget?.availableValues(mapCount * 2)
+     for (let i = 0; i < mapCount; i++) {
+       const key = readAvroString(reader)
+       const value = readAvroString(reader)
+       metadata[key] = value
+     }
++    checkBlockEnd(reader, end)
+     mapCount = readZigZag(reader)
+   }
+
+   // Parse avro-specific metadata
+   metadata['avro.schema'] = JSON.parse(metadata['avro.schema'])
++  reader.budget?.schema(metadata['avro.schema'])
+   if (metadata['schema']) {
+     metadata['schema'] = JSON.parse(metadata['schema'])
++    reader.budget?.schema(metadata['schema'])
+   }
+   if (metadata['iceberg.schema']) {
+     metadata['iceberg.schema'] = JSON.parse(metadata['iceberg.schema'])
++    reader.budget?.schema(metadata['iceberg.schema'])
+   }
+
+   // Read 16-byte sync marker
+-  const syncMarker = new Uint8Array(reader.view.buffer, reader.view.byteOffset + reader.offset, 16)
++  const syncMarker = boundedBytes(reader, 16, reader.budget?.limits.maxHeaderBytes)
+   reader.offset += 16
++  delete reader.headerEnd
+
+   return { metadata, syncMarker }
+ }
+diff --git a/src/avro/avro.read.js b/src/avro/avro.read.js
+index fe0b876cf69e9e2227bedcad6535ba311310b7c9..35ba514c4f802ba74c5e4f97c9691a82dcf779ed 100644
+--- a/src/avro/avro.read.js
++++ b/src/avro/avro.read.js
+@@ -1,5 +1,6 @@
++import { boundedBytes } from './avro.budget.js'
+ import { gunzip } from 'hyparquet-compressors'
+-import { readZigZag, readZigZagBigInt } from './avro.metadata.js'
++import { checkBlockEnd, readBlockEnd, readZigZag, readZigZagBigInt } from './avro.metadata.js'
+ import { parseDecimal } from 'hyparquet/src/convert.js'
+
+ const textDecoder = new TextDecoder()
+@@ -14,23 +15,27 @@ const textDecoder = new TextDecoder()
+  * @param {Uint8Array} options.syncMarker
+  * @returns {Record<string, any>[]}
+  */
+-export function avroRead({ reader, metadata, syncMarker }) {
+-  const decode = compileType(metadata['avro.schema'])
++export function avroRead({ reader, metadata, syncMarker, recordKind = 'entries' }) {
++  const budget = reader.budget
++  const decode = compileType(metadata['avro.schema'], budget)
+   const blocks = []
+   while (reader.offset < reader.view.byteLength) {
+     let recordCount = readZigZag(reader)
+     // A record count of 0 signals the end of blocks
++    if (budget && recordCount <= 0) budget.fail(new RangeError('Invalid Avro record count'))
+     if (recordCount === 0) break
+     if (recordCount < 0) {
+       // TODO: negative count is followed by block size for array / map
+       recordCount = -recordCount
+     }
++    budget?.records(recordCount, recordKind)
++    budget?.availableValues(recordCount)
+     const blockSize = readZigZag(reader)
+-    let data = new Uint8Array(reader.view.buffer, reader.view.byteOffset + reader.offset, blockSize)
++    let data = boundedBytes(reader, blockSize, budget?.limits.maxObjectBytes)
+     reader.offset += blockSize
+
+     // Read and verify sync marker for the block
+-    const blockSync = new Uint8Array(reader.view.buffer, reader.view.byteOffset + reader.offset, 16)
++    const blockSync = boundedBytes(reader, 16, 16)
+     reader.offset += 16
+     for (let i = 0; i < 16; i++) {
+       if (blockSync[i] !== syncMarker[i]) {
+@@ -41,14 +46,16 @@ export function avroRead({ reader, metadata, syncMarker }) {
+
+     // De-compress data
+     if (codec === 'deflate') {
+-      data = gunzip(data)
++      data = budget ? gunzip(data, undefined, 0, 0, { raw: true, maxOutputBytes: budget.inflateLimit() }) : gunzip(data)
+     } else if (codec !== 'null') {
+       throw new Error(`unsupported codec: ${codec}`)
+     }
+
++    budget?.inflated(data.byteLength)
+     const view = new DataView(data.buffer, data.byteOffset, data.byteLength)
+-    const dataReader = { view, offset: 0 }
++    const dataReader = { view, offset: 0, ...(budget ? { budget } : {}) }
+     for (let i = 0; i < recordCount; i++) blocks.push(decode(dataReader))
++    if (budget && dataReader.offset !== data.byteLength) budget.fail(new RangeError('Avro block length mismatch'))
+   }
+   return blocks
+ }
+@@ -61,10 +68,16 @@ export function avroRead({ reader, metadata, syncMarker }) {
+  * @returns {any}
+  */
+ function readType(reader, type) {
++  reader.budget?.values(1)
++  return readTypeValue(reader, type)
++}
++
++function readTypeValue(reader, type) {
+   if (type === 'null') {
+     return undefined
+   } else if (Array.isArray(type)) {
+     const unionIndex = readZigZag(reader)
++    reader.budget?.bound(unionIndex, type.length - 1, 'unionIndex')
+     return readType(reader, type[unionIndex])
+   } else if (typeof type === 'object' && type.type === 'record') {
+     // read recursively
+@@ -79,13 +92,16 @@ function readType(reader, type) {
+     while (true) {
+       let count = readZigZag(reader)
+       if (count === 0) break
++      let end
+       if (count < 0) {
+         count = -count
+-        readZigZag(reader) // block size
++        end = readBlockEnd(reader)
+       }
++      reader.budget?.availableValues(count)
+       for (let i = 0; i < count; i++) {
+         arr.push(readType(reader, type.items))
+       }
++      checkBlockEnd(reader, end)
+     }
+     return arr
+   } else if (typeof type === 'object' && type.type === 'map') {
+@@ -95,18 +111,23 @@ function readType(reader, type) {
+     while (true) {
+       let count = readZigZag(reader)
+       if (count === 0) break
++      let end
+       if (count < 0) {
+         count = -count
+-        readZigZag(reader) // block size in bytes
++        end = readBlockEnd(reader)
+       }
++      reader.budget?.availableValues(count)
+       for (let i = 0; i < count; i++) {
+         const key = readType(reader, 'string')
+         map[key] = readType(reader, type.values)
+       }
++      checkBlockEnd(reader, end)
+     }
+     return map
+   } else if (typeof type === 'object' && type.type === 'enum') {
+-    return type.symbols[readZigZag(reader)]
++    const index = readZigZag(reader)
++    reader.budget?.bound(index, type.symbols.length - 1, 'enumIndex')
++    return type.symbols[index]
+   } else if (typeof type === 'object' && 'logicalType' in type && type.logicalType) {
+     if (type.logicalType === 'date' && type.type === 'int') {
+       const value = readZigZag(reader)
+@@ -161,12 +182,12 @@ function readType(reader, type) {
+     return value
+   } else if (type === 'bytes') {
+     const length = readZigZag(reader)
+-    const bytes = new Uint8Array(reader.view.buffer, reader.view.byteOffset + reader.offset, length)
++    const bytes = boundedBytes(reader, length)
+     reader.offset += length
+     return bytes
+   } else if (type === 'string') {
+     const length = readZigZag(reader)
+-    const bytes = new Uint8Array(reader.view.buffer, reader.view.byteOffset + reader.offset, length)
++    const bytes = boundedBytes(reader, length)
+     const text = textDecoder.decode(bytes)
+     reader.offset += length
+     return text
+@@ -184,7 +205,7 @@ function readType(reader, type) {
+  * @returns {Uint8Array}
+  */
+ function readFixed(reader, size) {
+-  const bytes = new Uint8Array(reader.view.buffer, reader.view.byteOffset + reader.offset, size)
++  const bytes = boundedBytes(reader, size)
+   reader.offset += size
+   return bytes
+ }
+@@ -208,39 +229,51 @@ function bytesToUuid(bytes) {
+  * @param {AvroType} type
+  * @returns {(reader: DataReader) => any}
+  */
+-function compileType(type) {
++function compileType(type, budget) {
++  const decode = compileTypeValue(type, budget)
++  return budget ? reader => { budget.values(1); return decode(reader) } : decode
++}
++
++function compileTypeValue(type, budget) {
+   if (type === 'null') return () => undefined
+   if (type === 'int') return readZigZag
+   if (type === 'long') return readZigZagBigInt
+   if (type === 'string' || type === 'bytes') {
+     return reader => {
+       const length = readZigZag(reader)
+-      const bytes = new Uint8Array(reader.view.buffer, reader.view.byteOffset + reader.offset, length)
++      const bytes = boundedBytes(reader, length)
+       reader.offset += length
+       return type === 'string' ? textDecoder.decode(bytes) : bytes
+     }
+   }
+   if (Array.isArray(type)) {
+-    const readers = type.map(compileType)
+-    return reader => readers[readZigZag(reader)](reader)
++    const readers = type.map(item => compileType(item, budget))
++    return reader => {
++      const index = readZigZag(reader)
++      budget?.bound(index, readers.length - 1, 'unionIndex')
++      return readers[index](reader)
++    }
+   }
+   if (typeof type === 'object' && type.type === 'array') {
+-    const item = compileType(type.items)
++    const item = compileType(type.items, budget)
+     return reader => {
+       const arr = []
+       while (true) {
+         let count = readZigZag(reader)
+         if (count === 0) return arr
++        let end
+         if (count < 0) {
+           count = -count
+-          readZigZag(reader)
++          end = readBlockEnd(reader)
+         }
++        budget?.availableValues(count)
+         for (let i = 0; i < count; i++) arr.push(item(reader))
++        checkBlockEnd(reader, end)
+       }
+     }
+   }
+   if (typeof type === 'object' && type.type === 'record') {
+-    const fields = type.fields.map(field => ({ name: field.name, read: compileType(field.type) }))
++    const fields = type.fields.map(field => ({ name: field.name, read: compileType(field.type, budget) }))
+     // Avoid a field loop for the key/value records used by Iceberg maps.
+     if (fields.length === 2) {
+       const [{ name: firstName, read: firstRead }, { name: secondName, read: secondRead }] = fields
+@@ -259,5 +292,5 @@ function compileType(type) {
+       return obj
+     }
+   }
+-  return reader => readType(reader, type)
++  return reader => readTypeValue(reader, type)
+ }
 diff --git a/src/catalog/rest.js b/src/catalog/rest.js
 index 723451f34f95dab280ac699abdfd34c9703bba50..4bd3e8bf25f7da11a732b8493b89ae9e5606b6de 100644
 --- a/src/catalog/rest.js
@@ -37,7 +439,46 @@ index 723451f34f95dab280ac699abdfd34c9703bba50..4bd3e8bf25f7da11a732b8493b89ae9e
 +    body: stringifyIcebergJson({ source, destination }),
    })
  }
- 
+
+diff --git a/src/fetch.js b/src/fetch.js
+index e34733fe6a13818a27ca354549b967d8b8421c14..7bf36a27ba2e48c63348cc70f93f5f19f4eeff9c 100644
+--- a/src/fetch.js
++++ b/src/fetch.js
+@@ -413,7 +413,8 @@ async function decompressGzip(buf) {
+  * @param {number} [byteLength] - Optional file size hint for resolvers that otherwise need a HEAD request.
+  * @returns {Promise<Record<string, any>[]>} The decoded Avro records
+  */
+-export async function fetchAvroRecords(url, resolver, byteLength) {
++export async function fetchAvroRecords(url, resolver, byteLength, budget, recordKind) {
++  if (budget) return (await fetchBoundedAvroObject(url, resolver, byteLength, budget, recordKind)).records
+   const lengthHint = byteLength !== undefined && Number.isFinite(byteLength) ? byteLength : undefined
+   const ab = await resolver.reader(url, lengthHint)
+   const buffer = await ab.slice(0, ab.byteLength)
+@@ -421,3 +422,24 @@ export async function fetchAvroRecords(url, resolver, byteLength) {
+   const { metadata, syncMarker } = await avroMetadata(reader)
+   return await avroRead({ reader, metadata, syncMarker })
+ }
++
++// Parser-owned allocation boundary. Resolver construction/HEAD/other injected
++// transport allocations are outside this budget and must be bounded by callers.
++export async function fetchBoundedAvroObject(url, resolver, byteLength, budget, recordKind = 'entries') {
++  try {
++    budget.check()
++    if (byteLength !== undefined) budget.bound(byteLength, budget.limits.maxObjectBytes, 'lengthHint')
++    const ab = await resolver.reader(url, byteLength)
++    budget.check()
++    const length = ab.byteLength
++    budget.object(length)
++    if (byteLength !== undefined && byteLength !== length) throw new Error('Manifest object length changed')
++    const buffer = await ab.slice(0, length)
++    budget.check()
++    if (buffer.byteLength !== length) throw new Error('Manifest object range length changed')
++    const reader = { view: new DataView(buffer), offset: 0, budget }
++    const { metadata, syncMarker } = avroMetadata(reader)
++    const records = avroRead({ reader, metadata, syncMarker, recordKind })
++    return { metadata, records, byteLength: length }
++  } catch (error) { return budget.fail(error) }
++}
 diff --git a/src/index.js b/src/index.js
 index 2bac90d09cfa5a05243b3cf8d450df2f9e4f3c3a..a177d71fca3a3dc840b8fadfaa3ca3d7dfe8eac6 100644
 --- a/src/index.js
@@ -49,13 +490,16 @@ index 2bac90d09cfa5a05243b3cf8d450df2f9e4f3c3a..a177d71fca3a3dc840b8fadfaa3ca3d7
  export { fileCatalog } from './catalog/file.js'
  export { restCatalogConnect, restCatalogCreateNamespace, restCatalogDropNamespace, restCatalogListNamespaces, restCatalogListTables, restCatalogLoadCredentials, restCatalogLoadTable, restCatalogRegisterTable, restCatalogRenameTable } from './catalog/rest.js'
 diff --git a/src/manifest.js b/src/manifest.js
-index 873101728c62f83932cac785fb26625512c83e2b..15d7c8d830777a299a5cbc4b4b86515ca405c152 100644
+index 873101728c62f83932cac785fb26625512c83e2b..b6f2f63db8672ba06dd8b58d1943db3ae8fc2562 100644
 --- a/src/manifest.js
 +++ b/src/manifest.js
-@@ -2,6 +2,40 @@ import { avroMetadata } from './avro/avro.metadata.js'
+@@ -1,6 +1,41 @@
+ import { avroMetadata } from './avro/avro.metadata.js'
  import { avroRead } from './avro/avro.read.js'
- import { fetchAvroRecords, urlResolver } from './fetch.js'
- 
+-import { fetchAvroRecords, urlResolver } from './fetch.js'
++import { fetchAvroRecords, fetchBoundedAvroObject, urlResolver } from './fetch.js'
++import { createAvroBudget } from './avro/avro.budget.js'
++
 +// Cloudflare Workers cap subrequests per invocation, so manifest reads need bounded concurrency.
 +const MANIFEST_FETCH_CONCURRENCY = 8
 +
@@ -89,11 +533,10 @@ index 873101728c62f83932cac785fb26625512c83e2b..15d7c8d830777a299a5cbc4b4b86515c
 +  )
 +  return pending
 +}
-+
+
  /**
   * Returns manifest entries for a snapshot. Defaults to the current snapshot;
-  * pass `snapshotId` to time-travel to a prior snapshot in the metadata's
-@@ -9,13 +43,22 @@ import { fetchAvroRecords, urlResolver } from './fetch.js'
+@@ -9,13 +44,26 @@ import { fetchAvroRecords, urlResolver } from './fetch.js'
   *
   * @import {Resolver, TableMetadata, Manifest, ManifestEntry, Snapshot} from '../src/types.js'
   * @typedef {{ url: string, entries: ManifestEntry[] }[]} ManifestList
@@ -103,6 +546,7 @@ index 873101728c62f83932cac785fb26625512c83e2b..15d7c8d830777a299a5cbc4b4b86515c
   * @param {Resolver} [options.resolver]
   * @param {number | bigint} [options.snapshotId] - Optional snapshot id; defaults to `current-snapshot-id`.
 + * @param {ManifestReadCache} [options.manifestCache] - Caller-owned decoded read cache, scoped to one table snapshot.
++ * @param {import('../types/manifest.js').ManifestReadLimits} [options.readLimits] - Opt-in uncached source/decode-work limits, captured before reading.
 + * @param {ManifestPartitionFilter} [options.partitionFilter] - Optional predicate
 + *   applied to each manifest's manifest-list `partitions` field-summary array
 + *   BEFORE `fetchManifests` fans out. Return `false` to skip fetching that
@@ -113,24 +557,27 @@ index 873101728c62f83932cac785fb26625512c83e2b..15d7c8d830777a299a5cbc4b4b86515c
   * @returns {Promise<ManifestList>}
   */
 -export async function icebergManifests({ metadata, resolver, snapshotId }) {
-+export async function icebergManifests({ metadata, resolver, snapshotId, partitionFilter, manifestCache }) {
++export async function icebergManifests({ metadata, resolver, snapshotId, partitionFilter, manifestCache, readLimits }) {
++  const budget = createAvroBudget(readLimits)
++  if (budget && manifestCache !== undefined) throw new TypeError('Bounded manifest reads require an uncached walk')
++  const inlineEntries = budget ? new Map() : undefined
    resolver ??= urlResolver()
    const rawTarget = snapshotId ?? metadata['current-snapshot-id']
    if (rawTarget == null || rawTarget < 0) {
-@@ -37,15 +80,26 @@ export async function icebergManifests({ metadata, resolver, snapshotId }) {
+@@ -37,15 +85,26 @@ export async function icebergManifests({ metadata, resolver, snapshotId }) {
    if (snapshot['manifest-list']) {
      // Fetch manifest list and extract manifest URLs
      const manifestListUrl = snapshot['manifest-list']
 -    manifests = /** @type {Manifest[]} */ (await fetchAvroRecords(manifestListUrl, resolver))
-+    manifests = /** @type {Manifest[]} */ (await memoRead(manifestCache?.lists, manifestListUrl, () => fetchAvroRecords(manifestListUrl, resolver)))
++    manifests = /** @type {Manifest[]} */ (await memoRead(manifestCache?.lists, manifestListUrl, () => fetchAvroRecords(manifestListUrl, resolver, undefined, budget, 'manifests')))
    } else if (snapshot.manifests) {
      // v1 snapshots list manifests inline instead of pointing at a manifest list
 -    manifests = await resolveInlineManifests(snapshot, resolver)
-+    manifests = await memoRead(manifestCache?.lists, `inline:${targetId}`, () => resolveInlineManifests(snapshot, resolver))
++    manifests = await memoRead(manifestCache?.lists, `inline:${targetId}`, () => resolveInlineManifests(snapshot, resolver, budget, inlineEntries))
    } else {
      throw new Error('No manifest information found in snapshot')
    }
- 
+
 -  return await fetchManifests(manifests, resolver)
 +  if (partitionFilter) {
 +    manifests = manifests.filter((manifest) => {
@@ -143,27 +590,59 @@ index 873101728c62f83932cac785fb26625512c83e2b..15d7c8d830777a299a5cbc4b4b86515c
 +    })
 +  }
 +
-+  return await fetchManifests(manifests, resolver, manifestCache)
++  return await fetchManifests(manifests, resolver, manifestCache, budget, inlineEntries)
  }
- 
+
  /**
-@@ -61,7 +115,7 @@ export async function icebergManifests({ metadata, resolver, snapshotId }) {
+@@ -59,14 +118,24 @@ export async function icebergManifests({ metadata, resolver, snapshotId }) {
+  * @param {Resolver} resolver
+  * @returns {Promise<Manifest[]>}
   */
- export async function resolveInlineManifests(snapshot, resolver) {
+-export async function resolveInlineManifests(snapshot, resolver) {
++export async function resolveInlineManifests(snapshot, resolver, budget, inlineEntries) {
    const inline = snapshot.manifests ?? []
 -  return await Promise.all(inline.map(async manifestPath => {
+-    const ab = await resolver.reader(manifestPath)
+-    const buffer = await ab.slice(0, ab.byteLength)
+-    const reader = { view: new DataView(buffer), offset: 0 }
+-    const { metadata, syncMarker } = await avroMetadata(reader)
+-    const entries = /** @type {ManifestEntry[]} */ (await avroRead({ reader, metadata, syncMarker }))
++  budget?.records(inline.length, 'manifests')
 +  return await mapWithConcurrency(inline, async manifestPath => {
-     const ab = await resolver.reader(manifestPath)
-     const buffer = await ab.slice(0, ab.byteLength)
-     const reader = { view: new DataView(buffer), offset: 0 }
-@@ -86,54 +140,86 @@ export async function resolveInlineManifests(snapshot, resolver) {
++    budget?.check()
++    let metadata, entries, byteLength
++    if (budget) {
++      const object = await fetchBoundedAvroObject(manifestPath, resolver, undefined, budget)
++      metadata = object.metadata; entries = object.records; byteLength = object.byteLength
++      inlineEntries.set(manifestPath, entries)
++    } else {
++      const ab = await resolver.reader(manifestPath)
++      const buffer = await ab.slice(0, ab.byteLength)
++      const reader = { view: new DataView(buffer), offset: 0 }
++      const header = await avroMetadata(reader)
++      metadata = header.metadata; byteLength = ab.byteLength
++      entries = await avroRead({ reader, ...header })
++    }
+     const counts = [0, 0, 0]
+     const rows = [0n, 0n, 0n]
+     for (const entry of entries) {
+@@ -75,7 +144,7 @@ export async function resolveInlineManifests(snapshot, resolver) {
+     }
+     return {
+       manifest_path: manifestPath,
+-      manifest_length: BigInt(ab.byteLength),
++      manifest_length: BigInt(byteLength),
+       partition_spec_id: Number(metadata['partition-spec-id'] ?? 0),
+       content: 0,
+       added_snapshot_id: BigInt(snapshot['snapshot-id']),
+@@ -86,54 +155,93 @@ export async function resolveInlineManifests(snapshot, resolver) {
        existing_rows_count: rows[0],
        deleted_rows_count: rows[2],
      }
 -  }))
-+  })
++  }, budget)
  }
- 
+
  /**
 - * Fetch manifest entries from a list of manifests in parallel.
 + * Fetch one manifest's entries and apply inheritance.
@@ -186,10 +665,11 @@ index 873101728c62f83932cac785fb26625512c83e2b..15d7c8d830777a299a5cbc4b4b86515c
 -    for (const entry of entries) {
 -      entry.partition_spec_id = manifest.partition_spec_id ?? 0
 -      if (entry.snapshot_id == null) entry.snapshot_id = manifest.added_snapshot_id
-+async function fetchOneManifest(manifest, resolver) {
++async function fetchOneManifest(manifest, resolver, budget, inlineEntries) {
++  budget?.check()
 +  const url = manifest.manifest_path
 +  const entries = /** @type {ManifestEntry[]} */ (
-+    await fetchAvroRecords(url, resolver, Number(manifest.manifest_length))
++    inlineEntries?.get(url) ?? await fetchAvroRecords(url, resolver, Number(manifest.manifest_length), budget, 'entries')
 +  )
 +
 +  // Inherit sequence number from manifest if not present in entry
@@ -202,7 +682,7 @@ index 873101728c62f83932cac785fb26625512c83e2b..15d7c8d830777a299a5cbc4b4b86515c
 +      // sequence numbers for all files must default to 0.
 +      entry.sequence_number = manifest.sequence_number ?? 0n
 +    }
- 
+
 +    if (entry.status === 1) {
 +      // only ADDED can inherit sequence number
        if (entry.sequence_number === undefined) {
@@ -240,9 +720,7 @@ index 873101728c62f83932cac785fb26625512c83e2b..15d7c8d830777a299a5cbc4b4b86515c
 +
 +  return { url, entries }
 +}
- 
--    return { url, entries }
--  }))
++
 +/**
 + * Fetch manifest entries with bounded concurrency and stable result order.
 + *
@@ -250,10 +728,12 @@ index 873101728c62f83932cac785fb26625512c83e2b..15d7c8d830777a299a5cbc4b4b86515c
 + * @param {Resolver} resolver
 + * @returns {Promise<ManifestList>}
 + */
-+async function fetchManifests(manifests, resolver, manifestCache) {
-+  return await mapWithConcurrency(manifests, manifest => memoRead(manifestCache?.entries, manifest.manifest_path, () => fetchOneManifest(manifest, resolver), false))
++async function fetchManifests(manifests, resolver, manifestCache, budget, inlineEntries) {
++  return await mapWithConcurrency(manifests, manifest => memoRead(manifestCache?.entries, manifest.manifest_path, () => fetchOneManifest(manifest, resolver, budget, inlineEntries), false), budget)
 +}
-+
+
+-    return { url, entries }
+-  }))
 +/**
 + * Map manifest work with bounded concurrency and stable result order.
 + *
@@ -262,13 +742,19 @@ index 873101728c62f83932cac785fb26625512c83e2b..15d7c8d830777a299a5cbc4b4b86515c
 + * @param {(item: T) => Promise<U>} fn
 + * @returns {Promise<U[]>}
 + */
-+async function mapWithConcurrency(items, fn) {
++async function mapWithConcurrency(items, fn, budget) {
 +  const results = /** @type {U[]} */ (new Array(items.length))
 +  let next = 0
 +  async function worker() {
 +    while (next < items.length) {
-+      const index = next++
-+      results[index] = await fn(items[index])
++      try {
++        budget?.check()
++        const index = next++
++        results[index] = await fn(items[index])
++      } catch (error) {
++        if (budget) return budget.fail(error)
++        throw error
++      }
 +    }
 +  }
 +  const poolSize = Math.min(MANIFEST_FETCH_CONCURRENCY, items.length)
@@ -277,7 +763,7 @@ index 873101728c62f83932cac785fb26625512c83e2b..15d7c8d830777a299a5cbc4b4b86515c
 +  await Promise.all(workers)
 +  return results
  }
- 
+
  /**
 diff --git a/src/types.d.ts b/src/types.d.ts
 index 2d00f3dd0951a3da58a4dc2bf2243a60a287f55b..a15d3503e300afeb2c87fe925f2ae9b6c58e454f 100644
@@ -286,7 +772,7 @@ index 2d00f3dd0951a3da58a4dc2bf2243a60a287f55b..a15d3503e300afeb2c87fe925f2ae9b6
 @@ -177,7 +177,7 @@ interface PartitionStatistics {
    'file-size-in-bytes': bigint
  }
- 
+
 -interface SortOrder {
 +export interface SortOrder {
    'order-id': number
@@ -329,7 +815,7 @@ index 487ec24ba6d936de8459d6084ca15aaa3efbef54..032c6ead0992ae42e85be8c7ccff65e3
    })
 @@ -140,7 +142,7 @@ export async function prepareAppend({ tableUrl, metadata, records, resolver, sor
    )
- 
+
    return {
 -    snapshotId,
 +    snapshotId: appendSnapshotId,
@@ -360,7 +846,7 @@ index 487ec24ba6d936de8459d6084ca15aaa3efbef54..032c6ead0992ae42e85be8c7ccff65e3
 @@ -234,6 +241,91 @@ export async function stageSnapshotForAppend({ tableUrl, metadata, prepared, res
    })
  }
- 
+
 +/**
 + * Build one append snapshot from several independently prepared row batches.
 + * Each batch writes its parquet data and data manifest before this call, while
@@ -460,12 +946,12 @@ index 02ab344831083a390fda9a5038c33d0997ec72ef..d3989404f21c20a231917f7c0eb1a666
 -import { icebergStageAppend, icebergStageExpireSnapshots, icebergStageSetRef, icebergStageUpdateSchema, prepareAppend, stageSnapshotForAppend } from './stage.js'
 +import { icebergStageAppend, icebergStageExpireSnapshots, icebergStageSetRef, icebergStageUpdateSchema, prepareAppend, stageSnapshotForAppend, stageSnapshotForAppendBatches } from './stage.js'
  import { icebergStageRewrite } from './rewrite.js'
- 
+
  /**
 @@ -20,6 +20,27 @@ const DEFAULT_RETRY = Object.freeze({
    totalTimeoutMs: 30 * 60 * 1000,
  })
- 
+
 +/**
 + * Load the table context, or build it from metadata the caller already holds.
 + * Reuse applies to REST catalogs only: a REST load returns exactly
@@ -600,7 +1086,7 @@ index 7cfd5378c18f0cef88a1cee7f397095dd75cce76..b1cb9f5da0ed074c5dd9c9b7124fd944
  export { fileCatalog } from './catalog/file.js';
  export { restCatalogConnect, restCatalogCreateNamespace, restCatalogDropNamespace, restCatalogListNamespaces, restCatalogListTables, restCatalogLoadCredentials, restCatalogLoadTable, restCatalogRegisterTable, restCatalogRenameTable } from './catalog/rest.js';
 diff --git a/types/manifest.d.ts b/types/manifest.d.ts
-index 5545860383cee1b39726a6bbcc43bdd0243e0d2e..f41d9103abca6bee5f1d8667d97e206d0ab1ab17 100644
+index 5545860383cee1b39726a6bbcc43bdd0243e0d2e..326ff952983aacb5a05dd8e0601d82be34538661 100644
 --- a/types/manifest.d.ts
 +++ b/types/manifest.d.ts
 @@ -3,6 +3,15 @@ export type ManifestList = {
@@ -619,20 +1105,43 @@ index 5545860383cee1b39726a6bbcc43bdd0243e0d2e..f41d9103abca6bee5f1d8667d97e206d
  /**
   * Returns manifest entries for a snapshot. Defaults to the current snapshot;
   * pass `snapshotId` to time-travel to a prior snapshot in the metadata's
-@@ -16,10 +25,12 @@ export type ManifestList = {
+@@ -16,10 +25,14 @@ export type ManifestList = {
   * @param {number | bigint} [options.snapshotId] - Optional snapshot id; defaults to `current-snapshot-id`.
   * @returns {Promise<ManifestList>}
   */
 -export declare function icebergManifests({ metadata, resolver, snapshotId }: {
-+export declare function icebergManifests({ metadata, resolver, snapshotId, partitionFilter, manifestCache }: {
++export declare function icebergManifests({ metadata, resolver, snapshotId, partitionFilter, manifestCache, readLimits }: {
      metadata: TableMetadata;
      resolver?: Resolver;
      snapshotId?: number | bigint;
 +    partitionFilter?: ManifestPartitionFilter;
 +    manifestCache?: ManifestReadCache;
++    /** Strict uncached Avro read admission. Omitted preserves existing behavior. */
++    readLimits?: ManifestReadLimits;
  }): Promise<ManifestList>;
  /**
   * Turn a v1 snapshot's inline `manifests` (a list of manifest file locations)
+@@ -43,4 +56,18 @@ export declare function splitManifestEntries(manifests: ManifestList): {
+     dataEntries: ManifestEntry[];
+     deleteEntries: ManifestEntry[];
+ };
+-//# sourceMappingURL=manifest.d.ts.map
+\ No newline at end of file
++//# sourceMappingURL=manifest.d.ts.map
++/** Per-walk source, expansion and materialization-work bounds; not total JS heap. */
++export interface ManifestReadLimits {
++    maxObjectBytes: number;
++    maxTotalObjectBytes: number;
++    maxManifests: number;
++    maxEntries: number;
++    maxInflatedBlockBytes: number;
++    maxTotalInflatedBytes: number;
++    maxValueBytes: number;
++    maxDecodedValues: number;
++    maxHeaderBytes: number;
++    /** Positive integer no greater than 128. */
++    maxSchemaDepth: number;
++}
 diff --git a/types/write/stage.d.ts b/types/write/stage.d.ts
 index 3f29f9f3c0ab8cc742c4a57c8cc689fdc05d2dd4..2f92916a90b9edcbc5681f821beeeac85458cc89 100644
 --- a/types/write/stage.d.ts

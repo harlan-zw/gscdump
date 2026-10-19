@@ -45,6 +45,74 @@ For retry decisions, import `isCommitRateLimited`, `isCommitServerError`, or
 Use the dataset registry to define datasets.
 Raw Icebird table creation and append functions live under `unsafe-raw` for package adapters and diagnostics.
 
+## Opt-in manifest read limits
+
+`icebergManifests` on `@gscdump/lakehouse/unsafe-raw` accepts an optional
+`readLimits: ManifestReadLimits`. Omission preserves the existing reader and
+caller-owned manifest cache behavior. No higher-level file resolver or host
+automatically enables these limits.
+
+```ts
+import { icebergManifests } from '@gscdump/lakehouse/unsafe-raw'
+
+const manifests = await icebergManifests({
+  metadata,
+  resolver,
+  readLimits: {
+    maxObjectBytes: 2 * 1024 * 1024,
+    maxTotalObjectBytes: 8 * 1024 * 1024,
+    maxManifests: 8,
+    maxEntries: 128,
+    maxInflatedBlockBytes: 2 * 1024 * 1024,
+    maxTotalInflatedBytes: 8 * 1024 * 1024,
+    maxValueBytes: 1024 * 1024,
+    maxDecodedValues: 100_000,
+    maxHeaderBytes: 64 * 1024,
+    maxSchemaDepth: 32,
+  },
+})
+```
+
+These are example admission values, not defaults or a total JavaScript heap
+guarantee. Every field is required and must be a positive safe integer;
+`maxSchemaDepth` must also be at most 128. The reader copies and validates the
+policy before its first asynchronous read. Unknown fields are rejected.
+
+The per-object and cumulative source-byte checks happen after `resolver.reader`
+reports `byteLength`, **before** the reader requests `slice(0, byteLength)`.
+Declared manifest lengths and returned slice lengths must match. An injected
+resolver can allocate or fetch inside `reader` itself; those operations are
+outside this boundary and need their own transport limits and immutable-object
+identity checks. No HEAD, catalog JSON, network-request, or freshness bound is
+implied by this option.
+
+Manifest-list counts are admitted before record materialization and pruning;
+entry counts accumulate across all fetched manifests and blocks. V1 inline
+manifest counts are admitted before reads, with each file decoded once in a
+private per-call cache. Supplying `manifestCache` with `readLimits` is rejected:
+previously decoded cache entries carry no verifiable budget provenance. Defaults
+retain their existing cache behavior.
+
+For Avro `null` and raw `deflate` blocks, decoded block bytes and their cumulative
+total are bounded. The existing pure-JavaScript inflater checks output growth
+before allocating or writing past that limit. Bounded DEFLATE returns an exact-size
+backing buffer so byte views do not retain spare inflater capacity; growth and
+final-copy buffers can temporarily overlap. Header framing is byte-bounded
+before JSON parsing; schema depth/work is checked before recursive compilation.
+Variable and fixed values are checked before views or UTF-8 decoding, and
+`maxDecodedValues` bounds decoding work across header/schema nodes and decoded
+value visits, including arrays of zero-byte nulls. Strict reads also reject
+invalid counts, varints, indexes, truncated values and inconsistent block sizes.
+
+These limits do not measure JavaScript object/string overhead, the JSON parser's
+internal allocations, inflater tables, caller-retained output, injected resolver
+caches or total process memory. Output remains an eager array within the chosen
+count/byte/work policy. A refusal rejects the complete call; there is no eager
+fallback or partial success. Already-dispatched resolver reads cannot be
+physically cancelled by the AsyncBuffer interface, but a first failure stops new
+dispatches and prevents late responses from being decoded. Choose compatible
+limits and validate the complete consumer path before enabling them.
+
 ## Append retries
 
 Supply a durable `commitRetry.appendId` when a dataset append belongs to a job or receipt.

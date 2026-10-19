@@ -1,0 +1,131 @@
+diff --git a/src/gzip.js b/src/gzip.js
+index b33c63305a2bb490ef3a9ce7aab24028e5b26ccc..be3140a5a73a33c21606d8af6f67ffcec4d15367 100644
+--- a/src/gzip.js
++++ b/src/gzip.js
+@@ -60,14 +60,18 @@ function gzipStart(input, i) {
+  * @param {Uint8Array} [output]
+  * @param {number} [inputIndex]
+  * @param {number} [outputIndex]
++ * @param {{ raw: true, maxOutputBytes: number }} [limits] - Optional strict raw-DEFLATE allocation bound; no caller output/offsets.
+  * @returns {Uint8Array}
+  */
+-export function gunzip(input, output, inputIndex = 0, outputIndex = 0) {
+-  let out = output ?? new Uint8Array(1024) // initial size
++export function gunzip(input, output, inputIndex = 0, outputIndex = 0, limits) {
++  const maximum = limits?.maxOutputBytes
++  if (limits && (limits.raw !== true || !Number.isSafeInteger(maximum) || maximum < 0 || output || inputIndex !== 0 || outputIndex !== 0)) throw new RangeError('Invalid bounded raw DEFLATE options')
++  let out = output ?? new Uint8Array(limits ? Math.min(1024, maximum) : 1024) // initial size
++  if (limits && !input.length) throw new Error('unexpected EOF')
+   if (!(input.length - inputIndex)) return out
+-  const payloadStart = gzipStart(input, inputIndex)
+-  if (payloadStart === input.length - 8) return out
+-  if (payloadStart > input.length - 8) throw new Error('unexpected EOF')
++  const payloadStart = limits ? 0 : gzipStart(input, inputIndex)
++  if (!limits && payloadStart === input.length - 8) return out
++  if (!limits && payloadStart > input.length - 8) throw new Error('unexpected EOF')
+   let pos = payloadStart * 8 // position in bits
+   let final = 0 // last chunk?
+   let lengthBits = 0
+@@ -78,9 +82,10 @@ export function gunzip(input, output, inputIndex = 0, outputIndex = 0) {
+
+   /** @param {number} length */
+   function ensureSize(length) {
++    if (limits && (!Number.isSafeInteger(length) || length > maximum)) throw new RangeError('DEFLATE output byte limit exceeded')
+     if (!output && length > out.length) {
+       const old = out
+-      out = new Uint8Array(Math.max(old.length * 2, length))
++      out = new Uint8Array(limits ? Math.min(maximum, Math.max(old.length * 2, length)) : Math.max(old.length * 2, length))
+       out.set(old)
+     }
+   }
+@@ -96,6 +101,7 @@ export function gunzip(input, output, inputIndex = 0, outputIndex = 0) {
+         // go to end of byte boundary
+         const s = shft(pos) + 4
+         const l = input[s - 4] | input[s - 3] << 8
++        if (limits && (s > input.length || ((input[s - 2] | input[s - 1] << 8) ^ l) !== 65535)) throw new Error('invalid stored block length')
+         const t = s + l
+         if (t > input.length) throw new Error('unexpected EOF')
+         // copy uncompressed data
+@@ -129,6 +135,7 @@ export function gunzip(input, output, inputIndex = 0, outputIndex = 0) {
+         const codeLengthMap = huffMap(codeLengthTree, codeLengthBits, 1)
+         for (let i = 0; i < tl;) {
+           const r = codeLengthMap[bits(input, pos, clbMask)]
++          if (limits && !r) throw new Error('invalid code length')
+           // bits read
+           pos += r & 15
+           const symbol = r >> 4
+@@ -139,6 +146,7 @@ export function gunzip(input, output, inputIndex = 0, outputIndex = 0) {
+             let copy = 0
+             let n = 0 // count
+             if (symbol === 16) {
++              if (limits && i === 0) throw new Error('invalid code length repeat')
+               n = 3 + bits(input, pos, 3)
+               pos += 2
+               copy = lengthDistanceTree[i - 1]
+@@ -149,6 +157,7 @@ export function gunzip(input, output, inputIndex = 0, outputIndex = 0) {
+               n = 11 + bits(input, pos, 127)
+               pos += 7
+             }
++            if (limits && i + n > tl) throw new Error('invalid code length repeat')
+             while (n--) lengthDistanceTree[i++] = copy
+           }
+         }
+@@ -163,7 +172,7 @@ export function gunzip(input, output, inputIndex = 0, outputIndex = 0) {
+       if (pos > totalBits) throw new Error('unexpected EOF')
+     }
+
+-    ensureSize(outputIndex + 131072) // max chunk size?
++    ensureSize(limits ? Math.min(maximum, outputIndex + 131072) : outputIndex + 131072) // max chunk size?
+     const lms = (1 << lengthBits) - 1
+     const dms = (1 << distBits) - 1
+     for (;;) {
+@@ -173,7 +182,10 @@ export function gunzip(input, output, inputIndex = 0, outputIndex = 0) {
+       pos += code & 15
+       if (pos > totalBits) throw new Error('unexpected EOF')
+       if (!code) throw new Error('invalid length/literal')
+-      if (sym < 256) out[outputIndex++] = sym
++      if (sym < 256) {
++        if (limits) ensureSize(outputIndex + 1)
++        out[outputIndex++] = sym
++      }
+       else if (sym === 256) {
+         lengthMap = undefined
+         break
+@@ -191,6 +203,7 @@ export function gunzip(input, output, inputIndex = 0, outputIndex = 0) {
+         const d = distMap[bits16(input, pos) & dms]
+         const dsym = d >> 4
+         if (!d) throw new Error('invalid distance')
++        if (limits && dsym > 29) throw new Error('invalid distance symbol')
+         pos += d & 15
+         let dt = fixedDistance[dsym]
+         if (dsym > 3) {
+@@ -208,12 +221,18 @@ export function gunzip(input, output, inputIndex = 0, outputIndex = 0) {
+     if (lengthMap) final = 1
+   } while (!final)
+
+-  if (outputIndex < out.length) {
++  if (limits && Math.ceil(pos / 8) !== input.length) throw new Error('trailing raw DEFLATE bytes')
++
++  if (!limits && outputIndex < out.length) {
+     // multiple gzip blocks
+     const nextBlock = Math.ceil(pos / 8) + 8 // 8 byte gzip footer
+     gunzip(input, out, nextBlock, outputIndex)
+   }
+
++  // A bounded caller charges decoded bytes. Do not leave small blocks retaining
++  // a larger growth buffer through BYTE_ARRAY views. This final copy is itself
++  // bounded; old and new buffers may briefly overlap, so this is not a heap cap.
++  if (limits && outputIndex !== out.length) return out.slice(0, outputIndex)
+   if (!output) return out.subarray(0, outputIndex)
+   return out
+ }
+diff --git a/src/index.d.ts b/src/index.d.ts
+index 4fd572cc567699c097378ec0375b7a40be4a0ef2..7851559629272547cb24550f9ee6730415ba00ad 100644
+--- a/src/index.d.ts
++++ b/src/index.d.ts
+@@ -20,4 +20,4 @@ export function decompressLz4(input: Uint8Array, outputLength: number): Uint8Arr
+ export function decompressLz4Raw(input: Uint8Array, outputLength: number): Uint8Array
+ export function decompressSnappy(input: Uint8Array, outputLength: number): Uint8Array
+ export function decompressZstd(input: Uint8Array, output?: Uint8Array): Uint8Array
+-export function gunzip(input: Uint8Array, output?: Uint8Array): Uint8Array
++export function gunzip(input: Uint8Array, output?: Uint8Array, inputIndex?: number, outputIndex?: number, limits?: { raw: true, maxOutputBytes: number }): Uint8Array
