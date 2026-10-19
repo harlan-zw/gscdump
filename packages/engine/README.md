@@ -42,6 +42,19 @@ options produces identical bytes regardless of producer batch boundaries.
 This supports a counting/digest pass followed by a separately coordinated
 fixed-length upload, without the codec owning transport or commit semantics.
 
+The streaming encoder normally refuses when retained footer/index descriptors
+exceed `limits.maxRetainedMetadataBytes` (8 MiB by default). For wide values,
+callers can explicitly choose `metadataOverflow: 'omit-statistics'`. On the
+first overflow it omits column-chunk statistics and ColumnIndexes throughout
+that file, including earlier groups. OffsetIndexes, encoding descriptors,
+schema, row counts, data/dictionary pages and explicit `fileMetadata` remain
+unchanged. Required descriptors must still fit the same budget, and the
+group/footer output-buffer limit still applies. Missing statistics mean unknown
+bounds, so readers may scan more pages or groups; they do not mean empty data.
+If no overflow occurs, this option preserves the normal bytes. It bounds
+retained optional descriptors, not their transient construction or total heap.
+The array encoders and all omitted-option behavior remain unchanged.
+
 `decodeParquetRowGroups({ byteLength, slice }, options)` reads exact byte ranges
 and by default yields one physical row group at a time. The caller must pin every range
 to the same immutable object or ETag. It preserves the existing date, column
