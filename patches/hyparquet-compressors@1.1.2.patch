@@ -1,8 +1,8 @@
 diff --git a/src/gzip.js b/src/gzip.js
-index b33c63305a2bb490ef3a9ce7aab24028e5b26ccc..be3140a5a73a33c21606d8af6f67ffcec4d15367 100644
+index b33c63305a2bb490ef3a9ce7aab24028e5b26ccc..1bc1a2ec47e48916b9ca76225ab20320ded245c1 100644
 --- a/src/gzip.js
 +++ b/src/gzip.js
-@@ -60,14 +60,18 @@ function gzipStart(input, i) {
+@@ -60,14 +60,19 @@ function gzipStart(input, i) {
   * @param {Uint8Array} [output]
   * @param {number} [inputIndex]
   * @param {number} [outputIndex]
@@ -21,12 +21,13 @@ index b33c63305a2bb490ef3a9ce7aab24028e5b26ccc..be3140a5a73a33c21606d8af6f67ffce
 -  if (payloadStart === input.length - 8) return out
 -  if (payloadStart > input.length - 8) throw new Error('unexpected EOF')
 +  const payloadStart = limits ? 0 : gzipStart(input, inputIndex)
-+  if (!limits && payloadStart === input.length - 8) return out
-+  if (!limits && payloadStart > input.length - 8) throw new Error('unexpected EOF')
++  const isGzip = !limits && payloadStart > 0
++  if (isGzip && payloadStart === input.length - 8) return out
++  if (isGzip && payloadStart > input.length - 8) throw new Error('unexpected EOF')
    let pos = payloadStart * 8 // position in bits
    let final = 0 // last chunk?
    let lengthBits = 0
-@@ -78,9 +82,10 @@ export function gunzip(input, output, inputIndex = 0, outputIndex = 0) {
+@@ -78,9 +83,10 @@ export function gunzip(input, output, inputIndex = 0, outputIndex = 0) {
 
    /** @param {number} length */
    function ensureSize(length) {
@@ -38,7 +39,7 @@ index b33c63305a2bb490ef3a9ce7aab24028e5b26ccc..be3140a5a73a33c21606d8af6f67ffce
        out.set(old)
      }
    }
-@@ -96,6 +101,7 @@ export function gunzip(input, output, inputIndex = 0, outputIndex = 0) {
+@@ -96,6 +102,7 @@ export function gunzip(input, output, inputIndex = 0, outputIndex = 0) {
          // go to end of byte boundary
          const s = shft(pos) + 4
          const l = input[s - 4] | input[s - 3] << 8
@@ -46,7 +47,7 @@ index b33c63305a2bb490ef3a9ce7aab24028e5b26ccc..be3140a5a73a33c21606d8af6f67ffce
          const t = s + l
          if (t > input.length) throw new Error('unexpected EOF')
          // copy uncompressed data
-@@ -129,6 +135,7 @@ export function gunzip(input, output, inputIndex = 0, outputIndex = 0) {
+@@ -129,6 +136,7 @@ export function gunzip(input, output, inputIndex = 0, outputIndex = 0) {
          const codeLengthMap = huffMap(codeLengthTree, codeLengthBits, 1)
          for (let i = 0; i < tl;) {
            const r = codeLengthMap[bits(input, pos, clbMask)]
@@ -54,7 +55,7 @@ index b33c63305a2bb490ef3a9ce7aab24028e5b26ccc..be3140a5a73a33c21606d8af6f67ffce
            // bits read
            pos += r & 15
            const symbol = r >> 4
-@@ -139,6 +146,7 @@ export function gunzip(input, output, inputIndex = 0, outputIndex = 0) {
+@@ -139,6 +147,7 @@ export function gunzip(input, output, inputIndex = 0, outputIndex = 0) {
              let copy = 0
              let n = 0 // count
              if (symbol === 16) {
@@ -62,7 +63,7 @@ index b33c63305a2bb490ef3a9ce7aab24028e5b26ccc..be3140a5a73a33c21606d8af6f67ffce
                n = 3 + bits(input, pos, 3)
                pos += 2
                copy = lengthDistanceTree[i - 1]
-@@ -149,6 +157,7 @@ export function gunzip(input, output, inputIndex = 0, outputIndex = 0) {
+@@ -149,6 +158,7 @@ export function gunzip(input, output, inputIndex = 0, outputIndex = 0) {
                n = 11 + bits(input, pos, 127)
                pos += 7
              }
@@ -70,7 +71,7 @@ index b33c63305a2bb490ef3a9ce7aab24028e5b26ccc..be3140a5a73a33c21606d8af6f67ffce
              while (n--) lengthDistanceTree[i++] = copy
            }
          }
-@@ -163,7 +172,7 @@ export function gunzip(input, output, inputIndex = 0, outputIndex = 0) {
+@@ -163,7 +173,7 @@ export function gunzip(input, output, inputIndex = 0, outputIndex = 0) {
        if (pos > totalBits) throw new Error('unexpected EOF')
      }
 
@@ -79,7 +80,7 @@ index b33c63305a2bb490ef3a9ce7aab24028e5b26ccc..be3140a5a73a33c21606d8af6f67ffce
      const lms = (1 << lengthBits) - 1
      const dms = (1 << distBits) - 1
      for (;;) {
-@@ -173,7 +182,10 @@ export function gunzip(input, output, inputIndex = 0, outputIndex = 0) {
+@@ -173,7 +183,10 @@ export function gunzip(input, output, inputIndex = 0, outputIndex = 0) {
        pos += code & 15
        if (pos > totalBits) throw new Error('unexpected EOF')
        if (!code) throw new Error('invalid length/literal')
@@ -91,7 +92,7 @@ index b33c63305a2bb490ef3a9ce7aab24028e5b26ccc..be3140a5a73a33c21606d8af6f67ffce
        else if (sym === 256) {
          lengthMap = undefined
          break
-@@ -191,6 +203,7 @@ export function gunzip(input, output, inputIndex = 0, outputIndex = 0) {
+@@ -191,6 +204,7 @@ export function gunzip(input, output, inputIndex = 0, outputIndex = 0) {
          const d = distMap[bits16(input, pos) & dms]
          const dsym = d >> 4
          if (!d) throw new Error('invalid distance')
@@ -99,17 +100,23 @@ index b33c63305a2bb490ef3a9ce7aab24028e5b26ccc..be3140a5a73a33c21606d8af6f67ffce
          pos += d & 15
          let dt = fixedDistance[dsym]
          if (dsym > 3) {
-@@ -208,12 +221,18 @@ export function gunzip(input, output, inputIndex = 0, outputIndex = 0) {
+@@ -208,12 +222,22 @@ export function gunzip(input, output, inputIndex = 0, outputIndex = 0) {
      if (lengthMap) final = 1
    } while (!final)
 
 -  if (outputIndex < out.length) {
+-    // multiple gzip blocks
 +  if (limits && Math.ceil(pos / 8) !== input.length) throw new Error('trailing raw DEFLATE bytes')
 +
-+  if (!limits && outputIndex < out.length) {
-     // multiple gzip blocks
++  if (isGzip && outputIndex < out.length) {
++    // Only GZIP has a footer and subsequent members. Raw DEFLATE ends here.
      const nextBlock = Math.ceil(pos / 8) + 8 // 8 byte gzip footer
-     gunzip(input, out, nextBlock, outputIndex)
+-    gunzip(input, out, nextBlock, outputIndex)
++    if (nextBlock > input.length) throw new Error('unexpected EOF')
++    if (nextBlock < input.length) {
++      if (input[nextBlock] !== 31 || input[nextBlock + 1] !== 139 || input[nextBlock + 2] !== 8) throw new Error('invalid gzip member')
++      gunzip(input, out, nextBlock, outputIndex)
++    }
    }
 
 +  // A bounded caller charges decoded bytes. Do not leave small blocks retaining
