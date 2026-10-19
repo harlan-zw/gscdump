@@ -27,10 +27,12 @@ import type {
   TableName,
   WriteResult,
 } from '../storage'
+import type { BoundedValuesOptions } from './parquet-bounded-values'
 import { decompress as decompressZstd } from 'fzstd'
 import { parquetMetadata, parquetMetadataAsync, parquetReadObjects, parquetSchema, readOffsetIndex } from 'hyparquet'
 import { ByteWriter, ParquetWriter, parquetWriteRows } from 'hyparquet-writer'
 import { SCHEMAS, TABLE_METADATA } from '../schema'
+import { boundedValuesPolicy, decodeBoundedValues } from './parquet-bounded-values'
 import { parquetDecodeBudget } from './parquet-decode-budget'
 import { parquetRangeCache } from './parquet-range-cache'
 
@@ -610,6 +612,13 @@ export interface ParquetRangeSource {
 
 export interface DecodeParquetGroupsOptions extends DecodeParquetOptions {
   /**
+   * Strict opt-in value cursors for flat scalar PLAIN/dictionary SNAPPY or raw
+   * pages. Rejects unsupported inputs instead of falling back to eager decoding.
+   * Page buffers and emitted values have separate bounds; not an isolate heap cap.
+   * Cannot be combined with filters or indexedRowWindow.
+   */
+  boundedValues?: BoundedValuesOptions
+  /**
    * Opt-in windows for flat scalar groups whose designated, selected columns
    * have offset indexes and no dictionary encoding. Ineligible groups retain
    * the original physical-group read, so targetRows is not a hard batch limit.
@@ -649,6 +658,9 @@ export interface DecodeParquetGroupsOptions extends DecodeParquetOptions {
  * read-ahead is started. Missing/corrupt/range-error input throws; it is not empty.
  */
 export async function* decodeParquetRowGroups(file: ParquetRangeSource, opts: DecodeParquetGroupsOptions = {}): AsyncGenerator<Row[]> {
+  const values = boundedValuesPolicy(opts.boundedValues)
+  if (values && (opts.filter || opts.indexedRowWindow))
+    throw new Error('boundedValues cannot be combined with filter or indexedRowWindow')
   const indexedWindow = indexedWindowPolicy(opts.indexedRowWindow)
   const maxReadAndDecompressBytes = opts.limits?.maxReadAndDecompressBytes === undefined
     ? undefined
@@ -701,6 +713,10 @@ export async function* decodeParquetRowGroups(file: ParquetRangeSource, opts: De
   }
   if (!Number.isSafeInteger(totalRows) || BigInt(totalRows) !== metadata.num_rows)
     throw new Error('parquet stream row-count metadata mismatch')
+  if (values) {
+    yield* decodeBoundedValues(bounded, metadata, values, maxReadBytes, { columns: opts.columns?.slice(), rowStart: opts.rowStart, rowEnd: opts.rowEnd }, maxReadAndDecompressBytes)
+    return
+  }
   yield* decodeGroupsFromMetadata(bounded, metadata, opts, indexedWindow && { ...indexedWindow, maxReadBytes }, maxReadAndDecompressBytes)
 }
 
