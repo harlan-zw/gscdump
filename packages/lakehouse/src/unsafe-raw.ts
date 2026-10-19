@@ -12,3 +12,4 @@
  */
 export { icebergAppendRetrying } from './catalog'
 export { icebergAppend, icebergCreateTable, icebergDropTable, icebergManifests, restCatalogConnect, restCatalogCreateNamespace, restCatalogListTables, restCatalogLoadTable, s3SignedResolver } from 'icebird'
+export type { ManifestReadLimits } from 'icebird/src/manifest.js'

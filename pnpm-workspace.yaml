@@ -47,6 +47,7 @@ overrides:
   tinyexec: ^1.3.1
 
 patchedDependencies:
+  hyparquet-compressors@1.1.2: patches/hyparquet-compressors@1.1.2.patch
   hyparquet-writer@0.16.10: patches/hyparquet-writer@0.16.10.patch
   icebird@0.8.30: patches/icebird@0.8.30.patch
 
