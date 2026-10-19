@@ -158,8 +158,8 @@ describe('sync command (local analytics)', () => {
     })
 
     expect(rawQuerySpy).toHaveBeenCalled()
-    // 3 days x 2 tables; a short page is the last page, so one call each
-    expect(rawQuerySpy).toHaveBeenCalledTimes(6)
+    // 3 days x 2 tables, each with a nonempty page and an empty terminal page.
+    expect(rawQuerySpy).toHaveBeenCalledTimes(12)
 
     const harness = createNodeHarness({ dataDir: configState.dataDir! })
     const siteId = harness.siteIdFor(SITE)
@@ -200,6 +200,72 @@ describe('sync command (local analytics)', () => {
     })
     expect(rawQuerySpy.mock.calls.every(([siteUrl]) => siteUrl === SITE)).toBe(true)
     expect(await listStoreSites(configState.dataDir!)).toEqual([{ siteId: 'd_example.com', siteUrl: SITE }])
+  })
+
+  it('continues short nonempty pages until an empty terminal response before completing a date', async () => {
+    const day = '2026-04-01'
+    const rows = ['first', 'second', 'third'].map((name, index) => ({
+      keys: [`https://example.com/${name}`, day],
+      clicks: index + 1,
+      impressions: (index + 1) * 10,
+      position: 2,
+    }))
+    rawQuerySpy.mockImplementation((_siteUrl, params) => Promise.resolve({
+      rows: params.startRow === 0 ? rows.slice(0, 2) : params.startRow === 2 ? rows.slice(2) : [],
+    }))
+    await syncCommand.run!({
+      args: { 'site': SITE, 'start': day, 'end': day, 'tables': 'pages', 'types': 'web', 'quiet': true, 'rollups': false, 'sitemaps': false, 'inspections': false, 'requests-per-minute': '1000000' },
+      rawArgs: [],
+      cmd: syncCommand,
+    })
+    expect(rawQuerySpy.mock.calls.map(([, params]) => params.startRow)).toEqual([0, 2, 3])
+    const harness = createNodeHarness({ dataDir: tmpDir })
+    const result = await harness.runRawSql({
+      siteUrl: SITE,
+      table: 'pages',
+      sql: 'SELECT url, clicks, impressions FROM read_parquet({{FILES}}) ORDER BY url',
+    })
+    expect(result.rows).toEqual([
+      { url: '/first', clicks: 1, impressions: 10 },
+      { url: '/second', clicks: 2, impressions: 20 },
+      { url: '/third', clicks: 3, impressions: 30 },
+    ])
+    const states = await harness.engine.getSyncStates({ userId: harness.userId, siteId: harness.siteIdFor(SITE), table: 'pages' })
+    expect(states).toEqual([expect.objectContaining({ date: day, state: 'done' })])
+  })
+
+  it.each(['request failure', 'call budget'] as const)('preserves the prior day when a short page is followed by %s before terminal', async (stop) => {
+    const day = '2026-04-01'
+    const args = { 'site': SITE, 'start': day, 'end': day, 'tables': 'pages', 'types': 'web', 'quiet': true, 'rollups': false, 'sitemaps': false, 'inspections': false, 'requests-per-minute': '1000000' }
+    await syncCommand.run!({ args, rawArgs: [], cmd: syncCommand })
+    rawQuerySpy.mockClear()
+    rawQuerySpy.mockImplementation((_siteUrl, params) => {
+      if (params.startRow !== 0)
+        return Promise.reject(new Error('terminal page unavailable'))
+      return Promise.resolve({ rows: [{ keys: ['https://example.com/replacement', day], clicks: 99, impressions: 999, position: 2 }] })
+    })
+    vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+      throw new Error(`process.exit(${code})`)
+    }) as never)
+    const run = syncCommand.run!({
+      args: { ...args, force: true, ...(stop === 'call budget' ? { 'max-calls': '1' } : {}) },
+      rawArgs: [],
+      cmd: syncCommand,
+    })
+    if (stop === 'request failure')
+      await expect(run).rejects.toThrow('process.exit(1)')
+    else
+      await run
+    expect(rawQuerySpy.mock.calls.map(([, params]) => params.startRow)).toEqual(stop === 'request failure' ? [0, 1] : [0])
+    const harness = createNodeHarness({ dataDir: tmpDir })
+    const result = await harness.runRawSql({
+      siteUrl: SITE,
+      table: 'pages',
+      sql: 'SELECT url, clicks, impressions FROM read_parquet({{FILES}})',
+    })
+    expect(result.rows).toEqual([{ url: '/guide', clicks: 5, impressions: 50 }])
+    const states = await harness.engine.getSyncStates({ userId: harness.userId, siteId: harness.siteIdFor(SITE), table: 'pages' })
+    expect(states).toEqual([expect.objectContaining({ date: day, state: stop === 'request failure' ? 'failed' : 'pending' })])
   })
 
   it('refuses a Site whose Store ID already holds another Site', async () => {
@@ -270,7 +336,7 @@ describe('sync command (local analytics)', () => {
     const args = { site: SITE, start: day, end: day, tables: 'pages', types: 'web', quiet: true }
 
     await syncCommand.run!({ args, rawArgs: [], cmd: syncCommand })
-    expect(rawQuerySpy).toHaveBeenCalledTimes(1)
+    expect(rawQuerySpy).toHaveBeenCalledTimes(2)
 
     rawQuerySpy.mockClear()
     await syncCommand.run!({ args, rawArgs: [], cmd: syncCommand })
