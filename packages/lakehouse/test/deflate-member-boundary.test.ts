@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { Buffer } from 'node:buffer'
 import { createRequire } from 'node:module'
 import { constants, deflateRawSync, gzipSync, inflateRawSync } from 'node:zlib'
 import { describe, it } from 'vitest'
