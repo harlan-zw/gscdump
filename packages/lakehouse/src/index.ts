@@ -70,6 +70,8 @@ export type {
 
 export { toIcebergDayCount } from './date'
 
+export type { ManifestReadLimits } from './manifest-read-limits'
+
 export { buildManifestPartitionFilter } from './partition-prune'
 export type { IcebergFieldSummary, ManifestPartitionFilter, PartitionValueMatch } from './partition-prune'
 

@@ -49,8 +49,8 @@ Raw Icebird table creation and append functions live under `unsafe-raw` for pack
 
 `icebergManifests` on `@gscdump/lakehouse/unsafe-raw` accepts an optional
 `readLimits: ManifestReadLimits`. Omission preserves the existing reader and
-caller-owned manifest cache behavior. No higher-level file resolver or host
-automatically enables these limits.
+caller-owned manifest cache behavior. No file resolver or host automatically
+enables these limits.
 
 ```ts
 import { icebergManifests } from '@gscdump/lakehouse/unsafe-raw'
@@ -112,6 +112,30 @@ fallback or partial success. Already-dispatched resolver reads cannot be
 physically cancelled by the AsyncBuffer interface, but a first failure stops new
 dispatches and prevents late responses from being decoded. Choose compatible
 limits and validate the complete consumer path before enabling them.
+
+The same optional `readLimits` can be passed to `resolveIcebergDataFiles`,
+`dataset.resolveDataFiles(..., { readLimits })`, and the engine's
+`listIcebergDataFiles`. These wrappers capture and validate all ten values before
+catalog reads or lazy imports, then perform one bounded manifest walk. Per-object
+and aggregate limits remain independent upper bounds; a smaller aggregate limit
+does not expand the per-object allowance. Invalid, missing or unknown values are
+rejected even when the table has no current snapshot.
+
+In this opt-in mode, decoded manifest, resolved-file and month caches are neither
+read nor populated: old cache entries cannot establish compliance with a new
+policy. The existing catalog configuration, snapshot pointer and table metadata
+caches remain in use, with their existing identity/freshness rules. Catalog JSON
+and those metadata caches are outside the Avro allocation bound. Existing
+partition, Site, search-type, date pruning and output ordering are unchanged.
+
+This has an explicit warm-read cost. A default exact-range cache hit can avoid
+all Avro reads; a default month hit can need only the manifest list. A bounded
+call reads the list and every selected manifest again (subject to any injected
+resolver's own byte cache). Each concurrent bounded call owns its own limits;
+the option does not impose a connection-wide or process-wide budget. There is
+no automatic fallback to cached or unbounded results after refusal. Validate
+retained files and request costs before enabling a policy in a host; this does
+not bound a remote SQL provider's internal manifest planner.
 
 ## Append retries
 

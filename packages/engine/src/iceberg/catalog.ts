@@ -8,7 +8,7 @@
  * does not re-export them from `@gscdump/engine/iceberg`.
  */
 
-import type { IcebergConnection, IcebergListedDataFile, QueryProfiler } from '@gscdump/lakehouse'
+import type { IcebergConnection, IcebergListedDataFile, ManifestReadLimits, QueryProfiler } from '@gscdump/lakehouse'
 import type { Result } from 'gscdump/result'
 import type { EngineError } from '../errors'
 import type { IcebergTableName, PartitionKeyEncoding } from './schema'
@@ -204,6 +204,8 @@ export interface ListIcebergDataFilesOptions {
   cache?: import('@gscdump/lakehouse').CatalogCache
   clock?: () => number
   profiler?: QueryProfiler
+  /** Uncached Avro read limits; catalog metadata/snapshot caching is unchanged. */
+  readLimits?: ManifestReadLimits
 }
 
 /**
@@ -238,5 +240,6 @@ export async function listIcebergDataFiles(
     cache: opts.cache,
     clock: opts.clock,
     profiler: opts.profiler,
+    readLimits: opts.readLimits,
   })
 }
