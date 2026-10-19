@@ -110,6 +110,55 @@ It can reject valid files that previously decoded, particularly old files whose
 writer understated uncompressed footer sizes. Callers must preserve those files
 and choose their own explicit retry/repair policy; refusal is never empty data.
 
+`decodeParquetRowGroups(source, { boundedValues: {} })` selects a separate strict
+value-cursor path. It supports flat REQUIRED/OPTIONAL scalar columns, explicitly
+annotated UTF8/STRING, PLAIN and dictionary data pages (V1/V2), and SNAPPY or
+UNCOMPRESSED data. Projection, physical row ranges, nulls, date normalization and
+row order are preserved. Nested/binary/other logical types, other codecs or value
+encodings, BOOLEAN dictionaries, filters and `indexedRowWindow` combinations
+refuse; this mode never silently falls back to the eager reader. All selected
+page headers are inspected before the first output to detect unsupported later
+pages. Corrupt value bodies or over-limit individual values may fail after an
+earlier batch; consumers must finish validating their entire input before
+publishing a replacement.
+Explicit row bounds in this strict mode must be nonnegative safe integers, with
+positive Infinity also accepted for an open-ended `rowEnd`. Omitted bounds use
+the full input, and reversed or zero-length ranges are empty.
+
+The cursor retains at most one current data page and one encoded dictionary per
+selected column. UTF8 strings, definition levels and dictionary IDs are consumed
+incrementally. Dictionaries retain encoded bytes and a four-byte offset per
+entry, rather than an array of decoded strings. Final bit-packed padding is
+validated but not expanded. These options have independent meanings:
+
+| `boundedValues` option | Default | Admission rule |
+| --- | --- | --- |
+| `targetRows` | 1000 | Hard emitted batch row limit |
+| `maxBatchBytes` | 1 MiB | Before materialization: 128 per row, 16 per cell slot, 64 per cell plus twice UTF8 byte length or 32 for a fixed scalar |
+| `maxValueBytes` | 256 KiB | Encoded bytes of one string, before decoding |
+| `maxActiveBytes` | 24 MiB | Per group: sum of each column's largest compressed + uncompressed data page, dictionary compressed + uncompressed bytes, dictionary offset tables, plus one maximum header probe |
+| `maxPages` | 16384 | Retained page-descriptor count across the selected input |
+| `maxHeaderBytes` | 64 KiB | Header probe cap; starts at 512 bytes and grows only on truncation |
+| `maxDictionaryEntries` | 100000 | Entry count for each encoded dictionary |
+
+Active-buffer admission uses real page headers, not the often understated
+uncompressed sizes in legacy writer footers. Page transitions release the old
+cursor before reading/decompressing its successor; columns load sequentially.
+Batch bytes are a conservative value-materialization charge, **not a measurement
+of V8 object overhead or an isolate heap guarantee**. The footer (separately
+bounded), page-descriptor objects, fixed cursor/schema state, caller-retained
+batches, codec/runtime overhead and concurrent application work remain separate.
+Setting larger limits deliberately permits a larger working set. A single page
+still decompresses in full, and a consumer that retains all emitted batches
+removes the benefit. This mode does not make arbitrary malicious files safe.
+
+The existing `maxReadAndDecompressBytes` option also applies: a group's header
+probes, physical reads and SNAPPY output share one cumulative budget. Headers
+are scanned once; immutable/pinned object bytes are required across that scan
+and later reads. Iterator return/error releases cursor references; already
+dispatched source reads cannot be physically aborted. Defaults, the buffered
+decoder and indexed-window eligibility/fallback are unchanged.
+
 Both APIs have configurable admission limits. The encoder bounds producer
 batch rows/value bytes, output group rows/value bytes, retained descriptor counts
 and scalar bytes (including statistics), and the current encoded group/footer
