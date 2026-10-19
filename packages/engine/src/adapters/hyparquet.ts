@@ -659,9 +659,10 @@ export interface DecodeParquetGroupsOptions extends DecodeParquetOptions {
  */
 export async function* decodeParquetRowGroups(file: ParquetRangeSource, opts: DecodeParquetGroupsOptions = {}): AsyncGenerator<Row[]> {
   const values = boundedValuesPolicy(opts.boundedValues)
+  const selection = values ? { columns: opts.columns?.slice(), rowStart: opts.rowStart, rowEnd: opts.rowEnd } : undefined
   if (values) {
     for (const key of ['rowStart', 'rowEnd'] as const) {
-      const value = opts[key]
+      const value = selection![key]
       if (value !== undefined && !(key === 'rowEnd' && value === Infinity) && (!Number.isSafeInteger(value) || value < 0))
         throw new RangeError(`invalid boundedValues.${key}`)
     }
@@ -721,7 +722,7 @@ export async function* decodeParquetRowGroups(file: ParquetRangeSource, opts: De
   if (!Number.isSafeInteger(totalRows) || BigInt(totalRows) !== metadata.num_rows)
     throw new Error('parquet stream row-count metadata mismatch')
   if (values) {
-    yield* decodeBoundedValues(bounded, metadata, values, maxReadBytes, { columns: opts.columns?.slice(), rowStart: opts.rowStart, rowEnd: opts.rowEnd }, maxReadAndDecompressBytes)
+    yield* decodeBoundedValues(bounded, metadata, values, maxReadBytes, selection!, maxReadAndDecompressBytes)
     return
   }
   yield* decodeGroupsFromMetadata(bounded, metadata, opts, indexedWindow && { ...indexedWindow, maxReadBytes }, maxReadAndDecompressBytes)
