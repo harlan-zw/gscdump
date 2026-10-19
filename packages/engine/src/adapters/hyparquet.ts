@@ -351,6 +351,13 @@ export interface EncodeParquetBatchesOptions extends EncodeParquetOptions {
   columns: readonly ColumnDef[]
   /** Maximum rows per output group. Default 25000, matching the array codec. */
   rowGroupSize?: number
+  /**
+   * Opt in to omitting all footer column statistics and ColumnIndexes if they
+   * exceed the retained metadata limit. Default: refuse. OffsetIndexes,
+   * required descriptors and explicit file metadata remain bounded/preserved.
+   * Missing statistics reduce pruning; this does not bound transient codec heap.
+   */
+  metadataOverflow?: 'omit-statistics'
   limits?: {
     /** Refuse a producer batch with more rows. Default 25000. */
     maxBatchRows?: number
@@ -380,6 +387,12 @@ function scalarBytes(value: unknown): number {
   return typeof value === 'string' ? value.length * 3 + 8 : 16
 }
 
+class RetainedMetadataLimitError extends RangeError {
+  constructor() {
+    super('parquet stream exceeds maxRetainedMetadataBytes')
+  }
+}
+
 // Count each newly retained public descriptor once, including untruncated
 // statistic strings. This is a conservative admission metric, not heap size.
 function retainedDescriptorBytes(value: unknown, remaining: number): number {
@@ -407,7 +420,7 @@ function retainedDescriptorBytes(value: unknown, remaining: number): number {
       bytes += scalarBytes(value)
     }
     if (bytes > remaining)
-      throw new RangeError('parquet stream exceeds maxRetainedMetadataBytes')
+      throw new RetainedMetadataLimitError()
   }
   visit(value)
   return bytes
@@ -427,6 +440,9 @@ export async function encodeParquetRowBatches(
   opts: EncodeParquetBatchesOptions,
   write: (chunk: Uint8Array) => Promise<void>,
 ): Promise<WriteResult> {
+  const metadataOverflow = opts.metadataOverflow
+  if (metadataOverflow !== undefined && metadataOverflow !== 'omit-statistics')
+    throw new RangeError('parquet stream metadataOverflow must be omit-statistics when provided')
   const rowGroupSize = streamLimit(opts.rowGroupSize, ROW_GROUP_SIZE, 'rowGroupSize')
   const maxBatchRows = streamLimit(opts.limits?.maxBatchRows, ROW_GROUP_SIZE, 'maxBatchRows')
   const maxBatchBytes = streamLimit(opts.limits?.maxBatchBytes, 8 * 1024 * 1024, 'maxBatchBytes')
@@ -445,7 +461,8 @@ export async function encodeParquetRowBatches(
     if (metadataBytes > maxOutputBufferBytes)
       throw new RangeError('parquet stream file metadata exceeds maxOutputBufferBytes')
   }
-  let retainedMetadataBytes = retainedDescriptorBytes([schema, opts.fileMetadata], maxRetainedMetadataBytes)
+  const initialMetadataBytes = retainedDescriptorBytes([schema, opts.fileMetadata], maxRetainedMetadataBytes)
+  let retainedMetadataBytes = initialMetadataBytes
   const writer = new ByteWriter(Math.min(64 * 1024, maxOutputBufferBytes))
   // ByteWriter's documented offset is global; index is the current buffer.
   // No whole-file buffer is retained. Encoding is synchronous within a group,
@@ -477,6 +494,19 @@ export async function encodeParquetRowBatches(
   let groupBytes = 0
   let groups = 0
   let rowCount = 0
+  let omitStatistics = false
+  const omitOptionalMetadata = (firstIndex: number): void => {
+    // The writer retains these public descriptors until finish(). No index
+    // bytes or footer pointers have been emitted yet. Each index's chunk is
+    // also the exact object in row_groups. Leave offset indexes, encoding stats,
+    // data/dictionary bytes and every required descriptor intact.
+    for (let index = firstIndex; index < parquet.pendingIndexes.length; index++) {
+      const pending = parquet.pendingIndexes[index]!
+      if (pending.chunk.meta_data)
+        delete pending.chunk.meta_data.statistics
+      delete pending.columnIndex
+    }
+  }
   const flushGroup = async (): Promise<void> => {
     if (!groupRows)
       return
@@ -487,10 +517,33 @@ export async function encodeParquetRowBatches(
       columnData: codecs.map((col, index) => ({ name: col.name, nullable: col.nullable, columnIndex: true, data: values[index]! })),
       rowGroupSize: groupRows,
     })
-    retainedMetadataBytes += retainedDescriptorBytes(
-      [parquet.row_groups[parquet.row_groups.length - 1], parquet.pendingIndexes.slice(firstIndex)],
-      maxRetainedMetadataBytes - retainedMetadataBytes,
-    )
+    if (omitStatistics)
+      omitOptionalMetadata(firstIndex)
+    try {
+      retainedMetadataBytes += retainedDescriptorBytes(
+        [parquet.row_groups[parquet.row_groups.length - 1], parquet.pendingIndexes.slice(firstIndex)],
+        maxRetainedMetadataBytes - retainedMetadataBytes,
+      )
+    }
+    catch (error) {
+      if (!(error instanceof RetainedMetadataLimitError) || metadataOverflow !== 'omit-statistics' || omitStatistics)
+        throw error
+      // One deterministic transition for the whole file, regardless of input
+      // batch boundaries. Reclaim earlier optional descriptors too: leaving
+      // their full budget occupied could prevent later required metadata.
+      omitStatistics = true
+      omitOptionalMetadata(0)
+      retainedMetadataBytes = initialMetadataBytes
+      let index = 0
+      for (const group of parquet.row_groups) {
+        const end = index + group.columns.length
+        retainedMetadataBytes += retainedDescriptorBytes(
+          [group, parquet.pendingIndexes.slice(index, end)],
+          maxRetainedMetadataBytes - retainedMetadataBytes,
+        )
+        index = end
+      }
+    }
     values = codecs.map(() => [])
     groupRows = 0
     groupBytes = 0
