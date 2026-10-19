@@ -82,6 +82,28 @@ describe('strict bounded Parquet value cursors', () => {
     expect(await collect(bytes, { boundedValues: {}, rowStart: 0, rowEnd: 0 })).toEqual([])
     expect((await collect(bytes, { boundedValues: {}, rowEnd: Infinity })).flat()).toEqual(await decodeParquetToRows(bytes))
   })
+  it('captures the validated selection before an awaited footer read', async () => {
+    const { bytes, rows } = fixture()
+    const file = source(bytes)
+    let resume!: () => void
+    const held = new Promise<void>((resolve) => {
+      resume = resolve
+    })
+    vi.mocked(file.slice).mockImplementationOnce(async (start, end = bytes.length) => {
+      await held
+      return bytes.slice(start, end).buffer
+    })
+    const options: DecodeParquetGroupsOptions = { boundedValues: {}, columns: ['query'], rowStart: 211, rowEnd: 213 }
+    const iterator = decodeParquetRowGroups(file, options)
+    const first = iterator.next()
+    expect(file.slice).toHaveBeenCalledOnce()
+    options.rowStart = Number.NaN
+    options.rowEnd = Number.NaN
+    options.columns!.push('clicks')
+    resume()
+    expect((await first).value).toEqual(rows.slice(211, 213).map(({ query }) => ({ query })))
+    expect((await iterator.next()).done).toBe(true)
+  })
   it('preserves scalar/date values with frozen output batches owned by the caller', async () => {
     const rows = Array.from({ length: 15 }, (_, i) => ({ date: `2026-10-${String(i + 1).padStart(2, '0')}`, n: BigInt(i) - 9n, value: i / 7 }))
     const bytes = encodeRowsToParquetFlex(rows, { columns: [{ name: 'date', type: 'DATE' }, { name: 'n', type: 'BIGINT' }, { name: 'value', type: 'DOUBLE' }] })
