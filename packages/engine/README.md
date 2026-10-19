@@ -121,6 +121,9 @@ page headers are inspected before the first output to detect unsupported later
 pages. Corrupt value bodies or over-limit individual values may fail after an
 earlier batch; consumers must finish validating their entire input before
 publishing a replacement.
+Explicit row bounds in this strict mode must be nonnegative safe integers, with
+positive Infinity also accepted for an open-ended `rowEnd`. Omitted bounds use
+the full input, and reversed or zero-length ranges are empty.
 
 The cursor retains at most one current data page and one encoded dictionary per
 selected column. UTF8 strings, definition levels and dictionary IDs are consumed

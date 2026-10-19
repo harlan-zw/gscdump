@@ -659,6 +659,13 @@ export interface DecodeParquetGroupsOptions extends DecodeParquetOptions {
  */
 export async function* decodeParquetRowGroups(file: ParquetRangeSource, opts: DecodeParquetGroupsOptions = {}): AsyncGenerator<Row[]> {
   const values = boundedValuesPolicy(opts.boundedValues)
+  if (values) {
+    for (const key of ['rowStart', 'rowEnd'] as const) {
+      const value = opts[key]
+      if (value !== undefined && !(key === 'rowEnd' && value === Infinity) && (!Number.isSafeInteger(value) || value < 0))
+        throw new RangeError(`invalid boundedValues.${key}`)
+    }
+  }
   if (values && (opts.filter || opts.indexedRowWindow))
     throw new Error('boundedValues cannot be combined with filter or indexedRowWindow')
   const indexedWindow = indexedWindowPolicy(opts.indexedRowWindow)

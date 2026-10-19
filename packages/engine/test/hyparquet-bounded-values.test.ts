@@ -70,6 +70,18 @@ describe('strict bounded Parquet value cursors', () => {
       .toEqual(rows.slice(211, 409).map(({ query }) => ({ query })))
     expect((await collect(bytes, { boundedValues: {}, columns: ['missing'], rowStart: 2, rowEnd: 5 })).flat()).toEqual([{}, {}, {}])
   })
+  it.each(['rowStart', 'rowEnd'] as const)('refuses malformed %s before I/O only in strict mode', async (key) => {
+    const { bytes } = fixture()
+    for (const value of [Number.NaN, -Infinity, -1, 0.5, Number.MAX_SAFE_INTEGER + 1, ...(key === 'rowStart' ? [Infinity] : [])]) {
+      const file = source(bytes)
+      await expect(decodeParquetRowGroups(file, { boundedValues: {}, [key]: value }).next()).rejects.toThrow(`invalid boundedValues.${key}`)
+      expect(file.slice).not.toHaveBeenCalled()
+    }
+    expect(await collect(bytes, { [key]: Number.NaN })).toEqual([])
+    expect(await collect(bytes, { boundedValues: {}, rowStart: 5, rowEnd: 2 })).toEqual([])
+    expect(await collect(bytes, { boundedValues: {}, rowStart: 0, rowEnd: 0 })).toEqual([])
+    expect((await collect(bytes, { boundedValues: {}, rowEnd: Infinity })).flat()).toEqual(await decodeParquetToRows(bytes))
+  })
   it('preserves scalar/date values with frozen output batches owned by the caller', async () => {
     const rows = Array.from({ length: 15 }, (_, i) => ({ date: `2026-10-${String(i + 1).padStart(2, '0')}`, n: BigInt(i) - 9n, value: i / 7 }))
     const bytes = encodeRowsToParquetFlex(rows, { columns: [{ name: 'date', type: 'DATE' }, { name: 'n', type: 'BIGINT' }, { name: 'value', type: 'DOUBLE' }] })
