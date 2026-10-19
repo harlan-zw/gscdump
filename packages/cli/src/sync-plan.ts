@@ -148,10 +148,10 @@ export function fullHistoryStart(oldestGscDate: string): string {
 }
 
 /**
- * The fewest Search Analytics calls one date of a table costs. Plain tables
- * stop on a short page, so a day under 25,000 rows is one call. `dates` adds
- * device and query calls. The engine's slice runners page until an empty
- * page, and search appearance tables add two calls per appearance found.
+ * A planning estimate for the initial Search Analytics reads per table day.
+ * Nonempty results also require pagination through an empty terminal page.
+ * `dates` adds device and query reads; appearance tables add per-appearance
+ * reads. The quota ledger counts every actual call, including terminal reads.
  */
 export function minimumCallsPerDate(table: TableName): number {
   if (table === 'dates')

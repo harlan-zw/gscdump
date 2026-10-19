@@ -241,10 +241,9 @@ async function fetchDateRows(
         position: apiRow.position ?? 0,
       })
     }
-    // Google returns at most `rowLimit` rows a page. A shorter page is the
-    // last one, so the empty page Google's guide asks for costs a call and
-    // adds nothing.
-    if (batch.length < GSC_ROW_LIMIT)
+    // A short nonempty page is not completion evidence. Only an empty
+    // response lets this date replace its previous rows and become done.
+    if (batch.length === 0)
       break
     startRow += batch.length
   }
