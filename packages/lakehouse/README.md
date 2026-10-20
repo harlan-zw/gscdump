@@ -133,8 +133,12 @@ all Avro reads; a default month hit can need only the manifest list. A bounded
 call reads the list and every selected manifest again (subject to any injected
 resolver's own byte cache).
 
-A connection from `connectIcebergCatalog` keeps every object it reads in an
-unbounded per-connection byte cache. A bounded call reads through the uncached
+A connection from `connectIcebergCatalog` keeps the objects it reads in a
+per-connection byte cache. That cache holds at most 16 MiB of fetched bytes.
+If a read takes it over 16 MiB, it evicts the least recently read object
+first. It does not keep an object larger than 16 MiB, and it does not keep a
+failed read. Concurrent reads of one path share one S3 request. A successful
+write or delete of a path evicts that path. A bounded call reads through the uncached
 S3 resolver instead, so the connection keeps none of its manifest bytes after
 the call. It also does not reuse bytes that earlier unbounded calls cached. If
 you replace `connection.resolver`, the bounded call uses your resolver, and your
