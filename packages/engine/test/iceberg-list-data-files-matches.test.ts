@@ -22,6 +22,27 @@ const CONN = { catalog: {} as never, resolver: {} as never, namespace: 'gsc' } a
 const RANGE = { start: '2026-05-01', end: '2026-05-31' }
 
 describe('listIcebergDataFiles identity matches', () => {
+  it('forwards explicit manifest read limits without changing identity or range', async () => {
+    const readLimits = {
+      maxObjectBytes: 1024,
+      maxTotalObjectBytes: 4096,
+      maxManifests: 4,
+      maxEntries: 10,
+      maxInflatedBlockBytes: 2048,
+      maxTotalInflatedBytes: 8192,
+      maxValueBytes: 512,
+      maxDecodedValues: 1000,
+      maxHeaderBytes: 512,
+      maxSchemaDepth: 16,
+    }
+    await listIcebergDataFiles(CONN, { table: 'dates', siteId: 7, searchType: 1, range: RANGE, readLimits })
+    expect(resolveIcebergDataFiles).toHaveBeenLastCalledWith(CONN, expect.objectContaining({
+      readLimits,
+      range: RANGE,
+      matches: [{ field: 'site_id', value: 7, encoding: 'int32' }, { field: 'search_type', value: 1, encoding: 'int32' }],
+    }))
+  })
+
   it('int encoding passes int32 site_id + search_type matches (per-file isolation)', async () => {
     await listIcebergDataFiles(CONN, {
       table: 'pages',

@@ -17,6 +17,7 @@ import type {
 } from 'icebird/src/write/write.js'
 import type { AppendIdentity } from './append-identity'
 import type { CatalogCache, CatalogCacheGetOutcome } from './catalog-cache'
+import type { ManifestReadLimits } from './manifest-read-limits'
 import type { IcebergFieldSummary, ManifestPartitionFilter, PartitionValueMatch } from './partition-prune'
 import type { IcebergPartitionField, IcebergPrimitiveType, IcebergS3Config } from './schema'
 import {
@@ -32,6 +33,7 @@ import { deriveAppendIdentity } from './append-identity'
 import { stringifyBigintSafe } from './bigint'
 import { cacheGet, cachePut, reportCatalogCacheError } from './catalog-cache'
 import { toIcebergDayCount } from './date'
+import { captureManifestReadLimits } from './manifest-read-limits'
 import { buildManifestPartitionFilter, manifestMonthBucket, MULTI_MONTH_MANIFEST } from './partition-prune'
 
 /** A field in an icebird table `Schema`. */
@@ -736,6 +738,13 @@ export interface ResolveIcebergDataFilesOptions {
   cache?: CatalogCache
   clock?: () => number
   profiler?: QueryProfiler
+  /**
+   * Opt-in Avro source/decode-work limits for one uncached manifest walk.
+   * Bypasses decoded manifest, month and resolved-file caches; catalog metadata
+   * and snapshot caching keep their existing authority and are not byte-bounded
+   * by this option. No default limits or fallback to unbounded decoding.
+   */
+  readLimits?: ManifestReadLimits
 }
 
 const SNAPSHOT_REF_TTL_MS = 30 * 60 * 1000
@@ -1261,8 +1270,9 @@ async function resolveViaFullWalk(
   wantedMonths: ReadonlySet<number>,
   dateFieldId: number | null,
   manifestCache: ManifestReadCache | undefined,
+  readLimits?: ManifestReadLimits,
 ): Promise<ManifestWalkOutcome> {
-  const manifests: WalkedManifest[] = await icebergManifests({ metadata, resolver: conn.resolver, partitionFilter, manifestCache })
+  const manifests: WalkedManifest[] = await icebergManifests({ metadata, resolver: conn.resolver, partitionFilter, manifestCache, readLimits })
   const entries: IcebergListedDataFile[] = []
   for (const m of manifests) {
     for (const entry of m.entries) {
@@ -1465,6 +1475,7 @@ async function resolveIcebergDataFilesInBatch(
   conn: IcebergConnection,
   opts: ResolveIcebergDataFilesOptions,
 ): Promise<IcebergListedDataFile[]> {
+  const readLimits = captureManifestReadLimits(opts.readLimits)
   const { namespace, table } = opts
   const profiler = opts.profiler
   const now = (opts.clock ?? Date.now)()
@@ -1487,7 +1498,7 @@ async function resolveIcebergDataFilesInBatch(
 
   const scope = conn.cacheScope ?? ''
   const filesKey = resolvedFilesKey(scope, namespace, table, snapshotId, opts.matches, opts.range)
-  if (opts.cache) {
+  if (opts.cache && !readLimits) {
     const endCache = profiler?.start('iceberg.cache')
     const cached = await cacheGet<IcebergListedDataFile[]>(opts.cache, filesKey, now)
     endCache?.({ hit: cached !== undefined })
@@ -1517,11 +1528,13 @@ async function resolveIcebergDataFilesInBatch(
   // unparseable range all fall back to month-tuple pruning alone.
   const dateFieldId = dateColumnFieldId(metadata, monthField?.sourceColumn)
   const dayWindow = rangeDayWindow(opts.range)
-  const manifestCache = manifestReadCacheFor(conn, namespace, table, metadata)
+  // Old decoded caches carry no policy provenance. Keep the catalog/snapshot
+  // authority, but admit every Avro read under one private per-call budget.
+  const manifestCache = readLimits ? undefined : manifestReadCacheFor(conn, namespace, table, metadata)
 
-  const walk = opts.cache && monthFieldName
+  const walk = opts.cache && monthFieldName && !readLimits
     ? await resolveViaMonthCache(conn, opts.cache, metadata, partitionFilter, opts.partitionSpec, opts.matches, monthFieldName, wantedMonths, dateFieldId, scope, namespace, table, now, manifestCache)
-    : await resolveViaFullWalk(conn, metadata, partitionFilter, opts.matches, monthFieldName, wantedMonths, dateFieldId, manifestCache)
+    : await resolveViaFullWalk(conn, metadata, partitionFilter, opts.matches, monthFieldName, wantedMonths, dateFieldId, manifestCache, readLimits)
 
   // Day-bounds pruning runs once, over the merged (cached ∪ freshly-walked)
   // list — see `toListedFile` and `resolveViaMonthCache`'s doc for why it
@@ -1549,7 +1562,7 @@ async function resolveIcebergDataFilesInBatch(
     manifestsWalked: walk.manifestsWalked,
   })
 
-  if (opts.cache) {
+  if (opts.cache && !readLimits) {
     const freshKey = resolvedFilesKey(scope, namespace, table, snapshotId, opts.matches, opts.range)
     await cachePut(opts.cache, freshKey, out, RESOLVED_FILES_TTL_MS, now)
   }
