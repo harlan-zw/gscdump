@@ -11,6 +11,7 @@
  */
 
 import type { ManifestReadCache } from 'icebird/src/manifest.js'
+import type { Resolver } from 'icebird/src/types.js'
 import type {
   icebergAppend,
   icebergAppendBatches,
@@ -26,7 +27,6 @@ import {
   restCatalogListTables,
   restCatalogLoadTable,
 } from 'icebird/src/catalog/rest.js'
-import { cachingResolver } from 'icebird/src/fetch.js'
 import { icebergManifests } from 'icebird/src/manifest.js'
 import { s3SignedResolver } from 'icebird/src/s3.js'
 import { deriveAppendIdentity } from './append-identity'
@@ -35,6 +35,7 @@ import { cacheGet, cachePut, reportCatalogCacheError } from './catalog-cache'
 import { toIcebergDayCount } from './date'
 import { captureManifestReadLimits } from './manifest-read-limits'
 import { buildManifestPartitionFilter, manifestMonthBucket, MULTI_MONTH_MANIFEST } from './partition-prune'
+import { byteCappedCachingResolver } from './resolver-byte-cache'
 
 /** A field in an icebird table `Schema`. */
 export interface IcebergSchemaField {
@@ -100,7 +101,7 @@ export interface IcebergConnection {
   /** icebird REST catalog context, passed as `{ catalog }` to icebird write fns. */
   catalog: Awaited<ReturnType<typeof restCatalogConnect>>
   /** icebird S3 resolver (caching-wrapped), passed as `{ resolver }` to icebird fns. */
-  resolver: ReturnType<typeof cachingResolver>
+  resolver: Resolver
   /** The namespace the dataset's table lives under. */
   namespace: string
   /**
@@ -193,7 +194,7 @@ interface CachedCatalogConfig {
   overrides: Record<string, string>
 }
 
-type IcebergResolver = ReturnType<typeof cachingResolver>
+type IcebergResolver = Resolver
 type IcebergWriter = ReturnType<NonNullable<IcebergResolver['writer']>>
 type IcebirdWriteModule = typeof import('icebird/src/write/write.js')
 
@@ -285,7 +286,7 @@ export async function connectIcebergCatalog(
     endpoint: config.s3.endpoint,
     pathStyle: true,
   })
-  const resolver = withUncachedReader(withVerifiedWriterByteLengths(cachingResolver(s3Resolver)), s3Resolver)
+  const resolver = withUncachedReader(withVerifiedWriterByteLengths(byteCappedCachingResolver(s3Resolver)), s3Resolver)
   return {
     catalog,
     resolver,
@@ -300,9 +301,9 @@ const uncachedReader = Symbol('iceberg-uncached-reader')
 type ConnectionResolver = IcebergResolver & { [uncachedReader]?: IcebergResolver['reader'] }
 
 /**
- * The connection cache keeps every object it reads until the connection is
- * dropped, with no byte or entry limit. Keep the uncached S3 reader beside it,
- * so a call under `readLimits` can read without leaving bytes in that cache.
+ * The connection cache keeps up to `CONNECTION_CACHE_MAX_BYTES` of objects it
+ * reads. Keep the uncached S3 reader beside it, so a call under `readLimits`
+ * can read without leaving bytes in that cache.
  */
 function withUncachedReader(resolver: IcebergResolver, base: IcebergResolver): ConnectionResolver {
   return { ...resolver, [uncachedReader]: (path, byteLength) => base.reader(path, byteLength) }
