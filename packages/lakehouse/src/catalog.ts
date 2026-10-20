@@ -285,7 +285,7 @@ export async function connectIcebergCatalog(
     endpoint: config.s3.endpoint,
     pathStyle: true,
   })
-  const resolver = withVerifiedWriterByteLengths(cachingResolver(s3Resolver))
+  const resolver = withUncachedReader(withVerifiedWriterByteLengths(cachingResolver(s3Resolver)), s3Resolver)
   return {
     catalog,
     resolver,
@@ -293,6 +293,30 @@ export async function connectIcebergCatalog(
     cacheScope,
     [connectionReadBatch]: { active: 0, snapshots: new Map(), manifests: new Map() },
   }
+}
+
+const uncachedReader = Symbol('iceberg-uncached-reader')
+
+type ConnectionResolver = IcebergResolver & { [uncachedReader]?: IcebergResolver['reader'] }
+
+/**
+ * The connection cache keeps every object it reads until the connection is
+ * dropped, with no byte or entry limit. Keep the uncached S3 reader beside it,
+ * so a call under `readLimits` can read without leaving bytes in that cache.
+ */
+function withUncachedReader(resolver: IcebergResolver, base: IcebergResolver): ConnectionResolver {
+  return { ...resolver, [uncachedReader]: (path, byteLength) => base.reader(path, byteLength) }
+}
+
+/**
+ * The resolver for a walk under `readLimits`. The limits bound the bytes one
+ * call reads; reading through the connection cache would keep those bytes
+ * after the call. A hand-built connection without the uncached reader keeps
+ * its own resolver, because the caller owns its retention.
+ */
+function boundedReadResolver(resolver: IcebergResolver): IcebergResolver {
+  const read = (resolver as ConnectionResolver)[uncachedReader]
+  return read ? { reader: read } : resolver
 }
 
 /**
@@ -1272,7 +1296,8 @@ async function resolveViaFullWalk(
   manifestCache: ManifestReadCache | undefined,
   readLimits?: ManifestReadLimits,
 ): Promise<ManifestWalkOutcome> {
-  const manifests: WalkedManifest[] = await icebergManifests({ metadata, resolver: conn.resolver, partitionFilter, manifestCache, readLimits })
+  const resolver = readLimits ? boundedReadResolver(conn.resolver) : conn.resolver
+  const manifests: WalkedManifest[] = await icebergManifests({ metadata, resolver, partitionFilter, manifestCache, readLimits })
   const entries: IcebergListedDataFile[] = []
   for (const m of manifests) {
     for (const entry of m.entries) {

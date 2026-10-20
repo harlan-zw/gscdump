@@ -131,7 +131,14 @@ partition, Site, search-type, date pruning and output ordering are unchanged.
 This has an explicit warm-read cost. A default exact-range cache hit can avoid
 all Avro reads; a default month hit can need only the manifest list. A bounded
 call reads the list and every selected manifest again (subject to any injected
-resolver's own byte cache). Each concurrent bounded call owns its own limits;
+resolver's own byte cache).
+
+A connection from `connectIcebergCatalog` keeps every object it reads in an
+unbounded per-connection byte cache. A bounded call reads through the uncached
+S3 resolver instead, so the connection keeps none of its manifest bytes after
+the call. It also does not reuse bytes that earlier unbounded calls cached. If
+you replace `connection.resolver`, the bounded call uses your resolver, and your
+resolver owns its retention. Each concurrent bounded call owns its own limits;
 the option does not impose a connection-wide or process-wide budget. There is
 no automatic fallback to cached or unbounded results after refusal. Validate
 retained files and request costs before enabling a policy in a host; this does
