@@ -489,6 +489,38 @@ index 2bac90d09cfa5a05243b3cf8d450df2f9e4f3c3a..a177d71fca3a3dc840b8fadfaa3ca3d7
  export { icebergCreate } from './create.js'
  export { fileCatalog } from './catalog/file.js'
  export { restCatalogConnect, restCatalogCreateNamespace, restCatalogDropNamespace, restCatalogListNamespaces, restCatalogListTables, restCatalogLoadCredentials, restCatalogLoadTable, restCatalogRegisterTable, restCatalogRenameTable } from './catalog/rest.js'
+diff --git a/src/json.js b/src/json.js
+index 72a1ebbc89dbbd7b85c38983d83122abdc4dec02..59b97f5aec9682d35ee6f18fee80f8bc01a6ca8d 100644
+--- a/src/json.js
++++ b/src/json.js
+@@ -23,11 +23,16 @@ export function parseIcebergJson(text) {
+   function parseString() {
+     if (text[i] !== '"') throw new Error(`expected " at ${i}`)
+     i++
++    // Copy each run of plain characters with one slice. Appending one
++    // character at a time builds a rope with one node per character, so 4 MB
++    // of table metadata retained about 72 MiB of heap.
+     let s = ''
++    let run = i
+     while (i < text.length) {
+-      const c = text[i++]
+-      if (c === '"') return s
+-      if (c !== '\\') { s += c; continue }
++      const c = text.charCodeAt(i)
++      if (c === 0x22) return s + text.slice(run, i++)
++      if (c !== 0x5c) { i++; continue }
++      s += text.slice(run, i++)
+       const e = text[i++]
+       if (e === 'u') { s += String.fromCharCode(parseInt(text.slice(i, i + 4), 16)); i += 4 }
+       else if (e === 'n') s += '\n'
+@@ -36,6 +41,7 @@ export function parseIcebergJson(text) {
+       else if (e === 'b') s += '\b'
+       else if (e === 'f') s += '\f'
+       else s += e
++      run = i
+     }
+     throw new Error('unterminated string')
+   }
 diff --git a/src/manifest.js b/src/manifest.js
 index 873101728c62f83932cac785fb26625512c83e2b..b6f2f63db8672ba06dd8b58d1943db3ae8fc2562 100644
 --- a/src/manifest.js
