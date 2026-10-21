@@ -11,13 +11,13 @@
  */
 
 import type { ManifestReadCache } from 'icebird/src/manifest.js'
-import type { Resolver } from 'icebird/src/types.js'
 import type {
   icebergAppend,
   icebergAppendBatches,
 } from 'icebird/src/write/write.js'
 import type { AppendIdentity } from './append-identity'
 import type { CatalogCache, CatalogCacheGetOutcome } from './catalog-cache'
+import type { Resolver } from './icebird-resolver'
 import type { ManifestReadLimits } from './manifest-read-limits'
 import type { IcebergFieldSummary, ManifestPartitionFilter, PartitionValueMatch } from './partition-prune'
 import type { IcebergPartitionField, IcebergPrimitiveType, IcebergS3Config } from './schema'

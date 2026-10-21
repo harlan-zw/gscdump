@@ -1,5 +1,5 @@
 import type { AsyncBuffer } from 'hyparquet'
-import type { Resolver } from 'icebird/src/types.js'
+import type { Resolver } from './icebird-resolver'
 import { cachedAsyncBuffer } from 'hyparquet'
 
 /**
