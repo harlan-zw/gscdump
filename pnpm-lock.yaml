@@ -311,7 +311,7 @@ overrides:
 patchedDependencies:
   hyparquet-compressors@1.1.2: 3f8f44805c034b2563763dcd5d37050ea6b1d5d45b46ea37adc4a721e748a1c5
   hyparquet-writer@0.16.10: d26d002aede61ad95dd633d6557b56897cdcbc45dfc3a5d93fa0e9075ad5425f
-  icebird@0.8.30: dd7b4ab1f0368bfe59356853801f25e543334d7d0fb4aac230c42c9e35730c63
+  icebird@0.8.30: 3323fb6fb33622328d6d10f450feec7039468e8cad2e8667b7d8e59d48ae701b
 
 importers:
 
@@ -652,7 +652,7 @@ importers:
         version: 0.16.10(patch_hash=d26d002aede61ad95dd633d6557b56897cdcbc45dfc3a5d93fa0e9075ad5425f)
       icebird:
         specifier: 'catalog:'
-        version: 0.8.30(patch_hash=dd7b4ab1f0368bfe59356853801f25e543334d7d0fb4aac230c42c9e35730c63)
+        version: 0.8.30(patch_hash=3323fb6fb33622328d6d10f450feec7039468e8cad2e8667b7d8e59d48ae701b)
       tsx:
         specifier: 'catalog:'
         version: 4.23.15
@@ -742,7 +742,7 @@ importers:
         version: 0.16.10(patch_hash=d26d002aede61ad95dd633d6557b56897cdcbc45dfc3a5d93fa0e9075ad5425f)
       icebird:
         specifier: 'catalog:'
-        version: 0.8.30(patch_hash=dd7b4ab1f0368bfe59356853801f25e543334d7d0fb4aac230c42c9e35730c63)
+        version: 0.8.30(patch_hash=3323fb6fb33622328d6d10f450feec7039468e8cad2e8667b7d8e59d48ae701b)
       unstorage:
         specifier: 'catalog:'
         version: 1.17.5(aws4fetch@1.0.20)(db0@0.3.4)(ioredis@5.11.1(supports-color@10.2.2))
@@ -15245,7 +15245,7 @@ snapshots:
 
   hysnappy@1.1.1: {}
 
-  icebird@0.8.30(patch_hash=dd7b4ab1f0368bfe59356853801f25e543334d7d0fb4aac230c42c9e35730c63):
+  icebird@0.8.30(patch_hash=3323fb6fb33622328d6d10f450feec7039468e8cad2e8667b7d8e59d48ae701b):
     dependencies:
       hyparquet: 1.31.1
       hyparquet-compressors: 1.1.2(patch_hash=3f8f44805c034b2563763dcd5d37050ea6b1d5d45b46ea37adc4a721e748a1c5)

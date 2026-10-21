@@ -187,6 +187,29 @@ function loadTableBody(snapshotCount: number): string {
     + `"statistics": [], "partition-statistics": [], "position": -1.5e-3}}`
 }
 
+// Registered-host appends record their provider request in a snapshot summary
+// value, so the value is JSON inside JSON and carries many escaped quotes.
+function escapedSummaryBody(snapshotCount: number): string {
+  const request = JSON.stringify({
+    propertyUrl: 'sc-domain:example.test',
+    request: { startDate: '2025-07-01', endDate: '2025-07-01', dimensions: ['page', 'query', 'date'], dimensionFilterGroups: [{ filters: [{ dimension: 'page', operator: 'includingRegex', expression: '^https?://www\\.example\\.test/' }] }], rowLimit: 500, type: 'web', dataState: 'all' },
+  })
+  const snapshots = Array.from({ length: snapshotCount }, (_, index) => ({
+    'snapshot-id': 1_000_000_000 + index,
+    'sequence-number': index + 1,
+    'timestamp-ms': 1_790_000_000_000 + index,
+    'manifest-list': `s3://fixture_bucket/gsc_v1/page_queries/metadata/snap-${1_000_000_000 + index}-1-00000000-0000-0000-0000-000000000000.avro`,
+    'summary': {
+      'operation': 'append',
+      'added-records': '500',
+      'total-records': String(6500 + index * 500),
+      'lakehouse.append-id': `registered-host:${JSON.stringify(['historic', 2, 'gsc_v1', 1, `wave-${index}`, 'page_queries', 'web', '2025-07-01', request, index * 500])}`,
+    },
+    'schema-id': 0,
+  }))
+  return JSON.stringify({ 'metadata-location': 'memory://page_queries/1.json', 'config': {}, 'metadata': { 'format-version': 2, 'table-uuid': 'fixture', 'current-snapshot-id': 1_000_000_000 + snapshotCount - 1, snapshots } })
+}
+
 const ctx = Object.freeze({ type: 'rest', url: 'https://catalog.invalid', prefix: 'w', defaults: {}, overrides: {} }) as Parameters<typeof restCatalogLoadTable>[0]
 
 afterEach(() => {
@@ -212,10 +235,39 @@ describe('restCatalogLoadTable metadata parsing', () => {
     expect(retained).toBeLessThan(body.length * 3)
   })
 
+  it('retains a small multiple of the body size when strings carry many escapes', async () => {
+    const body = escapedSummaryBody(1_000)
+    expect(body.split('\\"').length).toBeGreaterThan(50_000)
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(body)))
+
+    gc()
+    gc()
+    const before = process.memoryUsage().heapUsed
+    const loaded = await restCatalogLoadTable(ctx, { namespace: 'gsc_v1', table: 'page_queries' })
+    gc()
+    gc()
+    const retained = process.memoryUsage().heapUsed - before
+
+    const expected = parseIcebird0830(body) as { 'metadata-location': string, 'config': object, 'metadata': unknown }
+    expect(loaded).toEqual({ metadataLocation: expected['metadata-location'], metadata: expected.metadata, config: expected.config })
+    // Decoding each escape into a rope retained about 10 times the body size.
+    expect(retained).toBeLessThan(body.length * 3)
+  })
+
   it('decodes escapes that JSON.parse refuses as the 0.8.30 parser did', async () => {
-    const body = '{"metadata": {"location": "a\\qb\\u00e9\\x", "raw": "tab\there"}}'
+    const body = '{"metadata": {"location": "a\\qb\\u00e9\\x", "raw": "tab\there", "mixed": "tab\t\\"q\\" \\u00e9\\z"}}'
     vi.stubGlobal('fetch', vi.fn(async () => new Response(body)))
     const loaded = await restCatalogLoadTable(ctx, { namespace: 'gsc', table: 'pages' })
+    expect(loaded.metadata).toEqual((parseIcebird0830(body) as { metadata: unknown }).metadata)
+  })
+
+  it('reads a short \\u escape past the closing quote as the 0.8.30 parser did', async () => {
+    // The 0.8.30 parser always consumes four characters after \u, so here the
+    // string ends at the second quote.
+    const body = '{"metadata": {"key": "x\\u12"ab"}}'
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(body)))
+    const loaded = await restCatalogLoadTable(ctx, { namespace: 'gsc', table: 'pages' })
+    expect(loaded.metadata).toEqual({ key: 'x\u0012b' })
     expect(loaded.metadata).toEqual((parseIcebird0830(body) as { metadata: unknown }).metadata)
   })
 })

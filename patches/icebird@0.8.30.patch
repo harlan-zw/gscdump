@@ -490,16 +490,39 @@ index 2bac90d09cfa5a05243b3cf8d450df2f9e4f3c3a..a177d71fca3a3dc840b8fadfaa3ca3d7
  export { fileCatalog } from './catalog/file.js'
  export { restCatalogConnect, restCatalogCreateNamespace, restCatalogDropNamespace, restCatalogListNamespaces, restCatalogListTables, restCatalogLoadCredentials, restCatalogLoadTable, restCatalogRegisterTable, restCatalogRenameTable } from './catalog/rest.js'
 diff --git a/src/json.js b/src/json.js
-index 72a1ebbc89dbbd7b85c38983d83122abdc4dec02..59b97f5aec9682d35ee6f18fee80f8bc01a6ca8d 100644
+index 72a1ebbc89dbbd7b85c38983d83122abdc4dec02..d7dd3f57d09c71b519c91bf23b31cb512bd3240c 100644
 --- a/src/json.js
 +++ b/src/json.js
-@@ -23,11 +23,16 @@ export function parseIcebergJson(text) {
+@@ -22,12 +22,38 @@ export function parseIcebergJson(text) {
+   /** @returns {string} */
    function parseString() {
      if (text[i] !== '"') throw new Error(`expected " at ${i}`)
-     i++
-+    // Copy each run of plain characters with one slice. Appending one
-+    // character at a time builds a rope with one node per character, so 4 MB
-+    // of table metadata retained about 72 MiB of heap.
+-    i++
++    // Return one flat string. Appending each character or escape builds a V8
++    // rope, and a rope node costs far more heap than the characters it holds.
++    const open = i++
++    let escaped = false
++    while (i < text.length) {
++      const c = text.charCodeAt(i)
++      if (c === 0x22) {
++        i++
++        if (!escaped) return text.slice(open + 1, i - 1)
++        // JSON.parse decodes a strict literal into a flat string, exactly as
++        // the lenient decoder would. It refuses what only the lenient decoder
++        // accepts, such as \q, a short \u, or a raw control character.
++        try { return JSON.parse(text.slice(open, i)) }
++        catch { break }
++      }
++      if (c === 0x5c) { escaped = true; i += 2; continue }
++      i++
++    }
++    i = open + 1
++    return parseLenientString()
++  }
++  // The original decoder: any escaped character stands for itself, and \u
++  // always consumes four characters, even past a closing quote.
++  /** @returns {string} */
++  function parseLenientString() {
      let s = ''
 +    let run = i
      while (i < text.length) {
@@ -513,7 +536,7 @@ index 72a1ebbc89dbbd7b85c38983d83122abdc4dec02..59b97f5aec9682d35ee6f18fee80f8bc
        const e = text[i++]
        if (e === 'u') { s += String.fromCharCode(parseInt(text.slice(i, i + 4), 16)); i += 4 }
        else if (e === 'n') s += '\n'
-@@ -36,6 +41,7 @@ export function parseIcebergJson(text) {
+@@ -36,6 +62,7 @@ export function parseIcebergJson(text) {
        else if (e === 'b') s += '\b'
        else if (e === 'f') s += '\f'
        else s += e
