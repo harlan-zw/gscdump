@@ -1,6 +1,7 @@
-import type { Manifest, ManifestEntry, Resolver } from 'icebird/src/types.js'
+import type { Manifest, ManifestEntry } from 'icebird/src/types.js'
 import type { IcebergConnection } from './catalog'
 import type { CatalogCache } from './catalog-cache'
+import type { Resolver } from './icebird-resolver'
 import { ByteWriter } from 'hyparquet-writer'
 import { restCatalogLoadTable, restCatalogUpdateTable } from 'icebird/src/catalog/rest.js'
 import { icebergManifests } from 'icebird/src/manifest.js'
