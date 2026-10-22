@@ -17,6 +17,8 @@ import type {
 } from 'icebird/src/write/write.js'
 import type { AppendIdentity } from './append-identity'
 import type { CatalogCache, CatalogCacheGetOutcome } from './catalog-cache'
+import type { Resolver } from './icebird-resolver'
+import type { ManifestReadLimits } from './manifest-read-limits'
 import type { IcebergFieldSummary, ManifestPartitionFilter, PartitionValueMatch } from './partition-prune'
 import type { IcebergPartitionField, IcebergPrimitiveType, IcebergS3Config } from './schema'
 import {
@@ -25,14 +27,15 @@ import {
   restCatalogListTables,
   restCatalogLoadTable,
 } from 'icebird/src/catalog/rest.js'
-import { cachingResolver } from 'icebird/src/fetch.js'
 import { icebergManifests } from 'icebird/src/manifest.js'
 import { s3SignedResolver } from 'icebird/src/s3.js'
 import { deriveAppendIdentity } from './append-identity'
 import { stringifyBigintSafe } from './bigint'
 import { cacheGet, cachePut, reportCatalogCacheError } from './catalog-cache'
 import { toIcebergDayCount } from './date'
+import { captureManifestReadLimits } from './manifest-read-limits'
 import { buildManifestPartitionFilter, manifestMonthBucket, MULTI_MONTH_MANIFEST } from './partition-prune'
+import { byteCappedCachingResolver } from './resolver-byte-cache'
 
 /** A field in an icebird table `Schema`. */
 export interface IcebergSchemaField {
@@ -98,7 +101,7 @@ export interface IcebergConnection {
   /** icebird REST catalog context, passed as `{ catalog }` to icebird write fns. */
   catalog: Awaited<ReturnType<typeof restCatalogConnect>>
   /** icebird S3 resolver (caching-wrapped), passed as `{ resolver }` to icebird fns. */
-  resolver: ReturnType<typeof cachingResolver>
+  resolver: Resolver
   /** The namespace the dataset's table lives under. */
   namespace: string
   /**
@@ -191,7 +194,7 @@ interface CachedCatalogConfig {
   overrides: Record<string, string>
 }
 
-type IcebergResolver = ReturnType<typeof cachingResolver>
+type IcebergResolver = Resolver
 type IcebergWriter = ReturnType<NonNullable<IcebergResolver['writer']>>
 type IcebirdWriteModule = typeof import('icebird/src/write/write.js')
 
@@ -283,7 +286,7 @@ export async function connectIcebergCatalog(
     endpoint: config.s3.endpoint,
     pathStyle: true,
   })
-  const resolver = withVerifiedWriterByteLengths(cachingResolver(s3Resolver))
+  const resolver = withUncachedReader(withVerifiedWriterByteLengths(byteCappedCachingResolver(s3Resolver)), s3Resolver)
   return {
     catalog,
     resolver,
@@ -291,6 +294,30 @@ export async function connectIcebergCatalog(
     cacheScope,
     [connectionReadBatch]: { active: 0, snapshots: new Map(), manifests: new Map() },
   }
+}
+
+const uncachedReader = Symbol('iceberg-uncached-reader')
+
+type ConnectionResolver = IcebergResolver & { [uncachedReader]?: IcebergResolver['reader'] }
+
+/**
+ * The connection cache keeps up to `CONNECTION_CACHE_MAX_BYTES` of objects it
+ * reads. Keep the uncached S3 reader beside it, so a call under `readLimits`
+ * can read without leaving bytes in that cache.
+ */
+function withUncachedReader(resolver: IcebergResolver, base: IcebergResolver): ConnectionResolver {
+  return { ...resolver, [uncachedReader]: (path, byteLength) => base.reader(path, byteLength) }
+}
+
+/**
+ * The resolver for a walk under `readLimits`. The limits bound the bytes one
+ * call reads; reading through the connection cache would keep those bytes
+ * after the call. A hand-built connection without the uncached reader keeps
+ * its own resolver, because the caller owns its retention.
+ */
+function boundedReadResolver(resolver: IcebergResolver): IcebergResolver {
+  const read = (resolver as ConnectionResolver)[uncachedReader]
+  return read ? { reader: read } : resolver
 }
 
 /**
@@ -736,6 +763,13 @@ export interface ResolveIcebergDataFilesOptions {
   cache?: CatalogCache
   clock?: () => number
   profiler?: QueryProfiler
+  /**
+   * Opt-in Avro source/decode-work limits for one uncached manifest walk.
+   * Bypasses decoded manifest, month and resolved-file caches; catalog metadata
+   * and snapshot caching keep their existing authority and are not byte-bounded
+   * by this option. No default limits or fallback to unbounded decoding.
+   */
+  readLimits?: ManifestReadLimits
 }
 
 const SNAPSHOT_REF_TTL_MS = 30 * 60 * 1000
@@ -1261,8 +1295,10 @@ async function resolveViaFullWalk(
   wantedMonths: ReadonlySet<number>,
   dateFieldId: number | null,
   manifestCache: ManifestReadCache | undefined,
+  readLimits?: ManifestReadLimits,
 ): Promise<ManifestWalkOutcome> {
-  const manifests: WalkedManifest[] = await icebergManifests({ metadata, resolver: conn.resolver, partitionFilter, manifestCache })
+  const resolver = readLimits ? boundedReadResolver(conn.resolver) : conn.resolver
+  const manifests: WalkedManifest[] = await icebergManifests({ metadata, resolver, partitionFilter, manifestCache, readLimits })
   const entries: IcebergListedDataFile[] = []
   for (const m of manifests) {
     for (const entry of m.entries) {
@@ -1465,6 +1501,7 @@ async function resolveIcebergDataFilesInBatch(
   conn: IcebergConnection,
   opts: ResolveIcebergDataFilesOptions,
 ): Promise<IcebergListedDataFile[]> {
+  const readLimits = captureManifestReadLimits(opts.readLimits)
   const { namespace, table } = opts
   const profiler = opts.profiler
   const now = (opts.clock ?? Date.now)()
@@ -1487,7 +1524,7 @@ async function resolveIcebergDataFilesInBatch(
 
   const scope = conn.cacheScope ?? ''
   const filesKey = resolvedFilesKey(scope, namespace, table, snapshotId, opts.matches, opts.range)
-  if (opts.cache) {
+  if (opts.cache && !readLimits) {
     const endCache = profiler?.start('iceberg.cache')
     const cached = await cacheGet<IcebergListedDataFile[]>(opts.cache, filesKey, now)
     endCache?.({ hit: cached !== undefined })
@@ -1517,11 +1554,13 @@ async function resolveIcebergDataFilesInBatch(
   // unparseable range all fall back to month-tuple pruning alone.
   const dateFieldId = dateColumnFieldId(metadata, monthField?.sourceColumn)
   const dayWindow = rangeDayWindow(opts.range)
-  const manifestCache = manifestReadCacheFor(conn, namespace, table, metadata)
+  // Old decoded caches carry no policy provenance. Keep the catalog/snapshot
+  // authority, but admit every Avro read under one private per-call budget.
+  const manifestCache = readLimits ? undefined : manifestReadCacheFor(conn, namespace, table, metadata)
 
-  const walk = opts.cache && monthFieldName
+  const walk = opts.cache && monthFieldName && !readLimits
     ? await resolveViaMonthCache(conn, opts.cache, metadata, partitionFilter, opts.partitionSpec, opts.matches, monthFieldName, wantedMonths, dateFieldId, scope, namespace, table, now, manifestCache)
-    : await resolveViaFullWalk(conn, metadata, partitionFilter, opts.matches, monthFieldName, wantedMonths, dateFieldId, manifestCache)
+    : await resolveViaFullWalk(conn, metadata, partitionFilter, opts.matches, monthFieldName, wantedMonths, dateFieldId, manifestCache, readLimits)
 
   // Day-bounds pruning runs once, over the merged (cached ∪ freshly-walked)
   // list — see `toListedFile` and `resolveViaMonthCache`'s doc for why it
@@ -1549,7 +1588,7 @@ async function resolveIcebergDataFilesInBatch(
     manifestsWalked: walk.manifestsWalked,
   })
 
-  if (opts.cache) {
+  if (opts.cache && !readLimits) {
     const freshKey = resolvedFilesKey(scope, namespace, table, snapshotId, opts.matches, opts.range)
     await cachePut(opts.cache, freshKey, out, RESOLVED_FILES_TTL_MS, now)
   }

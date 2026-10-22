@@ -13,6 +13,15 @@ const OTHER = 'https://other.example.com/'
 const querySpy = vi.fn()
 const sitesSpy = vi.fn()
 
+// Freeze calendar selection below, while real pacing follows elapsed time.
+vi.mock('../../src/request-pacer', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/request-pacer')>()
+  return {
+    ...actual,
+    createRequestPacer: (options: Parameters<typeof actual.createRequestPacer>[0]) => actual.createRequestPacer({ ...options, now: () => vi.getRealSystemTime() }),
+  }
+})
+
 vi.mock('gscdump/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('gscdump/client')>()
   return {
@@ -94,7 +103,7 @@ async function sync(...flags: string[]): Promise<Run> {
 const QUIET = ['--tables', 'pages', '--types', 'web', '--no-sitemaps', '--no-inspections', '--no-rollups', '--requests-per-minute', '1000000']
 
 function fetchedDates(site = SITE): string[] {
-  return querySpy.mock.calls.filter(([siteUrl]) => siteUrl === site).map(([, params]) => params.startDate as string)
+  return querySpy.mock.calls.filter(([siteUrl, params]) => siteUrl === site && (params.startRow ?? 0) === 0).map(([, params]) => params.startDate as string)
 }
 
 async function states(table = 'pages') {
@@ -107,7 +116,7 @@ describe('sync catch-up', () => {
     state.dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'gscdump-catchup-'))
     state.configDir = path.join(state.dataDir, 'config')
     querySpy.mockReset()
-    querySpy.mockImplementation(async (_site, params) => ({ rows: [row(params)] }))
+    querySpy.mockImplementation(async (_site, params) => ({ rows: (params.startRow ?? 0) > 0 ? [] : [row(params)] }))
     sitesSpy.mockReset()
     sitesSpy.mockResolvedValue([{ siteUrl: SITE, permissionLevel: 'siteOwner' }])
     // 02:00 UTC is 19:00 the day before in Los Angeles. Only Date is faked, so timers still run.
@@ -185,7 +194,7 @@ describe('sync catch-up', () => {
     querySpy.mockImplementation(async (_site, params) => {
       if (params.startDate === '2026-09-17')
         throw googleError(403, 'Search Analytics load quota exceeded.', 'quotaExceeded')
-      return { rows: [row(params)] }
+      return { rows: (params.startRow ?? 0) > 0 ? [] : [row(params)] }
     })
 
     const run = await sync('--site', SITE, ...QUIET, '--days', '5', '--concurrency', '1', '--json')
@@ -228,7 +237,7 @@ describe('sync catch-up', () => {
 
     querySpy.mockClear()
     await sync('--site', SITE, ...QUIET, '--days', '5', '--quiet')
-    expect(fetchedDates()).toEqual(['2026-09-17', '2026-09-16', '2026-09-15'])
+    expect(fetchedDates()).toEqual(['2026-09-18', '2026-09-17', '2026-09-16', '2026-09-15'])
   })
 
   it('plans at least one call per plain table day and three per dates day', async () => {
@@ -243,7 +252,7 @@ describe('sync catch-up', () => {
 
     await sync('--all-sites', ...QUIET, '--days', '2', '--quiet')
 
-    const order = querySpy.mock.calls.map(([site]) => site)
+    const order = querySpy.mock.calls.filter(([, params]) => (params.startRow ?? 0) === 0).map(([site]) => site)
     expect(order).toEqual([SITE, SITE, OTHER, OTHER])
   })
 
@@ -251,6 +260,9 @@ describe('sync catch-up', () => {
     let release: () => void = () => {}
     const interrupted = new Promise<void>((resolve) => {
       querySpy.mockImplementation(async (_site, params) => {
+        // A real process exits on the first signal; this fixture records exit.
+        if ((params.startRow ?? 0) > 0)
+          return { rows: [] }
         process.emit('SIGINT')
         resolve()
         await new Promise<void>((done) => {
@@ -282,7 +294,7 @@ describe('sync --status', () => {
     state.dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'gscdump-status-'))
     state.configDir = path.join(state.dataDir, 'config')
     querySpy.mockReset()
-    querySpy.mockImplementation(async (_site, params) => ({ rows: [row(params)] }))
+    querySpy.mockImplementation(async (_site, params) => ({ rows: (params.startRow ?? 0) > 0 ? [] : [row(params)] }))
     sitesSpy.mockResolvedValue([{ siteUrl: SITE, permissionLevel: 'siteOwner' }])
   })
 

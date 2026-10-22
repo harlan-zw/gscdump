@@ -23,6 +23,7 @@ import type {
   QueryProfiler,
 } from './catalog'
 import type { CatalogCache } from './catalog-cache'
+import type { ManifestReadLimits } from './manifest-read-limits'
 import type { ManifestPartitionFilter, PartitionValueMatch } from './partition-prune'
 import type {
   IcebergColumn,
@@ -31,6 +32,7 @@ import type {
   IcebergTableSpec,
 } from './schema'
 import { coerceBigIntToNumber } from './bigint'
+import { captureManifestReadLimits } from './manifest-read-limits'
 import { buildManifestPartitionFilter } from './partition-prune'
 import { ICEBERG_TYPE_MAP } from './schema'
 
@@ -245,6 +247,8 @@ export interface ResolveDataFilesOptions {
   cache?: CatalogCache
   clock?: () => number
   profiler?: QueryProfiler
+  /** Uncached Avro read limits; catalog metadata/snapshot caching is unchanged. */
+  readLimits?: ManifestReadLimits
 }
 
 export interface IcebergDataset {
@@ -540,6 +544,7 @@ export function defineIcebergDataset(def: IcebergDatasetDef): IcebergDataset {
     dims?: Record<string, string>,
     opts: ResolveDataFilesOptions = {},
   ): Promise<IcebergListedDataFile[]> {
+    const readLimits = captureManifestReadLimits(opts.readLimits)
     const { resolveDatasetDataFiles } = await import('./dataset-runtime')
     return resolveDatasetDataFiles(conn, {
       namespace: def.namespace,
@@ -550,6 +555,7 @@ export function defineIcebergDataset(def: IcebergDatasetDef): IcebergDataset {
       cache: opts.cache,
       clock: opts.clock,
       profiler: opts.profiler,
+      readLimits,
     })
   }
 

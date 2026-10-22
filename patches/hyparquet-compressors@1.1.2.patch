@@ -1,0 +1,359 @@
+diff --git a/src/gzip.js b/src/gzip.js
+index b33c63305a2bb490ef3a9ce7aab24028e5b26ccc..84f111b899d12071ac497287f83f109278d5ec63 100644
+--- a/src/gzip.js
++++ b/src/gzip.js
+@@ -47,8 +47,12 @@ function gzipStart(input, i) {
+   // if missing gzip header, assume raw deflate stream
+   if (input[i++] !== 31 || input[i++] !== 139 || input[i++] !== 8) return 0
+   const flag = input[i++]
++  // PATCH (gscdump): RFC 1952 reserves FLG bits 5 to 7 and requires an error.
++  if (flag & 224) throw new Error('invalid gzip header flags')
+   i += 6 // skip header
+-  if (flag & 4) i += (input[i + 10] | input[i + 11] << 8) + 2 // skip extra
++  // PATCH (gscdump): XLEN is the 2 byte little endian value at offset 10, which
++  // is i here. Upstream read offset 20 and skipped the payload start.
++  if (flag & 4) i += (input[i] | input[i + 1] << 8) + 2 // skip extra
+   // skip name and comment
+   for (let zs = (flag >> 3 & 1) + (flag >> 4 & 1); zs > 0; zs -= Number(!input[i++]));
+   return i + (flag & 2)
+@@ -60,160 +64,197 @@ function gzipStart(input, i) {
+  * @param {Uint8Array} [output]
+  * @param {number} [inputIndex]
+  * @param {number} [outputIndex]
++ * @param {{ raw: true, maxOutputBytes: number }} [limits] - Optional strict raw-DEFLATE allocation bound; no caller output/offsets.
+  * @returns {Uint8Array}
+  */
+-export function gunzip(input, output, inputIndex = 0, outputIndex = 0) {
+-  let out = output ?? new Uint8Array(1024) // initial size
++export function gunzip(input, output, inputIndex = 0, outputIndex = 0, limits) {
++  const maximum = limits?.maxOutputBytes
++  if (limits && (limits.raw !== true || !Number.isSafeInteger(maximum) || maximum < 0 || output || inputIndex !== 0 || outputIndex !== 0)) throw new RangeError('Invalid bounded raw DEFLATE options')
++  let out = output ?? new Uint8Array(limits ? Math.min(1024, maximum) : 1024) // initial size
++  if (limits && !input.length) throw new Error('unexpected EOF')
+   if (!(input.length - inputIndex)) return out
+-  const payloadStart = gzipStart(input, inputIndex)
+-  if (payloadStart === input.length - 8) return out
+-  if (payloadStart > input.length - 8) throw new Error('unexpected EOF')
+-  let pos = payloadStart * 8 // position in bits
+-  let final = 0 // last chunk?
+-  let lengthBits = 0
+-  let distBits = 0
+-  let lengthMap
+-  let distMap
+   const totalBits = input.length * 8
+ 
+   /** @param {number} length */
+   function ensureSize(length) {
++    if (limits && (!Number.isSafeInteger(length) || length > maximum)) throw new RangeError('DEFLATE output byte limit exceeded')
+     if (!output && length > out.length) {
+       const old = out
+-      out = new Uint8Array(Math.max(old.length * 2, length))
++      out = new Uint8Array(limits ? Math.min(maximum, Math.max(old.length * 2, length)) : Math.max(old.length * 2, length))
+       out.set(old)
+     }
+   }
+ 
+-  do {
+-    if (!lengthMap) {
+-      // final chunk is next?
+-      final = bits(input, pos, 1)
+-      const type = bits(input, pos + 1, 3)
+-      pos += 3
+-      if (!type) {
+-        // no compression
+-        // go to end of byte boundary
+-        const s = shft(pos) + 4
+-        const l = input[s - 4] | input[s - 3] << 8
+-        const t = s + l
+-        if (t > input.length) throw new Error('unexpected EOF')
+-        // copy uncompressed data
+-        ensureSize(outputIndex + l)
+-        out.set(input.subarray(s, t), outputIndex)
+-        outputIndex += l
+-        pos = t * 8
+-        continue
+-      } else if (type === 1) {
+-        // fixed huffman
+-        lengthMap = fixedLengthMap
+-        distMap = fixedDistanceMap
+-        lengthBits = 9
+-        distBits = 5
+-      } else if (type === 2) {
+-        // dynamic huffman
+-        const hLiteral = bits(input, pos, 31) + 257
+-        const hcLengths = bits(input, pos + 10, 15) + 4
+-        const tl = hLiteral + bits(input, pos + 5, 31) + 1
+-        pos += 14
+-        // length+distance tree
+-        const lengthDistanceTree = new Uint8Array(tl)
+-        const codeLengthTree = new Uint8Array(19)
+-        for (let i = 0; i < hcLengths; ++i) {
+-          // use index map to get real code
+-          codeLengthTree[codeLengthIndexMap[i]] = bits(input, pos + i * 3, 7)
+-        }
+-        pos += hcLengths * 3
+-        const codeLengthBits = Math.max(...codeLengthTree)
+-        const clbMask = (1 << codeLengthBits) - 1
+-        const codeLengthMap = huffMap(codeLengthTree, codeLengthBits, 1)
+-        for (let i = 0; i < tl;) {
+-          const r = codeLengthMap[bits(input, pos, clbMask)]
+-          // bits read
+-          pos += r & 15
+-          const symbol = r >> 4
+-          // code length to copy
+-          if (symbol < 16) {
+-            lengthDistanceTree[i++] = symbol
+-          } else {
+-            let copy = 0
+-            let n = 0 // count
+-            if (symbol === 16) {
+-              n = 3 + bits(input, pos, 3)
+-              pos += 2
+-              copy = lengthDistanceTree[i - 1]
+-            } else if (symbol === 17) {
+-              n = 3 + bits(input, pos, 7)
+-              pos += 3
+-            } else if (symbol === 18) {
+-              n = 11 + bits(input, pos, 127)
+-              pos += 7
++  // PATCH (gscdump): iterate GZIP members in a loop that shares one output.
++  // Upstream recursed once per member. That overflowed the stack on many
++  // members. The recursive call also could not grow the output, so without a
++  // supplied output only the first member came back.
++  let memberStart = inputIndex
++  for (;;) {
++    const payloadStart = limits ? 0 : gzipStart(input, memberStart)
++    const isGzip = !limits && payloadStart > 0
++    if (isGzip && payloadStart === input.length - 8) break
++    if (isGzip && payloadStart > input.length - 8) throw new Error('unexpected EOF')
++    const pos = inflate(payloadStart * 8)
++    if (limits && Math.ceil(pos / 8) !== input.length) throw new Error('trailing raw DEFLATE bytes')
++    // Only GZIP has a footer and subsequent members. Raw DEFLATE ends here.
++    // A full supplied output ends decoding, as upstream does.
++    if (!isGzip || (output && outputIndex >= out.length)) break
++    const nextBlock = Math.ceil(pos / 8) + 8 // 8 byte gzip footer
++    if (nextBlock > input.length) throw new Error('unexpected EOF')
++    if (nextBlock === input.length) break
++    if (input[nextBlock] !== 31 || input[nextBlock + 1] !== 139 || input[nextBlock + 2] !== 8) throw new Error('invalid gzip member')
++    memberStart = nextBlock
++  }
++
++  /**
++   * Inflate one DEFLATE stream into out.
++   * @param {number} pos start position in bits
++   * @returns {number} position in bits after the final block
++   */
++  function inflate(pos) {
++    let final = 0 // last chunk?
++    let lengthBits = 0
++    let distBits = 0
++    let lengthMap
++    let distMap
++    do {
++      if (!lengthMap) {
++        // final chunk is next?
++        final = bits(input, pos, 1)
++        const type = bits(input, pos + 1, 3)
++        pos += 3
++        if (!type) {
++          // no compression
++          // go to end of byte boundary
++          const s = shft(pos) + 4
++          const l = input[s - 4] | input[s - 3] << 8
++          if (limits && (s > input.length || ((input[s - 2] | input[s - 1] << 8) ^ l) !== 65535)) throw new Error('invalid stored block length')
++          const t = s + l
++          if (t > input.length) throw new Error('unexpected EOF')
++          // copy uncompressed data
++          ensureSize(outputIndex + l)
++          out.set(input.subarray(s, t), outputIndex)
++          outputIndex += l
++          pos = t * 8
++          continue
++        } else if (type === 1) {
++          // fixed huffman
++          lengthMap = fixedLengthMap
++          distMap = fixedDistanceMap
++          lengthBits = 9
++          distBits = 5
++        } else if (type === 2) {
++          // dynamic huffman
++          const hLiteral = bits(input, pos, 31) + 257
++          const hcLengths = bits(input, pos + 10, 15) + 4
++          const tl = hLiteral + bits(input, pos + 5, 31) + 1
++          pos += 14
++          // length+distance tree
++          const lengthDistanceTree = new Uint8Array(tl)
++          const codeLengthTree = new Uint8Array(19)
++          for (let i = 0; i < hcLengths; ++i) {
++            // use index map to get real code
++            codeLengthTree[codeLengthIndexMap[i]] = bits(input, pos + i * 3, 7)
++          }
++          pos += hcLengths * 3
++          const codeLengthBits = Math.max(...codeLengthTree)
++          const clbMask = (1 << codeLengthBits) - 1
++          const codeLengthMap = huffMap(codeLengthTree, codeLengthBits, 1)
++          for (let i = 0; i < tl;) {
++            const r = codeLengthMap[bits(input, pos, clbMask)]
++            if (limits && !r) throw new Error('invalid code length')
++            // bits read
++            pos += r & 15
++            const symbol = r >> 4
++            // code length to copy
++            if (symbol < 16) {
++              lengthDistanceTree[i++] = symbol
++            } else {
++              let copy = 0
++              let n = 0 // count
++              if (symbol === 16) {
++                if (limits && i === 0) throw new Error('invalid code length repeat')
++                n = 3 + bits(input, pos, 3)
++                pos += 2
++                copy = lengthDistanceTree[i - 1]
++              } else if (symbol === 17) {
++                n = 3 + bits(input, pos, 7)
++                pos += 3
++              } else if (symbol === 18) {
++                n = 11 + bits(input, pos, 127)
++                pos += 7
++              }
++              if (limits && i + n > tl) throw new Error('invalid code length repeat')
++              while (n--) lengthDistanceTree[i++] = copy
+             }
+-            while (n--) lengthDistanceTree[i++] = copy
+           }
+-        }
+-        const lengthTree = lengthDistanceTree.subarray(0, hLiteral)
+-        const distanceTree = lengthDistanceTree.subarray(hLiteral)
+-        // max length/dist bits
+-        lengthBits = Math.max(...lengthTree)
+-        distBits = Math.max(...distanceTree)
+-        lengthMap = huffMap(lengthTree, lengthBits, 1)
+-        distMap = huffMap(distanceTree, distBits, 1)
+-      } else throw new Error('invalid block type')
+-      if (pos > totalBits) throw new Error('unexpected EOF')
+-    }
++          const lengthTree = lengthDistanceTree.subarray(0, hLiteral)
++          const distanceTree = lengthDistanceTree.subarray(hLiteral)
++          // max length/dist bits
++          lengthBits = Math.max(...lengthTree)
++          distBits = Math.max(...distanceTree)
++          lengthMap = huffMap(lengthTree, lengthBits, 1)
++          distMap = huffMap(distanceTree, distBits, 1)
++        } else throw new Error('invalid block type')
++        if (pos > totalBits) throw new Error('unexpected EOF')
++      }
+ 
+-    ensureSize(outputIndex + 131072) // max chunk size?
+-    const lms = (1 << lengthBits) - 1
+-    const dms = (1 << distBits) - 1
+-    for (;;) {
+-      // bits read, code
+-      const code = lengthMap[bits16(input, pos) & lms]
+-      const sym = code >> 4
+-      pos += code & 15
+-      if (pos > totalBits) throw new Error('unexpected EOF')
+-      if (!code) throw new Error('invalid length/literal')
+-      if (sym < 256) out[outputIndex++] = sym
+-      else if (sym === 256) {
+-        lengthMap = undefined
+-        break
+-      } else {
+-        let add = sym - 254
+-        // no extra bits needed if less
+-        if (sym > 264) {
+-          const index = sym - 257
+-          const b = fixedLengthExtraBits[index]
+-          add = bits(input, pos, (1 << b) - 1) + fixedLength[index]
+-          pos += b
++      ensureSize(limits ? Math.min(maximum, outputIndex + 131072) : outputIndex + 131072) // max chunk size?
++      const lms = (1 << lengthBits) - 1
++      const dms = (1 << distBits) - 1
++      for (;;) {
++        // bits read, code
++        const code = lengthMap[bits16(input, pos) & lms]
++        const sym = code >> 4
++        pos += code & 15
++        if (pos > totalBits) throw new Error('unexpected EOF')
++        if (!code) throw new Error('invalid length/literal')
++        if (sym < 256) {
++          if (limits) ensureSize(outputIndex + 1)
++          out[outputIndex++] = sym
+         }
+-        // dist
+-        if (!distMap) throw new Error('invalid distance map')
+-        const d = distMap[bits16(input, pos) & dms]
+-        const dsym = d >> 4
+-        if (!d) throw new Error('invalid distance')
+-        pos += d & 15
+-        let dt = fixedDistance[dsym]
+-        if (dsym > 3) {
+-          const b = fixedDistanceExtraBits[dsym]
+-          dt += bits16(input, pos) & (1 << b) - 1
+-          pos += b
++        else if (sym === 256) {
++          lengthMap = undefined
++          break
++        } else {
++          let add = sym - 254
++          // no extra bits needed if less
++          if (sym > 264) {
++            const index = sym - 257
++            const b = fixedLengthExtraBits[index]
++            add = bits(input, pos, (1 << b) - 1) + fixedLength[index]
++            pos += b
++          }
++          // dist
++          if (!distMap) throw new Error('invalid distance map')
++          const d = distMap[bits16(input, pos) & dms]
++          const dsym = d >> 4
++          if (!d) throw new Error('invalid distance')
++          if (limits && dsym > 29) throw new Error('invalid distance symbol')
++          pos += d & 15
++          let dt = fixedDistance[dsym]
++          if (dsym > 3) {
++            const b = fixedDistanceExtraBits[dsym]
++            dt += bits16(input, pos) & (1 << b) - 1
++            pos += b
++          }
++          if (pos > totalBits) throw new Error('unexpected EOF')
++          const end = outputIndex + add
++          if (outputIndex < dt) throw new Error('unexpected dictionary case')
++          ensureSize(end)
++          for (; outputIndex < end; outputIndex++) out[outputIndex] = out[outputIndex - dt]
+         }
+-        if (pos > totalBits) throw new Error('unexpected EOF')
+-        const end = outputIndex + add
+-        if (outputIndex < dt) throw new Error('unexpected dictionary case')
+-        ensureSize(end)
+-        for (; outputIndex < end; outputIndex++) out[outputIndex] = out[outputIndex - dt]
+       }
+-    }
+-    if (lengthMap) final = 1
+-  } while (!final)
+-
+-  if (outputIndex < out.length) {
+-    // multiple gzip blocks
+-    const nextBlock = Math.ceil(pos / 8) + 8 // 8 byte gzip footer
+-    gunzip(input, out, nextBlock, outputIndex)
++      if (lengthMap) final = 1
++    } while (!final)
++    return pos
+   }
+ 
++  // A bounded caller charges decoded bytes. Do not leave small blocks retaining
++  // a larger growth buffer through BYTE_ARRAY views. This final copy is itself
++  // bounded; old and new buffers may briefly overlap, so this is not a heap cap.
++  if (limits && outputIndex !== out.length) return out.slice(0, outputIndex)
+   if (!output) return out.subarray(0, outputIndex)
+   return out
+ }
+diff --git a/src/index.d.ts b/src/index.d.ts
+index 4fd572cc567699c097378ec0375b7a40be4a0ef2..7851559629272547cb24550f9ee6730415ba00ad 100644
+--- a/src/index.d.ts
++++ b/src/index.d.ts
+@@ -20,4 +20,4 @@ export function decompressLz4(input: Uint8Array, outputLength: number): Uint8Arr
+ export function decompressLz4Raw(input: Uint8Array, outputLength: number): Uint8Array
+ export function decompressSnappy(input: Uint8Array, outputLength: number): Uint8Array
+ export function decompressZstd(input: Uint8Array, output?: Uint8Array): Uint8Array
+-export function gunzip(input: Uint8Array, output?: Uint8Array): Uint8Array
++export function gunzip(input: Uint8Array, output?: Uint8Array, inputIndex?: number, outputIndex?: number, limits?: { raw: true, maxOutputBytes: number }): Uint8Array

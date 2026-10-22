@@ -1274,6 +1274,12 @@ export function createGscdumpRealtimeV1Client(
     socket.onmessage = (event) => {
       if (!running || current !== context || context.closed)
         return
+      // Heartbeats describe transport health, independently of an awaited
+      // application effect or resync. Keep JSON frames ordered below.
+      if (event.data === GSCDUMP_REALTIME_PONG) {
+        context.lastPongAt = runtime.now()
+        return
+      }
       const work = context.frameQueue.then(() => processRawMessage(context, event.data))
       context.frameQueue = work.catch((cause) => {
         handleFrameQueueError(context, cause)
