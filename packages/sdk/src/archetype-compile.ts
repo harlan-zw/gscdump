@@ -163,15 +163,17 @@ export function builderStateToArchetype(
   if (dims.includes('hour') || dims.includes('searchAppearance'))
     return null // no archetype SQL builder groups by these today
 
-  if (dims.includes('date') && (state.rowLimit !== undefined || state.startRow !== undefined || state.orderBy !== undefined))
+  // Daily archetypes already return ascending dates in both native executors.
+  const ascendingDateOrder = dims.includes('date') && state.orderBy?.column === 'date' && state.orderBy.dir === 'asc'
+  if (dims.includes('date') && (state.rowLimit !== undefined || state.startRow !== undefined || (state.orderBy !== undefined && !ascendingDateOrder)))
     return null
-  if (state.orderBy?.column === 'date')
+  if (state.orderBy?.column === 'date' && !ascendingDateOrder)
     return null
 
   const searchType = opts.searchType ?? state.searchType
   const metrics = state.metrics
   const cmp = opts.compareRange
-  const order = state.orderBy ? { metric: state.orderBy.column as Metric, dir: state.orderBy.dir } : undefined
+  const order = state.orderBy && !ascendingDateOrder ? { metric: state.orderBy.column as Metric, dir: state.orderBy.dir } : undefined
 
   // date-only series
   if (dims.length === 1 && dims[0] === 'date') {
