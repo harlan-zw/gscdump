@@ -7,6 +7,7 @@ import type {
   HttpV1Registry,
 } from '@gscdump/contracts/v1/http'
 import type { z, ZodTypeAny } from 'zod'
+import { canonicalJson } from '../canonical-json'
 
 type MaybePromise<T> = T | Promise<T>
 type ValueOf<T> = T[keyof T]
@@ -84,6 +85,8 @@ export interface CreateGscdumpV1ClientOptions {
   fetch?: typeof fetch
   headers?: GscdumpV1HeadersResolver
   retry?: GscdumpV1RetryOptions
+  /** Share concurrent identical queries within this client. Defaults to true. */
+  dedupe?: boolean
 }
 
 export interface GscdumpV1ExecuteOptions {
@@ -532,6 +535,7 @@ export function createGscdumpV1Client(options: CreateGscdumpV1ClientOptions): Gs
   const retryOptions = resolveRetryOptions(options.retry)
   const apiRoot = options.apiRoot ?? DEFAULT_API_ROOT
   const fetchImpl = options.fetch ?? globalThis.fetch
+  const inflight = new Map<string, Promise<unknown>>()
 
   if (typeof fetchImpl !== 'function')
     throw new TypeError('createGscdumpV1Client requires a fetch implementation in this runtime.')
@@ -590,124 +594,162 @@ export function createGscdumpV1Client(options: CreateGscdumpV1ClientOptions): Gs
       throw requestValidationError(operation.id, 'query', cause)
     }
     const canRetry = operation.semantics.retry === 'idempotent'
+    if (executeOptions.signal?.aborted)
+      throw abortedRequestError(operation, executeOptions)
+    const firstHeaders = await awaitWithAbort(
+      buildRequestHeaders(options, operation, prepared, executeOptions),
+      operation,
+      executeOptions,
+    )
+    if (executeOptions.signal?.aborted)
+      throw abortedRequestError(operation, executeOptions)
 
-    for (let attempt = 1; attempt <= retryOptions.maxAttempts; attempt++) {
-      if (executeOptions.signal?.aborted) {
-        throw abortedRequestError(operation, executeOptions)
+    // Resolve auth before sharing. A rotating credential or request header must
+    // never reuse another principal's read. Abortable calls keep their own fetch.
+    const dedupeKey = options.dedupe !== false && !executeOptions.signal
+      && operation.semantics.kind === 'query'
+      ? canonicalJson([operation.id, url, prepared.body, [...firstHeaders.entries()].sort(([a], [b]) => a.localeCompare(b))])
+      : null
+    if (dedupeKey) {
+      const pending = inflight.get(dedupeKey)
+      if (pending)
+        return pending
+    }
+
+    const pending = performRequest()
+    if (dedupeKey) {
+      inflight.set(dedupeKey, pending)
+      const remove = (): void => {
+        if (inflight.get(dedupeKey) === pending)
+          inflight.delete(dedupeKey)
       }
+      void pending.then(remove, remove)
+    }
+    return pending
 
-      const headers = await awaitWithAbort(
-        buildRequestHeaders(options, operation, prepared, executeOptions),
-        operation,
-        executeOptions,
-      )
-      if (executeOptions.signal?.aborted)
-        throw abortedRequestError(operation, executeOptions)
-
-      let response: Response
-      try {
-        response = await fetchImpl(url, {
-          method: operation.method,
-          headers,
-          body: prepared.body === undefined ? undefined : JSON.stringify(prepared.body),
-          signal: executeOptions.signal,
-        })
-      }
-      catch (cause) {
-        if (isAbortError(cause, executeOptions.signal)) {
-          throw abortedRequestError(operation, executeOptions, cause)
+    async function performRequest(): Promise<unknown> {
+      for (let attempt = 1; attempt <= retryOptions.maxAttempts; attempt++) {
+        if (executeOptions.signal?.aborted) {
+          throw abortedRequestError(operation, executeOptions)
         }
-        if (canRetry && attempt < retryOptions.maxAttempts) {
-          await waitForRetry(retryDelay(attempt, null, retryOptions), operation, executeOptions)
-          continue
-        }
-        throw new GscdumpV1Error({
-          code: 'network_error',
-          message: `${operation.id}: network request failed`,
-          requestId: executeOptions.requestId,
-          retryable: canRetry,
-          details: { attempts: attempt },
-          cause,
-        })
-      }
 
-      const requestId = requestIdFrom(response) ?? executeOptions.requestId
-      let payload: unknown
-      try {
-        payload = await readJson(response)
-      }
-      catch (cause) {
-        if (isAbortError(cause, executeOptions.signal))
-          throw abortedRequestError(operation, executeOptions, cause)
-        throw responseValidationError(operation.id, response.status, requestId, cause)
-      }
-      if (executeOptions.signal?.aborted)
-        throw abortedRequestError(operation, executeOptions)
+        // Shared retries keep the authentication context used by their key and joiners.
+        // Independent requests can resolve fresh credentials on each attempt.
+        const headers = attempt === 1 || dedupeKey !== null
+          ? firstHeaders
+          : await awaitWithAbort(
+              buildRequestHeaders(options, operation, prepared, executeOptions),
+              operation,
+              executeOptions,
+            )
+        if (executeOptions.signal?.aborted)
+          throw abortedRequestError(operation, executeOptions)
 
-      const responseContract = (operation.responses as HttpV1OperationDefinition['responses'])[response.status]
-      if (responseContract) {
+        let response: Response
         try {
-          return responseContract.client.parse(payload)
+          response = await fetchImpl(url, {
+            method: operation.method,
+            headers,
+            body: prepared.body === undefined ? undefined : JSON.stringify(prepared.body),
+            signal: executeOptions.signal,
+          })
+        }
+        catch (cause) {
+          if (isAbortError(cause, executeOptions.signal)) {
+            throw abortedRequestError(operation, executeOptions, cause)
+          }
+          if (canRetry && attempt < retryOptions.maxAttempts) {
+            await waitForRetry(retryDelay(attempt, null, retryOptions), operation, executeOptions)
+            continue
+          }
+          throw new GscdumpV1Error({
+            code: 'network_error',
+            message: `${operation.id}: network request failed`,
+            requestId: executeOptions.requestId,
+            retryable: canRetry,
+            details: { attempts: attempt },
+            cause,
+          })
+        }
+
+        const requestId = requestIdFrom(response) ?? executeOptions.requestId
+        let payload: unknown
+        try {
+          payload = await readJson(response)
+        }
+        catch (cause) {
+          if (isAbortError(cause, executeOptions.signal))
+            throw abortedRequestError(operation, executeOptions, cause)
+          throw responseValidationError(operation.id, response.status, requestId, cause)
+        }
+        if (executeOptions.signal?.aborted)
+          throw abortedRequestError(operation, executeOptions)
+
+        const responseContract = (operation.responses as HttpV1OperationDefinition['responses'])[response.status]
+        if (responseContract) {
+          try {
+            return responseContract.client.parse(payload)
+          }
+          catch (cause) {
+            throw responseValidationError(operation.id, response.status, requestId, cause)
+          }
+        }
+
+        if (response.ok) {
+          throw new GscdumpV1Error({
+            code: 'protocol_error',
+            message: `${operation.id}: undeclared success status ${response.status}`,
+            status: response.status,
+            requestId,
+            retryable: false,
+            details: { status: response.status },
+          })
+        }
+
+        let envelope: GscdumpV1ErrorEnvelope
+        try {
+          envelope = protocol.schemas.errorEnvelope.client.parse(payload)
         }
         catch (cause) {
           throw responseValidationError(operation.id, response.status, requestId, cause)
         }
-      }
+        if (!(operation.errors as readonly string[]).includes(envelope.error.code)) {
+          throw new GscdumpV1Error({
+            code: 'protocol_error',
+            message: `${operation.id}: undeclared error code ${envelope.error.code}`,
+            status: response.status,
+            requestId: envelope.error.requestId,
+            retryable: false,
+            details: { code: envelope.error.code },
+          })
+        }
 
-      if (response.ok) {
-        throw new GscdumpV1Error({
-          code: 'protocol_error',
-          message: `${operation.id}: undeclared success status ${response.status}`,
-          status: response.status,
-          requestId,
-          retryable: false,
-          details: { status: response.status },
-        })
-      }
-
-      let envelope: GscdumpV1ErrorEnvelope
-      try {
-        envelope = protocol.schemas.errorEnvelope.client.parse(payload)
-      }
-      catch (cause) {
-        throw responseValidationError(operation.id, response.status, requestId, cause)
-      }
-      if (!(operation.errors as readonly string[]).includes(envelope.error.code)) {
-        throw new GscdumpV1Error({
-          code: 'protocol_error',
-          message: `${operation.id}: undeclared error code ${envelope.error.code}`,
+        const apiError = new GscdumpV1Error({
+          code: envelope.error.code,
+          message: envelope.error.message,
           status: response.status,
           requestId: envelope.error.requestId,
-          retryable: false,
-          details: { code: envelope.error.code },
+          retryable: envelope.error.retryable,
+          details: envelope.error.details ?? {},
         })
+        if (canRetry && apiError.retryable && attempt < retryOptions.maxAttempts) {
+          await waitForRetry(
+            retryDelay(attempt, response.headers.get('retry-after'), retryOptions),
+            operation,
+            executeOptions,
+          )
+          continue
+        }
+        throw apiError
       }
 
-      const apiError = new GscdumpV1Error({
-        code: envelope.error.code,
-        message: envelope.error.message,
-        status: response.status,
-        requestId: envelope.error.requestId,
-        retryable: envelope.error.retryable,
-        details: envelope.error.details ?? {},
+      throw new GscdumpV1Error({
+        code: 'network_error',
+        message: `${operationId}: retry budget exhausted`,
+        retryable: false,
+        details: {},
       })
-      if (canRetry && apiError.retryable && attempt < retryOptions.maxAttempts) {
-        await waitForRetry(
-          retryDelay(attempt, response.headers.get('retry-after'), retryOptions),
-          operation,
-          executeOptions,
-        )
-        continue
-      }
-      throw apiError
     }
-
-    throw new GscdumpV1Error({
-      code: 'network_error',
-      message: `${operationId}: retry budget exhausted`,
-      retryable: false,
-      details: {},
-    })
   }
 
   const client: GscdumpV1Client = {
