@@ -633,7 +633,9 @@ export function createGscdumpV1Client(options: CreateGscdumpV1ClientOptions): Gs
           throw abortedRequestError(operation, executeOptions)
         }
 
-        const headers = attempt === 1
+        // Shared retries keep the authentication context used by their key and joiners.
+        // Independent requests can resolve fresh credentials on each attempt.
+        const headers = attempt === 1 || dedupeKey !== null
           ? firstHeaders
           : await awaitWithAbort(
               buildRequestHeaders(options, operation, prepared, executeOptions),
