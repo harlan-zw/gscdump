@@ -88,6 +88,15 @@ export interface ResolvedComparisonSQL {
   countParams: unknown[]
 }
 
+/**
+ * Totals SQL for the current and previous windows of a comparison read.
+ * `Combined` is one statement for both windows. `Separate` is one statement
+ * per window, for windows that read different tables or filter different rows.
+ */
+export type ResolvedComparisonTotalsSQL
+  = | { _tag: 'Combined', sql: string, params: unknown[] }
+    | { _tag: 'Separate', current: ResolvedSQLOptimized, previous: ResolvedSQLOptimized }
+
 export interface ExtraQuery {
   key: string
   sql: string

@@ -15,12 +15,15 @@ export { createResolverAdapter } from './adapter'
 export type { CreateResolverAdapterConfig } from './adapter'
 export { canonicalRollupCovers } from './canonical-source'
 export {
+  buildComparisonTotalsSql,
   buildExtrasQueries,
   buildTotalsSql,
   mergeExtras,
   resolveComparisonSQL,
+  resolveComparisonSQLOptimized,
   resolveToSQL,
   resolveToSQLOptimized,
+  splitComparisonTotalsRow,
 } from './compile'
 export {
   assertDimensionsSupported,
@@ -81,6 +84,7 @@ export type {
   ComparisonOrderBy,
   ExtraQuery,
   ResolvedComparisonSQL,
+  ResolvedComparisonTotalsSQL,
   ResolvedSQL,
   ResolvedSQLOptimized,
   ResolverAdapter,

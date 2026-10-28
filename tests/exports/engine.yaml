@@ -196,6 +196,7 @@
 ./resolver:
   assertDimensionsSupported: function
   assertSchemaInSync: function
+  buildComparisonTotalsSql: function
   buildExtrasQueries: function
   buildTotalsSql: function
   canonicalRollupCovers: function
@@ -222,10 +223,12 @@
   pgResolverAdapter: object
   QuerySourceCoverageError: function
   resolveComparisonSQL: function
+  resolveComparisonSQLOptimized: function
   resolveToSQL: function
   resolveToSQLOptimized: function
   runComparisonQuery: function
   runOptimizedQuery: function
+  splitComparisonTotalsRow: function
   supportsDimensionOnSurface: function
   UnresolvableDatasetError: function
 ./rollups:

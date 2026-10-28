@@ -24,6 +24,7 @@ import type {
   ComparisonOrderBy,
   ExtraQuery,
   ResolvedComparisonSQL,
+  ResolvedComparisonTotalsSQL,
   ResolvedSQL,
   ResolvedSQLOptimized,
   ResolverOptions,
@@ -117,6 +118,8 @@ interface BuiltScope<TK extends string> {
   hasDate: boolean
   metrics: readonly Metric[]
   wherePredicates: SQL[]
+  /** Every WHERE predicate except the Site, search type, and date range. */
+  filterPredicates: SQL[]
   having: SQL[]
   dimFilters: InternalFilter[]
   startDate?: string
@@ -209,21 +212,22 @@ function buildScope<TK extends string>(
     wherePredicates.push(sql`${adapter.searchTypeColRef(tableKey)} = ${searchType}`)
   wherePredicates.push(sql`${adapter.dateColRef(tableKey)} >= ${plan.dateRange.startDate}`)
   wherePredicates.push(sql`${adapter.dateColRef(tableKey)} <= ${plan.dateRange.endDate}`)
-  wherePredicates.push(...adapter.prefilterPredicates(prefilters, tableKey))
+  const filterPredicates: SQL[] = [...adapter.prefilterPredicates(prefilters, tableKey)]
   // Prefer the tree (preserves OR groups); fall back to flat AND of leaves
   // for plans built without tree support (older callers).
   const dimSql = plan.dimensionFilterTree
     ? compileFilterTree(plan.dimensionFilterTree, adapter, tableKey)
     : undefined
   if (dimSql) {
-    wherePredicates.push(dimSql)
+    filterPredicates.push(dimSql)
   }
   else if (!plan.dimensionFilterTree) {
-    wherePredicates.push(...adapter.dimensionPredicates(dimFilters, tableKey))
+    filterPredicates.push(...adapter.dimensionPredicates(dimFilters, tableKey))
   }
   const tl = adapter.topLevelPredicate(topLevelFilters(plan), tableKey)
   if (tl)
-    wherePredicates.push(tl)
+    filterPredicates.push(tl)
+  wherePredicates.push(...filterPredicates)
 
   const having = adapter.havingPredicates(metricFilters, tableKey)
 
@@ -234,6 +238,7 @@ function buildScope<TK extends string>(
     hasDate,
     metrics,
     wherePredicates,
+    filterPredicates,
     having,
     dimFilters,
     startDate: plan.dateRange.startDate,
@@ -430,13 +435,137 @@ export function buildTotalsSql<TK extends string>(
   return compileCollapsed(adapter, query)
 }
 
-export function resolveComparisonSQL<TK extends string>(
+const PREVIOUS_TOTALS_ALIAS: Record<Metric, string> = {
+  clicks: 'prevClicks',
+  impressions: 'prevImpressions',
+  ctr: 'prevCtr',
+  position: 'prevPosition',
+}
+
+// The `metricSql` expressions, summed over the rows of one window only. Rows
+// outside the window add NULL, so a window with no rows gives NULL metrics,
+// the same as a `buildTotalsSql` statement over that window alone.
+function windowMetricSql(metric: Metric, columns: Record<string, SQL>, inWindow: SQL): SQL {
+  const sum = (column: string): SQL => sql`SUM(CASE WHEN ${inWindow} THEN ${columns[column]} END)`
+  switch (metric) {
+    case 'clicks':
+      return sql`CAST(${sum('clicks')} AS DOUBLE)`
+    case 'impressions':
+      return sql`CAST(${sum('impressions')} AS DOUBLE)`
+    case 'ctr':
+      return sql`CAST(${sum('clicks')} AS DOUBLE) / NULLIF(${sum('impressions')}, 0)`
+    case 'position':
+      return sql`${sum('sum_position')} / NULLIF(${sum('impressions')}, 0) + 1`
+  }
+}
+
+// One WHERE clause can serve both windows only when they read the same
+// relation and filter the same rows.
+function sharesTotalsScope<TK extends string>(
+  adapter: ResolverOptions<TK>['adapter'],
+  current: BuiltScope<TK>,
+  previous: BuiltScope<TK>,
+): boolean {
+  if (current.tableKey !== previous.tableKey || current.queryCanonicalUsed !== previous.queryCanonicalUsed)
+    return false
+  const left = adapter.compile(joinAnd(current.filterPredicates))
+  const right = adapter.compile(joinAnd(previous.filterPredicates))
+  return left.sql === right.sql
+    && left.params.length === right.params.length
+    && left.params.every((value, index) => Object.is(value, right.params[index]))
+}
+
+/**
+ * Totals SQL for both windows of a comparison read, as one statement when it
+ * can be. Pass the two dimensionless states that {@link buildTotalsSql} would
+ * receive; their filters choose the table.
+ *
+ * The `Combined` statement scans both date ranges once. Each metric sums only
+ * the rows of its own window, so days between the windows count in neither
+ * total, and days that both windows contain count in both. Its one row holds
+ * the current metrics under their own names and the previous metrics as
+ * `prevClicks`, `prevImpressions`, `prevCtr`, and `prevPosition`. Read it
+ * with {@link splitComparisonTotalsRow}. It is a single-table aggregate with
+ * no GROUP BY, the same shape as a `buildTotalsSql` statement.
+ *
+ * If the windows read different tables or filter different rows, the result
+ * is `Separate`: the two `buildTotalsSql` statements.
+ */
+export function buildComparisonTotalsSql<TK extends string>(
   current: BuilderState,
   previous: BuilderState,
   options: ResolverOptions<TK>,
-  comparisonFilter?: ComparisonFilter,
-  comparisonOrderBy?: ComparisonOrderBy,
-): ResolvedComparisonSQL {
+): ResolvedComparisonTotalsSQL {
+  const { adapter, siteId, searchType } = options
+  const currentScope = buildScope(withMinimumImpressions(current, options), options)
+  const previousScope = buildScope(withMinimumImpressions(previous, options), options)
+  if (!sharesTotalsScope(adapter, currentScope, previousScope))
+    return { _tag: 'Separate', current: buildTotalsSql(current, options), previous: buildTotalsSql(previous, options) }
+
+  const { tableKey } = currentScope
+  const columns = (adapter.schema as Record<string, Record<string, SQL>>)[tableKey]!
+  const dateCol = adapter.dateColRef(tableKey)
+  const currentRange = currentScope.plan.dateRange
+  const previousRange = previousScope.plan.dateRange
+  const inWindow = (range: { startDate: string, endDate: string }): SQL => sql`${dateCol} >= ${range.startDate} AND ${dateCol} <= ${range.endDate}`
+
+  const selectExprs: SQL[] = [
+    ...currentScope.metrics.map(m => sql`${windowMetricSql(m, columns, inWindow(currentRange))} as ${aliasRaw(m)}`),
+    ...previousScope.metrics.map(m => sql`${windowMetricSql(m, columns, inWindow(previousRange))} as ${aliasRaw(PREVIOUS_TOTALS_ALIAS[m])}`),
+  ]
+  const wherePredicates: SQL[] = []
+  if (adapter.siteIdColRef && siteId != null)
+    wherePredicates.push(sql`${adapter.siteIdColRef(tableKey)} = ${siteId}`)
+  if (adapter.searchTypeColRef && searchType != null)
+    wherePredicates.push(sql`${adapter.searchTypeColRef(tableKey)} = ${searchType}`)
+  // The outer range keeps range pruning simple for engines that do not prune
+  // on OR. The OR then drops the days between two distant windows.
+  const spanStart = currentRange.startDate < previousRange.startDate ? currentRange.startDate : previousRange.startDate
+  const spanEnd = currentRange.endDate > previousRange.endDate ? currentRange.endDate : previousRange.endDate
+  wherePredicates.push(sql`${dateCol} >= ${spanStart}`)
+  wherePredicates.push(sql`${dateCol} <= ${spanEnd}`)
+  wherePredicates.push(sql`((${inWindow(currentRange)}) OR (${inWindow(previousRange)}))`)
+  wherePredicates.push(...currentScope.filterPredicates)
+
+  const table = adapter.fromSql(tableKey, { queryCanonical: currentScope.queryCanonicalUsed })
+  const query = sql`SELECT ${joinComma(selectExprs)} FROM ${table} WHERE ${joinAnd(wherePredicates)}`
+  const compiled = compileCollapsed(adapter, query)
+  return { _tag: 'Combined', sql: compiled.sql, params: compiled.params }
+}
+
+/**
+ * Split the row of a `Combined` {@link buildComparisonTotalsSql} statement
+ * into the metrics of each window. A metric the statement did not select stays
+ * absent. With no row, both windows are empty.
+ */
+export function splitComparisonTotalsRow(row: Record<string, unknown> | undefined): {
+  current: Record<string, unknown>
+  previous: Record<string, unknown>
+} {
+  const current: Record<string, unknown> = {}
+  const previous: Record<string, unknown> = {}
+  if (!row)
+    return { current, previous }
+  for (const [metric, previousAlias] of Object.entries(PREVIOUS_TOTALS_ALIAS)) {
+    if (metric in row)
+      current[metric] = row[metric]
+    if (previousAlias in row)
+      previous[metric] = row[previousAlias]
+  }
+  return { current, previous }
+}
+
+// The row and count queries of a comparison read. `windowCount` adds a
+// `totalCount` window column to every row, so the row query also answers the
+// count query.
+function buildComparisonQueries<TK extends string>(
+  current: BuilderState,
+  previous: BuilderState,
+  options: ResolverOptions<TK>,
+  comparisonFilter: ComparisonFilter | undefined,
+  comparisonOrderBy: ComparisonOrderBy | undefined,
+  windowCount: boolean,
+): { main: SQL, count: SQL } {
   const { adapter, siteId, searchType } = options
   const comparisonPlan = buildComparisonPlan(current, previous, adapter.capabilities)
   const currentScope = buildScope(current, options)
@@ -533,15 +662,46 @@ export function resolveComparisonSQL<TK extends string>(
   if (changeOrder)
     outerCurrentCols.push(changeOrder.column)
 
-  const mainQuery = sql`WITH current AS (${currentCte}), previous AS (${previousCte}) SELECT ${joinComma(outerCurrentCols)}, COALESCE(CAST(p.clicks AS DOUBLE), 0) as "prevClicks", COALESCE(CAST(p.impressions AS DOUBLE), 0) as "prevImpressions", COALESCE(p.ctr, 0) as "prevCtr", COALESCE(p.position, 0) as "prevPosition" FROM current c FULL OUTER JOIN previous p ON ${joinOn} WHERE 1=1 ${filterClause} ${orderSql} ${limitSql}`
+  const mainQuery = sql`WITH current AS (${currentCte}), previous AS (${previousCte}) SELECT ${joinComma(outerCurrentCols)}, COALESCE(CAST(p.clicks AS DOUBLE), 0) as "prevClicks", COALESCE(CAST(p.impressions AS DOUBLE), 0) as "prevImpressions", COALESCE(p.ctr, 0) as "prevCtr", COALESCE(p.position, 0) as "prevPosition"${windowCount ? sql.raw(', COUNT(*) OVER() as "totalCount"') : sql.raw('')} FROM current c FULL OUTER JOIN previous p ON ${joinOn} WHERE 1=1 ${filterClause} ${orderSql} ${limitSql}`
 
   const firstGroupBy = groupByDims[0] ? groupByDims[0].replace(/\W/g, '') : 'clicks'
   const countInnerSelect = groupByDims[0] ? sql.raw(`COALESCE(c.${firstGroupBy}, p.${firstGroupBy})`) : sql.raw(`c.${firstGroupBy}`)
   const countQuery = sql`WITH current AS (${currentCte}), previous AS (${previousCte}) SELECT COUNT(*) as total FROM (SELECT ${countInnerSelect} FROM current c FULL OUTER JOIN previous p ON ${joinOn} WHERE 1=1 ${filterClause})`
 
-  const main = compileCollapsed(adapter, mainQuery)
-  const count = compileCollapsed(adapter, countQuery)
+  return { main: mainQuery, count: countQuery }
+}
+
+export function resolveComparisonSQL<TK extends string>(
+  current: BuilderState,
+  previous: BuilderState,
+  options: ResolverOptions<TK>,
+  comparisonFilter?: ComparisonFilter,
+  comparisonOrderBy?: ComparisonOrderBy,
+): ResolvedComparisonSQL {
+  const queries = buildComparisonQueries(current, previous, options, comparisonFilter, comparisonOrderBy, false)
+  const main = compileCollapsed(options.adapter, queries.main)
+  const count = compileCollapsed(options.adapter, queries.count)
   return { sql: main.sql, params: main.params, countSql: count.sql, countParams: count.params }
+}
+
+/**
+ * The comparison row query of {@link resolveComparisonSQL}, with the count in
+ * the same statement. Every row carries `totalCount`: the number of joined
+ * rows that pass the comparison filter, before LIMIT and OFFSET.
+ *
+ * Only a row can carry the count. Without OFFSET, an empty result means
+ * `totalCount` is 0. With an OFFSET past the last row, run the count query of
+ * {@link resolveComparisonSQL} instead.
+ */
+export function resolveComparisonSQLOptimized<TK extends string>(
+  current: BuilderState,
+  previous: BuilderState,
+  options: ResolverOptions<TK>,
+  comparisonFilter?: ComparisonFilter,
+  comparisonOrderBy?: ComparisonOrderBy,
+): ResolvedSQLOptimized {
+  const queries = buildComparisonQueries(current, previous, options, comparisonFilter, comparisonOrderBy, true)
+  return compileCollapsed(options.adapter, queries.main)
 }
 
 /**
