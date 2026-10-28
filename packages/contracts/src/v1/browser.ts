@@ -16,6 +16,7 @@ import {
   sitemapStatuses,
 } from '../onboarding'
 import { GSC_SEARCH_TYPES } from '../search-types'
+import { siteVersionIdentityResponseSchema } from '../site-version'
 import { defineResponseObject, defineSuccessResponse } from './http-core'
 import { createRealtimeV1Schemas } from './realtime'
 import { GSCDUMP_HTTP_V1_VERSION } from './version'
@@ -123,6 +124,7 @@ function lifecycleResponseSchemas(ids: RealtimeV1Schemas) {
       sitemaps: sitemaps.producer,
       indexing: indexing.producer,
       hold: siteHoldReasonSchema.nullable(),
+      registration: siteVersionIdentityResponseSchema.optional(),
       latestError: latestError.producer.nullable(),
       updatedAt: z.iso.datetime(),
     },
@@ -138,6 +140,10 @@ function lifecycleResponseSchemas(ids: RealtimeV1Schemas) {
       indexing: indexing.client,
       // A host older than contracts 4.7.0 sends no `hold`; read it as not held.
       hold: siteHoldReasonSchema.nullable().default(null),
+      // The registration `partner.sites.registered_host.identity.get` answers.
+      // Absent when the host sends none: an older host, a user key, or a Site
+      // whose identity read would refuse. Read the identity operation then.
+      registration: siteVersionIdentityResponseSchema.optional(),
       latestError: latestError.client.nullable(),
       updatedAt: z.iso.datetime(),
     },

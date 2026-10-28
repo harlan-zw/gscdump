@@ -1042,7 +1042,7 @@ export function createGscdumpV1Protocol() {
         lifecycle: { introduced: '1.0.0' },
         docs: {
           summary: 'Get user lifecycle',
-          description: 'Returns the authoritative lifecycle state for one visible user and their sites.',
+          description: 'Returns the authoritative lifecycle state for one visible user and their sites. A partner key read also carries the registered-host registration of each Site that gscdump can serve.',
           tags: ['Users'],
           examples: {
             request: { params: { userId: 'u_01' } },

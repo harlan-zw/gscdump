@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { searchTypeSchema } from './schemas'
+import { GSC_SEARCH_TYPES } from './search-types'
 
 /** Partner control-plane identity. Numeric identity is the effective writer key. */
 const registeredUrl = z.url().refine((value) => {
@@ -55,7 +55,9 @@ export const siteVersionSliceSchema = z.strictObject({
     'search_appearance_page_queries',
     'hourly_pages',
   ]),
-  searchType: searchTypeSchema,
+  // Built here, not imported from ./schemas: the browser lifecycle schema reads
+  // this module, and ./schemas would pull every shared schema into that bundle.
+  searchType: z.enum(GSC_SEARCH_TYPES),
 })
 
 export const siteVersionPreviewRequestSchema = z.strictObject({

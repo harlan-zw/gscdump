@@ -37462,7 +37462,7 @@
     },
     "/api/partner/v1/users/{userId}/lifecycle": {
       "get": {
-        "description": "Returns the authoritative lifecycle state for one visible user and their sites.",
+        "description": "Returns the authoritative lifecycle state for one visible user and their sites. A partner key read also carries the registered-host registration of each Site that gscdump can serve.",
         "operationId": "partner.users.lifecycle.get",
         "parameters": [
           {
@@ -37862,6 +37862,144 @@
                                 "required": [
                                   "status",
                                   "nextAction"
+                                ],
+                                "type": "object"
+                              },
+                              "registration": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "coverage": {
+                                    "oneOf": [
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "_tag": {
+                                            "const": "legacy",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "_tag"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "_tag": {
+                                            "const": "verified",
+                                            "type": "string"
+                                          },
+                                          "window": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "endDate": {
+                                                "format": "date",
+                                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                                "type": "string"
+                                              },
+                                              "startDate": {
+                                                "format": "date",
+                                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "startDate",
+                                              "endDate"
+                                            ],
+                                            "type": "object"
+                                          }
+                                        },
+                                        "required": [
+                                          "_tag",
+                                          "window"
+                                        ],
+                                        "type": "object"
+                                      }
+                                    ]
+                                  },
+                                  "identity": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "catalogRevision": {
+                                        "maximum": 9007199254740991,
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "catalogSiteId": {
+                                        "exclusiveMinimum": 0,
+                                        "maximum": 9007199254740991,
+                                        "type": "integer"
+                                      },
+                                      "dataVersion": {
+                                        "maximum": 9007199254740991,
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "namespace": {
+                                        "pattern": "^[a-z][a-z0-9_]*$",
+                                        "type": "string"
+                                      },
+                                      "requestedUrl": {
+                                        "format": "uri",
+                                        "type": "string"
+                                      },
+                                      "revision": {
+                                        "maximum": 9007199254740991,
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "siteId": {
+                                        "pattern": "^s_[\\w-]+$",
+                                        "type": "string"
+                                      },
+                                      "teamId": {
+                                        "anyOf": [
+                                          {
+                                            "format": "uuid",
+                                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                                            "type": "string"
+                                          },
+                                          {
+                                            "pattern": "^t_[\\w-]+$",
+                                            "type": "string"
+                                          }
+                                        ]
+                                      },
+                                      "userId": {
+                                        "pattern": "^u_[\\w-]+$",
+                                        "type": "string"
+                                      },
+                                      "version": {
+                                        "maximum": 9007199254740991,
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "warehouse": {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "siteId",
+                                      "userId",
+                                      "teamId",
+                                      "requestedUrl",
+                                      "catalogSiteId",
+                                      "warehouse",
+                                      "namespace",
+                                      "version",
+                                      "revision",
+                                      "catalogRevision",
+                                      "dataVersion"
+                                    ],
+                                    "type": "object"
+                                  }
+                                },
+                                "required": [
+                                  "identity",
+                                  "coverage"
                                 ],
                                 "type": "object"
                               },

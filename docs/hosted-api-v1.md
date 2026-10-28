@@ -217,6 +217,18 @@ allowance it sends the `user.allowance.notice` webhook to the partner. Its
 `sites`, `preserved_rows`, or `url_inspections`, `threshold` is `80` or `100`,
 and `period` is the UTC month as `YYYY-MM`.
 
+## Lifecycle Site registration
+
+A `partner_key` read of `partner.users.lifecycle.get` carries `registration` on
+each Site that gscdump can serve. `registration` is the `{ identity, coverage }`
+that `partner.sites.registered_host.identity.get` answers for that Site. The host
+reads it on the D1 primary during the lifecycle read.
+
+- A `user_key` read carries no `registration`, because the identity operation is partner-only.
+- If the identity operation would refuse the Site, the Site carries no `registration`. Read the identity operation for the refusal.
+- A host that predates this field sends no `registration`. Read the identity operation then.
+- A `registration` is as old as the lifecycle read that carried it. `identity.dataVersion` changes when a sync writes rows, so a cached lifecycle is not a live identity read.
+
 ## Record read refusals
 
 If the Site's record cannot serve an `analytics.rows.query` read, the host
