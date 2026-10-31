@@ -112,9 +112,9 @@ describe('icebergOverwriteWriter — trailing-window partition overwrite (P1.4)'
     await writer.close()
   })
 
-  it('writes a slice, then overwrites it with revised values — reads return only revised data', async () => {
+  it('writes a slice, then overwrites it with revised values — reads return only revised data', async ({ skip }) => {
     if (!available)
-      return
+      skip()
     const slice = { ctx: ctx('site-rev'), table: 'pages' as const, searchType: 'web' as const, date: '2026-05-01' }
 
     // initial sync — two rows, 15 total clicks
@@ -133,9 +133,9 @@ describe('icebergOverwriteWriter — trailing-window partition overwrite (P1.4)'
     expect(rows).toEqual([{ url: '/', clicks: 40 }])
   }, 60_000)
 
-  it('scopes the overwrite to the exact (site, searchType, date) partition', async () => {
+  it('scopes the overwrite to the exact (site, searchType, date) partition', async ({ skip }) => {
     if (!available)
-      return
+      skip()
     const day1 = { ctx: ctx('site-scope'), table: 'pages' as const, searchType: 'web' as const, date: '2026-06-01' }
     const day2 = { ctx: ctx('site-scope'), table: 'pages' as const, searchType: 'web' as const, date: '2026-06-02' }
     const otherType = { ctx: ctx('site-scope'), table: 'pages' as const, searchType: 'discover' as const, date: '2026-06-01' }
@@ -157,9 +157,9 @@ describe('icebergOverwriteWriter — trailing-window partition overwrite (P1.4)'
     expect(disc).toEqual([{ date: '2026-06-01', clicks: 33 }])
   }, 60_000)
 
-  it('converges a daily re-sync of the trailing 3-day window with no duplicates', async () => {
+  it('converges a daily re-sync of the trailing 3-day window with no duplicates', async ({ skip }) => {
     if (!available)
-      return
+      skip()
     const site = 'site-trailing'
     const days = ['2026-07-10', '2026-07-11', '2026-07-12']
     const sliceFor = (date: string) => ({ ctx: ctx(site), table: 'keywords' as const, searchType: 'web' as const, date })
@@ -182,9 +182,9 @@ describe('icebergOverwriteWriter — trailing-window partition overwrite (P1.4)'
     expect(rows).toEqual(days.map(date => ({ date, clicks: 310, n: 2, dq: 2 })))
   }, 90_000)
 
-  it('overwriting with an empty slice clears the partition', async () => {
+  it('overwriting with an empty slice clears the partition', async ({ skip }) => {
     if (!available)
-      return
+      skip()
     const slice = { ctx: ctx('site-empty'), table: 'pages' as const, searchType: 'web' as const, date: '2026-08-01' }
     await writer.overwriteSlice(slice, [pageRow('/', '2026-08-01', 9)])
     const cleared = await writer.overwriteSlice(slice, [])
@@ -194,9 +194,9 @@ describe('icebergOverwriteWriter — trailing-window partition overwrite (P1.4)'
     expect(rows).toEqual([])
   }, 60_000)
 
-  it('surfaces a backend failure as a thrown error', async () => {
+  it('surfaces a backend failure as a thrown error', async ({ skip }) => {
     if (!available)
-      return
+      skip()
     const slice = { ctx: ctx('site-bad'), table: 'pages' as const, searchType: 'web' as const, date: '2026-10-01' }
     // null in a required metric column — PyIceberg rejects the cast
     await expect(
