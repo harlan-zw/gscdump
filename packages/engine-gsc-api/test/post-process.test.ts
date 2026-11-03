@@ -46,7 +46,7 @@ describe('live API row post-processing', () => {
       rowLimit: 7,
     } satisfies BuilderState
     const expected = [...rows]
-      .sort((a, b) => b.clicks - a.clicks)
+      .sort((a, b) => b.clicks - a.clicks || (a.query < b.query ? -1 : 1))
       .slice(state.startRow, state.startRow + state.rowLimit)
 
     expect(applyBuilderStatePostProcessing(rows, state)).toEqual(expected)
@@ -117,5 +117,33 @@ describe('live API row post-processing of ungrouped dimension filters', () => {
     } as BuilderState
 
     expect(applyBuilderStatePostProcessing(rows, state)).toHaveLength(2)
+  })
+})
+
+describe('live API row post-processing of tied order values', () => {
+  // Each page re-fetches from Google, which may return tied rows in a new
+  // order. Pages must still partition the result by row key.
+  it('pages tied rows by dimension ascending whatever order Google returns', () => {
+    const rows = Array.from({ length: 40 }, (_, index) => ({
+      query: `q${String(index).padStart(2, '0')}`,
+      page: index % 2 ? '/b' : '/a',
+      clicks: index < 30 ? 5 : 9,
+    }))
+    const pageKeys = (input: typeof rows, startRow: number): string[] =>
+      applyBuilderStatePostProcessing([...input], {
+        dimensions: ['query', 'page'],
+        orderBy: { column: 'clicks', dir: 'desc' },
+        startRow,
+        rowLimit: 10,
+      }).map(row => `${row.query}|${row.page}`)
+    const keys = [
+      ...pageKeys(rows, 0),
+      ...pageKeys([...rows].reverse(), 10),
+      ...pageKeys(rows.slice(17).concat(rows.slice(0, 17)), 20),
+      ...pageKeys([...rows].reverse(), 30),
+    ]
+
+    expect(new Set(keys).size).toBe(rows.length)
+    expect(keys.slice(10, 13)).toEqual(['q00|/a', 'q01|/b', 'q02|/a'])
   })
 })
