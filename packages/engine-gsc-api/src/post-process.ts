@@ -219,6 +219,19 @@ export function applyBuilderStatePostProcessing(
       hasNonFiniteOrderValue = true
   }
 
+  // Each page re-fetches from Google, which may return tied rows in any
+  // order. Break ties on the grouped dimensions ascending, as the SQL engines
+  // do, so pages partition the result instead of repeating or dropping keys.
+  const tieDimensions = [...new Set(state.dimensions)].filter(dimension => dimension !== column)
+  const compareTies = (a: Row, b: Row): number => {
+    for (const dimension of tieDimensions) {
+      const left = String(a[dimension] ?? '')
+      const right = String(b[dimension] ?? '')
+      if (left !== right)
+        return left < right ? -1 : 1
+    }
+    return 0
+  }
   const compareRows = (a: Row, b: Row): number => {
     const left = column === 'date'
       ? String(a.date ?? '')
@@ -228,7 +241,7 @@ export function applyBuilderStatePostProcessing(
       : metricValue(b, column)
 
     if (left === right)
-      return 0
+      return compareTies(a, b)
     if (dir === 'asc')
       return left < right ? -1 : 1
     return left > right ? -1 : 1
