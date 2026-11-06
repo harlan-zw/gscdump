@@ -53,7 +53,7 @@ export const issueDetails: Record<string, IndexingIssueDetail> = {
     fix: 'Verify the URL parses and resolves. Remove malformed URLs from your sitemap and internal links. If the URLs are valid, re-inspect in a few days — transient crawl errors clear themselves.',
   },
   sitemap_redirect: {
-    description: 'These URLs are submitted in your sitemap but redirect elsewhere. A sitemap should only list final, canonical, 200-status URLs — a redirecting entry wastes crawl budget and tells Google your sitemap is stale.',
+    description: 'These URLs are submitted in your sitemap but redirect elsewhere. A sitemap should list only final, canonical URLs that return 200. A redirecting entry names a URL that is not the one to index.',
     fix: 'Replace each redirecting entry with its destination URL, or drop it from the sitemap entirely. Then resubmit the sitemap.',
   },
   alternate_canonical: {
@@ -77,12 +77,12 @@ export const issueDetails: Record<string, IndexingIssueDetail> = {
     fix: 'Check sitemap membership and links from indexed pages. Compare the saved check date with later indexing requests. Request acceptance does not confirm crawling or indexing.',
   },
   stale_crawl: {
-    description: 'Google hasn\'t re-crawled these pages in over 30 days. They may have low perceived value or your crawl budget may be exhausted.',
-    fix: 'Update content on these pages to signal freshness. Improve internal linking. Ensure your site loads quickly to maximize crawl budget efficiency.',
+    description: 'Saved URL Inspection results report a last Google crawl more than 30 days before their check times. Google recrawls pages that rarely change less often, so crawl age alone does not identify a cause.',
+    fix: 'For pages that changed after that crawl, check sitemap lastmod values and links from indexed pages. A page that did not change needs no work. Crawl budget limits apply mainly to sites with many thousands of URLs.',
   },
   very_stale_crawl: {
-    description: 'Google hasn\'t visited these pages in over 60 days. They are at risk of being dropped from the index entirely.',
-    fix: 'Prioritize updating these pages immediately. Add fresh internal links. Consider requesting re-indexing via Google Search Console\'s URL Inspection tool.',
+    description: 'Saved URL Inspection results report a last Google crawl more than 60 days before their check times. A long crawl gap alone does not show that Google will drop a page from the index.',
+    fix: 'For pages that changed after that crawl, check sitemap lastmod values and links from indexed pages, then review current URL Inspection. A page that did not change needs no work.',
   },
   not_found: {
     description: 'These URLs return 404 errors. Google previously knew about them but they no longer exist.',
@@ -102,7 +102,7 @@ export const issueDetails: Record<string, IndexingIssueDetail> = {
   },
   redirect: {
     description: 'These URLs redirect to other pages. Google follows the redirect and indexes the destination instead.',
-    fix: 'This is usually expected behavior. Ensure redirects point to the correct destination. Update internal links to point directly to the final URL to save crawl budget.',
+    fix: 'This is usually expected behavior. Ensure redirects point to the correct destination. Update internal links to point directly to the final URL, so crawlers and visitors skip the extra hop.',
   },
   canonical_mismatch: {
     description: 'The canonical URL declared on these pages points to a different URL. Google may index the canonical target instead.',
@@ -164,7 +164,7 @@ export const issueGroups: IssueGroup[] = [
     description: 'Server and URL issues to resolve',
     effort: 'moderate',
     controlLevel: 'full',
-    education: 'These are infrastructure problems — your server is returning errors, blocking Googlebot at the edge, failing to follow redirects, or serving pages that look empty. Fix crawl blocks and server errors first (they cost crawl budget and can drop indexed pages), then handle 404s with redirects.',
+    education: 'These are infrastructure problems: your server returns errors, blocks Googlebot at the edge, fails to follow redirects, or serves pages that look empty. Fix crawl blocks and server errors first, because they can drop indexed pages. Then handle 404s with redirects.',
     issueTypes: ['server_error', 'not_found', 'soft_404', 'access_forbidden', 'access_denied', 'blocked_4xx', 'redirect_error', 'crawl_error'],
   },
   {
