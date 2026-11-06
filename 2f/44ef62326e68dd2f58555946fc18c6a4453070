@@ -1,0 +1,54 @@
+{
+  "harness": 1,
+  "commit": "2f44ef62326e68dd2f58555946fc18c6a4453070",
+  "parentCommit": "e9f58026e5f2788740adeefab1e09222cb855997",
+  "dependenciesChanged": false,
+  "runner": "ubuntu24",
+  "node": "v22.23.4",
+  "cpu": "INTEL(R) XEON(R) PLATINUM 8573C",
+  "measuredAt": "2026-11-06T18:52:54.296Z",
+  "benchmarks": [
+    {
+      "id": "engine/decode-parquet-200k",
+      "kind": "time",
+      "unit": "ms",
+      "repeats": 9,
+      "head": {
+        "min": 200.992,
+        "median": 206.292
+      },
+      "parent": {
+        "min": 206.723,
+        "median": 209.551
+      },
+      "control": {
+        "min": 211.482,
+        "median": 215.739
+      },
+      "deltaPercent": -2.772,
+      "controlPercent": 5.219,
+      "verified": true
+    },
+    {
+      "id": "engine/dist-bytes",
+      "kind": "count",
+      "unit": "bytes",
+      "repeats": 1,
+      "head": {
+        "min": 1104955,
+        "median": 1104955
+      },
+      "parent": {
+        "min": 1104955,
+        "median": 1104955
+      },
+      "control": {
+        "min": 1104955,
+        "median": 1104955
+      },
+      "deltaPercent": 0,
+      "controlPercent": 0,
+      "verified": true
+    }
+  ]
+}
