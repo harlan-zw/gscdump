@@ -89,6 +89,15 @@ import {
   createGscdumpV1BrowserSchemas,
   GSCDUMP_V1_ANALYTICS_DIMENSIONS,
 } from './browser'
+import {
+  generativeAiReportQueryV1Schema,
+  generativeAiReportReadV1Schemas,
+  generativeAiReportUploadIdV1Schema,
+  generativeAiReportUploadListV1Schemas,
+  generativeAiReportUploadReceiptV1Schemas,
+  generativeAiReportUploadRemovedV1Schemas,
+  generativeAiReportUploadV1Schema,
+} from './generative-ai-report'
 import { googleSubmissionReceiptV1Schemas, googleSubmitV1Schema, indexingApiGrantUpdateV1Schema, indexingApiGrantV1Schemas, siteIndexingApiGrantV1Schemas } from './google-indexing'
 import {
   defineHttpOperation,
@@ -927,6 +936,8 @@ export function createGscdumpV1Protocol() {
     'contract_violation',
   ] as const
   const siteVersionErrors = [...partnerSiteErrors, 'conflict', 'service_unavailable'] as const
+  const generativeAiReportUploadCreateErrors = [...partnerSiteErrors, 'no_registered_host_rows'] as const
+  const generativeAiReportUploadLookupErrors = [...partnerSiteErrors, 'generative_ai_report_upload_not_found'] as const
   const siteVersionIdentityResponse = defineSuccessResponse(
     { producer: siteVersionIdentityResponseSchema, client: siteVersionIdentityResponseSchema },
     partnerResponseMeta,
@@ -1413,6 +1424,90 @@ export function createGscdumpV1Protocol() {
           examples: {
             request: { params: { siteId: 's_01' }, query: { dataset: 'traffic', startDate: '2026-08-01', endDate: '2026-08-31', limit: 100, offset: 0 } },
             response: { data: { searchEngine: 'bing', siteUrl: 'https://example.com/', dataset: 'traffic', semantics: 'site-totals', sync: { _tag: 'missing' }, rows: [], pagination: { total: 0, limit: 100, offset: 0, hasMore: false } }, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } },
+          },
+        },
+      }),
+      createSiteGenerativeAiReportUpload: defineHttpOperation({
+        ...gscdumpV1OperationRoute('partner.sites.generative_ai.uploads.create'),
+        visibility: 'public',
+        semantics: { kind: 'mutation', sideEffects: 'state', idempotent: true, retry: 'idempotent', readConsistency: null },
+        auth: { credentials: ['user_key', 'partner_key'], scopes: ['sites:write'], ownership: [{ credential: 'user_key', rule: 'authorized_site' }, { credential: 'partner_key', rule: 'authorized_site' }] },
+        request: { params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }), query: null, headers: requestHeaders, body: generativeAiReportUploadV1Schema },
+        responses: { 200: defineSuccessResponse(generativeAiReportUploadReceiptV1Schemas, partnerResponseMeta) },
+        errors: generativeAiReportUploadCreateErrors,
+        errorResponse: errorEnvelopeSchemas(generativeAiReportUploadCreateErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [{ type: 'site.analytics', idFrom: 'params.siteId' }], changes: [{ type: 'site.analytics', idFrom: 'params.siteId' }] },
+        lifecycle: { introduced: '1.8.0' },
+        docs: {
+          summary: 'Upload a Generative AI report',
+          description: 'Stores one normalized Generative AI report upload for this Site. The caller parses the zip with `@gscdump/sdk/generative-ai-report`. The same content returns the same `uploadId` with `deduped: true`. An export with Pages rows but none on the registered host returns `no_registered_host_rows`. Each read states that an upload is the source, because the server cannot prove the numbers came from Google.',
+          tags: ['Analytics'],
+          examples: {
+            request: { params: { siteId: 's_01' }, body: { report: 'search', parserVersion: 1, sourceSha256: '0'.repeat(64), sourceFilename: 'example.com-Performance-on-Search-Generative-AI-Features-2026-04-02.zip', window: { startDate: '2026-03-30', endDate: '2026-03-30', label: 'Last 3 months' }, searchTypeFilter: 'Web (text-based)', chart: { rows: [{ date: '2026-03-30', impressions: { _tag: 'reported', value: 4 } }] }, pages: { coverage: { _tag: 'complete' }, offHostRows: 0, offHostImpressions: 0, rows: [{ url: 'https://example.com/', impressions: { _tag: 'reported', value: 4 } }] }, countries: { rows: [{ countryName: 'Turkey', countryCode: 'tur', impressions: { _tag: 'reported', value: 4 } }] }, devices: { rows: [{ device: 'desktop', impressions: { _tag: 'reported', value: 4 } }] }, warnings: [] } },
+            response: { data: { uploadId: 'gau_01', deduped: false, warnings: [], unmappedCountries: [], window: { startDate: '2026-03-30', endDate: '2026-03-30', label: 'Last 3 months' }, rowCounts: { chart: 1, pages: 1, countries: 1, devices: 1 } }, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } },
+          },
+        },
+      }),
+      listSiteGenerativeAiReportUploads: defineHttpOperation({
+        ...gscdumpV1OperationRoute('partner.sites.generative_ai.uploads.list'),
+        visibility: 'public',
+        semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
+        auth: { credentials: ['user_key', 'partner_key'], scopes: ['analytics:read'], ownership: [{ credential: 'user_key', rule: 'authorized_site' }, { credential: 'partner_key', rule: 'authorized_site' }] },
+        request: { params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }), query: null, headers: requestHeaders, body: null },
+        responses: { 200: defineSuccessResponse(generativeAiReportUploadListV1Schemas, partnerResponseMeta) },
+        errors: partnerSiteErrors,
+        errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [{ type: 'site.analytics', idFrom: 'params.siteId' }], changes: [] },
+        lifecycle: { introduced: '1.8.0' },
+        docs: {
+          summary: 'List Generative AI report uploads',
+          description: 'Returns every Generative AI report upload for this Site, with its source file, window, and coverage.',
+          tags: ['Analytics'],
+          examples: {
+            request: { params: { siteId: 's_01' } },
+            response: { data: { uploads: [] }, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } },
+          },
+        },
+      }),
+      removeSiteGenerativeAiReportUpload: defineHttpOperation({
+        ...gscdumpV1OperationRoute('partner.sites.generative_ai.uploads.remove'),
+        visibility: 'public',
+        semantics: { kind: 'mutation', sideEffects: 'state', idempotent: true, retry: 'idempotent', readConsistency: null },
+        auth: { credentials: ['user_key', 'partner_key'], scopes: ['sites:write'], ownership: [{ credential: 'user_key', rule: 'authorized_site' }, { credential: 'partner_key', rule: 'authorized_site' }] },
+        request: { params: z.strictObject({ siteId: realtimeSchemas.publicSiteId, uploadId: generativeAiReportUploadIdV1Schema }), query: null, headers: requestHeaders, body: null },
+        responses: { 200: defineSuccessResponse(generativeAiReportUploadRemovedV1Schemas, partnerResponseMeta) },
+        errors: generativeAiReportUploadLookupErrors,
+        errorResponse: errorEnvelopeSchemas(generativeAiReportUploadLookupErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [{ type: 'site.analytics', idFrom: 'params.siteId' }], changes: [{ type: 'site.analytics', idFrom: 'params.siteId' }] },
+        lifecycle: { introduced: '1.8.0' },
+        docs: {
+          summary: 'Remove a Generative AI report upload',
+          description: 'Deletes one Generative AI report upload and its rows, for example after an upload to the wrong Site.',
+          tags: ['Analytics'],
+          examples: {
+            request: { params: { siteId: 's_01', uploadId: 'gau_01' } },
+            response: { data: { uploadId: 'gau_01', removed: true }, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } },
+          },
+        },
+      }),
+      getSiteGenerativeAiReport: defineHttpOperation({
+        ...gscdumpV1OperationRoute('partner.sites.generative_ai.get'),
+        visibility: 'public',
+        semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
+        auth: { credentials: ['user_key', 'partner_key'], scopes: ['analytics:read'], ownership: [{ credential: 'user_key', rule: 'authorized_site' }, { credential: 'partner_key', rule: 'authorized_site' }] },
+        request: { params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }), query: generativeAiReportQueryV1Schema, headers: requestHeaders, body: null },
+        responses: { 200: defineSuccessResponse(generativeAiReportReadV1Schemas, partnerResponseMeta) },
+        errors: generativeAiReportUploadLookupErrors,
+        errorResponse: errorEnvelopeSchemas(generativeAiReportUploadLookupErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [{ type: 'site.analytics', idFrom: 'params.siteId' }], changes: [] },
+        lifecycle: { introduced: '1.8.0' },
+        docs: {
+          summary: 'Read the Generative AI report',
+          description: 'Returns the Generative AI impressions of one upload, with its source, window, freshness, and the scope of each tab. Page rows count each URL on the registered host. Chart, country, and device rows count the whole property. So this response has no total field. A zero reads as `zero-or-unavailable`, and a page with no row reads as `not-listed`.',
+          tags: ['Analytics'],
+          examples: {
+            request: { params: { siteId: 's_01' }, query: { pageUrl: 'https://example.com/' } },
+            response: { data: { _tag: 'empty', report: 'search', reason: 'no-upload' }, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } },
           },
         },
       }),

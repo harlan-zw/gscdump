@@ -105,6 +105,20 @@ The two ADR-0012 decisions are
 
 ## Terms
 
+### Generative AI report upload
+**Is:** one Generative AI report export zip for one Site, stored unchanged. The verb is upload.
+**Use for:** the user's manual action, its stored record, and `createSiteGenerativeAiReportUpload`.
+**Never:** import, sync, backfill, snapshot, ingestion.
+**Casing:** `Generative AI report upload` in prose, `generativeAiReportUpload` in identifiers. Google's own report stays `generative AI report`.
+**Ratified by:** gscdump.com ADR-0023.
+
+### Generative AI impressions
+**Is:** impressions that the Generative AI report states for a date, page, country, or device.
+**Use for:** the one metric of a Generative AI report upload. A zero reads as `zero-or-unavailable`, because Google writes both as zero.
+**Never:** AI traffic, AI visits, AI clicks, clicks from AI, AI citations, AI rankings.
+**Casing:** `Generative AI impressions` in prose. Use `impressions` in fields and when the context is clear.
+**Ratified by:** gscdump.com ADR-0023.
+
 ### Search Engine
 **Is:** Google or Bing as the origin of Indexing Evidence.
 **Use for:** the `searchEngine` discriminator in public contracts, schemas, Operations, and SDK methods.

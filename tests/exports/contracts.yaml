@@ -294,6 +294,14 @@
   defineHttpSurface: function
   defineResponseObject: function
   defineSuccessResponse: function
+  GENERATIVE_AI_REPORT_MAX_ROWS: number
+  generativeAiReportQueryV1Schema: object
+  generativeAiReportReadV1Schemas: object
+  generativeAiReportUploadIdV1Schema: object
+  generativeAiReportUploadListV1Schemas: object
+  generativeAiReportUploadReceiptV1Schemas: object
+  generativeAiReportUploadRemovedV1Schemas: object
+  generativeAiReportUploadV1Schema: object
   GOOGLE_INDEXING_API_PROJECT_DAILY_DEFAULT: number
   GOOGLE_SUBMISSION_MAX_ATTEMPTS: number
   GOOGLE_SUBMISSION_REFUSAL_REASONS: object
@@ -382,6 +390,14 @@
   defineHttpSurface: function
   defineResponseObject: function
   defineSuccessResponse: function
+  GENERATIVE_AI_REPORT_MAX_ROWS: number
+  generativeAiReportQueryV1Schema: object
+  generativeAiReportReadV1Schemas: object
+  generativeAiReportUploadIdV1Schema: object
+  generativeAiReportUploadListV1Schemas: object
+  generativeAiReportUploadReceiptV1Schemas: object
+  generativeAiReportUploadRemovedV1Schemas: object
+  generativeAiReportUploadV1Schema: object
   GOOGLE_INDEXING_API_PROJECT_DAILY_DEFAULT: number
   GOOGLE_SUBMISSION_MAX_ATTEMPTS: number
   GOOGLE_SUBMISSION_REFUSAL_REASONS: object
