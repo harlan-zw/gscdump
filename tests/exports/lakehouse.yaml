@@ -30,6 +30,7 @@
 ./date:
   toIcebergDayCount: function
 ./maintenance:
+  expireIcebergSnapshots: function
   isCommitRateLimited: function
   isCommitServerError: function
   isCommitTransient: function
