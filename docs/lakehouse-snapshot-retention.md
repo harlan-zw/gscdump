@@ -5,6 +5,23 @@ It preserves the current snapshot and does not delete storage objects.
 
 Import it from `@gscdump/lakehouse/maintenance`.
 
+## Preview the policy
+
+`planIcebergSnapshotRetention` reads fresh Catalog metadata and returns a proposed bounded removal list.
+It uses the same planning function as `expireIcebergSnapshots`.
+It sends no Catalog mutation and requires no storage writer.
+
+Pass `olderThanMs`, `retainLast`, `protectedSnapshotIds`, and optionally `maxExpired`.
+The `Planned` result includes the table UUID, current head, total snapshot count, and proposed IDs.
+`eligibleSnapshotCount` includes candidates beyond the bounded removal list.
+An empty table returns `Empty`. Invalid policy, inventory, or references return `Err`.
+
+A preview records one observation. It does not reserve the head or grant future expiry authority.
+If inventory or caller protection changes, rebuild the preview.
+The mutation operation always reloads metadata and replans before checking authority.
+
+## Apply the policy
+
 | Option | Contract |
 | --- | --- |
 | `olderThanMs` | Keep every snapshot at or after this timestamp. Pass an explicit clock-derived cutoff. |

@@ -1,6 +1,6 @@
 import type { IcebergConnection } from '../src/catalog'
 import { afterEach, expect, it, vi } from 'vitest'
-import { expireIcebergSnapshots } from '../src/maintenance'
+import { expireIcebergSnapshots, planIcebergSnapshotRetention } from '../src/maintenance'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -98,5 +98,55 @@ it('refuses missing protected history even when the table is empty', async () =>
   const f = fixture({ empty: true })
   expect(await expireIcebergSnapshots(f.conn, 'queries', { olderThanMs: 5000, retainLast: 1, protectedSnapshotIds: ['1'], confirmAuthority: async () => true }))
     .toEqual({ _tag: 'Err', reason: 'invalid-inventory' })
+  expect(f.requests).toEqual([])
+})
+
+it('previews the same bounded removals without sending a Catalog mutation', async () => {
+  const f = fixture()
+  const options = { olderThanMs: 5000, retainLast: 2, protectedSnapshotIds: ['1'], maxExpired: 1 }
+  expect(await planIcebergSnapshotRetention({ catalog: f.conn.catalog, namespace: f.conn.namespace }, 'queries', options)).toEqual({
+    _tag: 'Planned',
+    tableUuid: 'table-uuid',
+    headSnapshotId: '5',
+    snapshotIds: ['2'],
+    snapshotCount: 5,
+    retained: 4,
+    eligibleSnapshotCount: 2,
+  })
+  expect(f.requests).toEqual([])
+  expect(await expireIcebergSnapshots(f.conn, 'queries', { ...options, confirmAuthority: async () => true }))
+    .toEqual({ _tag: 'Expired', snapshotIds: ['2'], retained: 4 })
+})
+
+it.each([undefined, -1])('previews and leaves an empty inventory unchanged with head %s', async (head) => {
+  const f = fixture({ empty: true })
+  f.metadata['current-snapshot-id'] = head
+  const options = { olderThanMs: 5000, retainLast: 1, protectedSnapshotIds: [] }
+  expect(await planIcebergSnapshotRetention(f.conn, 'queries', options)).toEqual({ _tag: 'Empty', tableUuid: 'table-uuid' })
+  expect(await expireIcebergSnapshots(f.conn, 'queries', { ...options, confirmAuthority: async () => true })).toEqual({ _tag: 'Unchanged' })
+  expect(f.requests).toEqual([])
+})
+
+it.each(['invalid-options', 'invalid-inventory', 'unsupported-refs'] as const)('refuses an unsafe preview for %s', async (reason) => {
+  const f = fixture({ branch: reason === 'unsupported-refs' })
+  expect(await planIcebergSnapshotRetention(f.conn, 'queries', {
+    olderThanMs: reason === 'invalid-options' ? -1 : 5000,
+    retainLast: 1,
+    protectedSnapshotIds: reason === 'invalid-inventory' ? ['99'] : [],
+  })).toEqual({ _tag: 'Err', reason })
+  expect(f.requests).toEqual([])
+})
+
+it('returns a complete no-removal preview when policy retains all history', async () => {
+  const f = fixture()
+  expect(await planIcebergSnapshotRetention(f.conn, 'queries', { olderThanMs: 5000, retainLast: 5, protectedSnapshotIds: [] })).toEqual({
+    _tag: 'Planned',
+    tableUuid: 'table-uuid',
+    headSnapshotId: '5',
+    snapshotIds: [],
+    snapshotCount: 5,
+    retained: 5,
+    eligibleSnapshotCount: 0,
+  })
   expect(f.requests).toEqual([])
 })

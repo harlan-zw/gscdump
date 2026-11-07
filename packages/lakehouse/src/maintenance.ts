@@ -17,6 +17,6 @@ export type {
   SweepUncommittedOrphansOptions,
   SweepUncommittedOrphansResult,
 } from './orphan-sweep'
-export { expireIcebergSnapshots } from './snapshot-retention'
+export { expireIcebergSnapshots, planIcebergSnapshotRetention } from './snapshot-retention'
 
-export type { ExpireIcebergSnapshotsOptions, ExpireIcebergSnapshotsResult } from './snapshot-retention'
+export type { ExpireIcebergSnapshotsOptions, ExpireIcebergSnapshotsResult, PlanIcebergSnapshotRetentionOptions, PlanIcebergSnapshotRetentionResult } from './snapshot-retention'
