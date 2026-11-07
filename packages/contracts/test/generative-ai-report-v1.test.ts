@@ -9,11 +9,11 @@ const upload = {
   report: 'search',
   parserVersion: 1,
   sourceSha256: 'a'.repeat(64),
-  sourceFilename: 'gscdump.com-Performance-on-Search-Generative-AI-Features-2026-11-07.zip',
-  window: { startDate: '2026-11-03', endDate: '2026-11-04', label: 'Last 3 months' },
+  sourceFilename: 'example.com-Performance-on-Search-Generative-AI-Features-2026-04-02.zip',
+  window: { startDate: '2026-03-29', endDate: '2026-03-30', label: 'Last 3 months' },
   searchTypeFilter: 'Web (text-based)',
-  chart: { rows: [{ date: '2026-11-03', impressions: zero }, { date: '2026-11-04', impressions: reported(4) }] },
-  pages: { coverage: { _tag: 'complete' }, offHostRows: 0, offHostImpressions: 0, rows: [{ url: 'http://gscdump.com/', impressions: reported(2) }, { url: 'https://gscdump.com/', impressions: reported(15) }] },
+  chart: { rows: [{ date: '2026-03-29', impressions: zero }, { date: '2026-03-30', impressions: reported(4) }] },
+  pages: { coverage: { _tag: 'complete' }, offHostRows: 0, offHostImpressions: 0, rows: [{ url: 'http://example.com/', impressions: reported(3) }, { url: 'https://example.com/', impressions: reported(12) }] },
   countries: { rows: [{ countryName: 'Atlantis', countryCode: null, impressions: reported(3) }] },
   devices: { rows: [{ device: 'desktop', impressions: reported(1) }] },
   warnings: [],
@@ -22,8 +22,8 @@ const upload = {
 const available = {
   _tag: 'available',
   report: 'search',
-  source: { _tag: 'upload', uploadId: 'gau_01', uploadedAt: '2026-11-07T00:00:00.000Z', sourceFilename: upload.sourceFilename },
-  window: { startDate: '2026-11-03', endDate: '2026-11-04', label: 'Last 3 months' },
+  source: { _tag: 'upload', uploadId: 'gau_01', uploadedAt: '2026-04-02T00:00:00.000Z', sourceFilename: upload.sourceFilename },
+  window: { startDate: '2026-03-29', endDate: '2026-03-30', label: 'Last 3 months' },
   freshness: 'current',
   chart: { scope: 'property', rows: upload.chart.rows },
   pages: { scope: 'registered-host', coverage: { _tag: 'complete' }, offHostRows: 0, rows: upload.pages.rows },
@@ -41,17 +41,17 @@ describe('generative AI report upload body', () => {
   })
 
   it.each([
-    ['a reported zero, which must read as zero or unavailable', { chart: { rows: [{ date: '2026-11-03', impressions: reported(0) }, upload.chart.rows[1]] } }],
-    ['a total field', { total: 213 }],
-    ['a Chart gap', { chart: { rows: [upload.chart.rows[0], { date: '2026-11-05', impressions: zero }] }, window: { ...upload.window, endDate: '2026-11-05' } }],
-    ['a window that differs from Chart', { window: { ...upload.window, startDate: '2026-11-01' } }],
+    ['a reported zero, which must read as zero or unavailable', { chart: { rows: [{ date: '2026-03-29', impressions: reported(0) }, upload.chart.rows[1]] } }],
+    ['a total field', { total: 70 }],
+    ['a Chart gap', { chart: { rows: [upload.chart.rows[0], { date: '2026-03-31', impressions: zero }] }, window: { ...upload.window, endDate: '2026-03-31' } }],
+    ['a window that differs from Chart', { window: { ...upload.window, startDate: '2026-03-27' } }],
     ['a duplicate page', { pages: { ...upload.pages, rows: [upload.pages.rows[0], upload.pages.rows[0]] } }],
     ['a duplicate country', { countries: { rows: [upload.countries.rows[0], upload.countries.rows[0]] } }],
     ['a duplicate device', { devices: { rows: [upload.devices.rows[0], upload.devices.rows[0]] } }],
     ['a Discover report', { report: 'discover' }],
     ['a country code that is not lowercase alpha-3', { countries: { rows: [{ countryName: 'Spain', countryCode: 'ES', impressions: zero }] } }],
     ['an unknown device', { devices: { rows: [{ device: 'watch', impressions: zero }] } }],
-    ['more than 1,000 Pages rows', { pages: { ...upload.pages, rows: Array.from({ length: 1001 }, (_, index) => ({ url: `https://gscdump.com/${index}`, impressions: zero })) } }],
+    ['more than 1,000 Pages rows', { pages: { ...upload.pages, rows: Array.from({ length: 1001 }, (_, index) => ({ url: `https://example.com/${index}`, impressions: zero })) } }],
     ['a short source hash', { sourceSha256: 'abc' }],
   ])('refuses %s', (_name, override) => {
     expect(generativeAiReportUploadV1Schema.safeParse({ ...upload, ...override }).success).toBe(false)
@@ -67,8 +67,8 @@ describe('getSiteGenerativeAiReport', () => {
   })
 
   it('never lets a producer send a total, a reported zero, or a Discover report', () => {
-    expect(response.producer.safeParse({ data: { ...available, total: 213 }, meta }).success).toBe(false)
-    expect(response.producer.safeParse({ data: { ...available, chart: { scope: 'property', rows: [{ date: '2026-11-03', impressions: reported(0) }] } }, meta }).success).toBe(false)
+    expect(response.producer.safeParse({ data: { ...available, total: 70 }, meta }).success).toBe(false)
+    expect(response.producer.safeParse({ data: { ...available, chart: { scope: 'property', rows: [{ date: '2026-03-29', impressions: reported(0) }] } }, meta }).success).toBe(false)
     expect(response.producer.safeParse({ data: { ...available, report: 'discover' }, meta }).success).toBe(false)
   })
 
@@ -78,15 +78,15 @@ describe('getSiteGenerativeAiReport', () => {
   })
 
   it('states an exact URL read as listed or not listed, with rows on the other scheme', () => {
-    const otherSchemeRows = [{ url: 'http://gscdump.com/', impressions: reported(2) }]
-    const listed = { _tag: 'listed', url: 'https://gscdump.com/', impressions: reported(15), otherSchemeRows }
+    const otherSchemeRows = [{ url: 'http://example.com/', impressions: reported(3) }]
+    const listed = { _tag: 'listed', url: 'https://example.com/', impressions: reported(12), otherSchemeRows }
     const notListed = { _tag: 'not-listed', otherSchemeRows }
     expect(response.producer.parse({ data: { ...available, page: listed }, meta }).data).toMatchObject({ page: listed })
     expect(response.producer.parse({ data: { ...available, page: notListed }, meta }).data).toMatchObject({ page: notListed })
   })
 
   it('accepts an optional upload and an exact page URL', () => {
-    const query = { uploadId: 'gau_01', pageUrl: 'https://gscdump.com/' }
+    const query = { uploadId: 'gau_01', pageUrl: 'https://example.com/' }
     expect(operations.getSiteGenerativeAiReport.request.query.parse(query)).toEqual(query)
     expect(operations.getSiteGenerativeAiReport.request.query.parse({})).toEqual({})
     expect(operations.getSiteGenerativeAiReport.request.query.safeParse({ pageUrl: '/about' }).success).toBe(false)
@@ -101,7 +101,7 @@ describe('upload operations', () => {
     const data = {
       uploadId: 'gau_01',
       deduped: true,
-      warnings: [{ _tag: 'filename_site_mismatch', prefix: 'other.com', host: 'gscdump.com' }],
+      warnings: [{ _tag: 'filename_site_mismatch', prefix: 'other.com', host: 'example.com' }],
       unmappedCountries: ['Atlantis'],
       window: upload.window,
       rowCounts: { chart: 2, pages: 2, countries: 1, devices: 1 },
@@ -130,7 +130,7 @@ describe('upload operations', () => {
       sourceSha256: upload.sourceSha256,
       parserVersion: 1,
       window: upload.window,
-      uploadedAt: '2026-11-07T00:00:00.000Z',
+      uploadedAt: '2026-04-02T00:00:00.000Z',
       pagesCoverage: { _tag: 'complete' },
       offHostRows: 0,
       offHostImpressions: 0,

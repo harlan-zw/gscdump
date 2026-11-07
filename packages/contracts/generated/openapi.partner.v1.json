@@ -13728,7 +13728,7 @@
               "chart": {
                 "rows": [
                   {
-                    "date": "2026-11-04",
+                    "date": "2026-03-30",
                     "impressions": {
                       "_tag": "reported",
                       "value": 4
@@ -13778,13 +13778,13 @@
               "parserVersion": 1,
               "report": "search",
               "searchTypeFilter": "Web (text-based)",
-              "sourceFilename": "example.com-Performance-on-Search-Generative-AI-Features-2026-11-07.zip",
+              "sourceFilename": "example.com-Performance-on-Search-Generative-AI-Features-2026-04-02.zip",
               "sourceSha256": "0000000000000000000000000000000000000000000000000000000000000000",
               "warnings": [],
               "window": {
-                "endDate": "2026-11-04",
+                "endDate": "2026-03-30",
                 "label": "Last 3 months",
-                "startDate": "2026-11-04"
+                "startDate": "2026-03-30"
               }
             },
             "params": {
@@ -13804,9 +13804,9 @@
               "uploadId": "gau_01",
               "warnings": [],
               "window": {
-                "endDate": "2026-11-04",
+                "endDate": "2026-03-30",
                 "label": "Last 3 months",
-                "startDate": "2026-11-04"
+                "startDate": "2026-03-30"
               }
             },
             "meta": {

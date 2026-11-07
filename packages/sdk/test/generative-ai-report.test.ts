@@ -6,10 +6,10 @@ import { parseGenerativeAiReportExport } from '@gscdump/sdk/generative-ai-report
 import { strToU8, zipSync } from 'fflate'
 import { describe, expect, it } from 'vitest'
 
-const REAL_FILENAME = 'gscdump.com-Performance-on-Search-Generative-AI-Features-2026-11-07.zip'
+const FIXTURE_FILENAME = 'example.com-Performance-on-Search-Generative-AI-Features-2026-04-02.zip'
 const FILE_NAMES = ['Chart.csv', 'Pages.csv', 'Countries.csv', 'Devices.csv', 'Filters.csv'] as const
 
-const realFiles = Object.fromEntries(FILE_NAMES.map(name => [
+const fixtureFiles = Object.fromEntries(FILE_NAMES.map(name => [
   name,
   readFileSync(new URL(`./fixtures/generative-ai-report/${name}`, import.meta.url), 'utf8'),
 ])) as Record<typeof FILE_NAMES[number], string>
@@ -22,15 +22,15 @@ function zipOf(files: Record<string, string | Uint8Array>): Uint8Array {
 }
 
 function report(overrides: Partial<Record<typeof FILE_NAMES[number], string>> = {}): Uint8Array {
-  return zipOf({ ...realFiles, ...overrides })
+  return zipOf({ ...fixtureFiles, ...overrides })
 }
 
 function parse(input: Partial<GenerativeAiReportParseInput> = {}) {
   return parseGenerativeAiReportExport({
     bytes: report(),
-    filename: REAL_FILENAME,
-    site: { registeredHost: 'gscdump.com', gscProperty: 'sc-domain:gscdump.com' },
-    now: new Date('2026-11-07T00:00:00.000Z'),
+    filename: FIXTURE_FILENAME,
+    site: { registeredHost: 'example.com', gscProperty: 'sc-domain:example.com' },
+    now: new Date('2026-04-02T00:00:00.000Z'),
     ...input,
   })
 }
@@ -53,26 +53,27 @@ function reportedSum(rows: { impressions: { _tag: string, value?: number } }[]):
   return rows.reduce((sum, row) => sum + (row.impressions.value ?? 0), 0)
 }
 
-describe('parseGenerativeAiReportExport with the real gscdump.com export', () => {
-  it('takes the date range from Chart.csv and sums 213 over 92 days', async () => {
+describe('parseGenerativeAiReportExport with a synthetic export in the observed shape', () => {
+  it('takes the date range from Chart.csv and sums 70 over 30 days', async () => {
     const { upload } = await parsedUpload()
-    expect(upload.window).toEqual({ startDate: '2026-08-05', endDate: '2026-11-04', label: 'Last 3 months' })
-    expect(upload.chart.rows).toHaveLength(92)
-    expect(reportedSum(upload.chart.rows)).toBe(213)
+    expect(upload.window).toEqual({ startDate: '2026-03-01', endDate: '2026-03-30', label: 'Last 3 months' })
+    expect(upload.chart.rows).toHaveLength(30)
+    expect(reportedSum(upload.chart.rows)).toBe(70)
   })
 
-  it('reads each of the 58 zero days as zero or unavailable', async () => {
+  it('reads each of the 12 zero days as zero or unavailable', async () => {
     const { upload } = await parsedUpload()
     const zeroDays = upload.chart.rows.filter(row => row.impressions._tag === 'zero-or-unavailable')
-    expect(zeroDays).toHaveLength(58)
-    expect(upload.chart.rows[0]).toEqual({ date: '2026-08-05', impressions: { _tag: 'zero-or-unavailable' } })
-    expect(upload.chart.rows[4]).toEqual({ date: '2026-08-09', impressions: { _tag: 'reported', value: 1 } })
+    expect(zeroDays).toHaveLength(12)
+    expect(upload.chart.rows[0]).toEqual({ date: '2026-03-01', impressions: { _tag: 'zero-or-unavailable' } })
+    expect(upload.chart.rows[4]).toEqual({ date: '2026-03-05', impressions: { _tag: 'reported', value: 1 } })
   })
 
-  it('keeps 21 Pages rows summing 224, above the Chart sum, with no refusal', async () => {
+  it('keeps 7 Pages rows summing 81, above the Chart sum, with no refusal', async () => {
     const { upload } = await parsedUpload()
-    expect(upload.pages.rows).toHaveLength(21)
-    expect(reportedSum(upload.pages.rows)).toBe(224)
+    expect(upload.pages.rows).toHaveLength(7)
+    expect(reportedSum(upload.pages.rows)).toBe(81)
+    expect(reportedSum(upload.pages.rows)).toBeGreaterThan(reportedSum(upload.chart.rows))
     expect(upload.pages.coverage).toEqual({ _tag: 'complete' })
     expect(upload.pages.offHostRows).toBe(0)
     expect(upload.pages.offHostImpressions).toBe(0)
@@ -81,25 +82,25 @@ describe('parseGenerativeAiReportExport with the real gscdump.com export', () =>
   it('stores http rows verbatim, apart from their https rows', async () => {
     const { upload } = await parsedUpload()
     const byUrl = new Map(upload.pages.rows.map(row => [row.url, row.impressions]))
-    expect(byUrl.get('http://gscdump.com/')).toEqual({ _tag: 'reported', value: 2 })
-    expect(byUrl.get('https://gscdump.com/')).toEqual({ _tag: 'reported', value: 15 })
-    expect(byUrl.get('http://gscdump.com/learn-google-search-console/limits/16-month-data-retention')).toEqual({ _tag: 'reported', value: 13 })
+    expect(byUrl.get('http://example.com/')).toEqual({ _tag: 'reported', value: 3 })
+    expect(byUrl.get('https://example.com/')).toEqual({ _tag: 'reported', value: 12 })
+    expect(byUrl.get('http://example.com/guides/beta')).toEqual({ _tag: 'reported', value: 9 })
     expect(upload.pages.rows.filter(row => row.url.startsWith('http://'))).toHaveLength(2)
   })
 
   it('maps the 3 devices to the analytics enum', async () => {
     const { upload } = await parsedUpload()
     expect(upload.devices.rows).toEqual([
-      { device: 'desktop', impressions: { _tag: 'reported', value: 196 } },
-      { device: 'mobile', impressions: { _tag: 'reported', value: 16 } },
-      { device: 'tablet', impressions: { _tag: 'reported', value: 1 } },
+      { device: 'desktop', impressions: { _tag: 'reported', value: 50 } },
+      { device: 'mobile', impressions: { _tag: 'reported', value: 18 } },
+      { device: 'tablet', impressions: { _tag: 'reported', value: 2 } },
     ])
   })
 
-  it('maps all 51 countries, including Turkey and Hong Kong', async () => {
+  it('maps all 7 countries, including Turkey and Hong Kong', async () => {
     const { upload, unmappedCountries } = await parsedUpload()
-    expect(upload.countries.rows).toHaveLength(51)
-    expect(reportedSum(upload.countries.rows)).toBe(213)
+    expect(upload.countries.rows).toHaveLength(7)
+    expect(reportedSum(upload.countries.rows)).toBe(70)
     expect(unmappedCountries).toEqual([])
     const codes = new Map(upload.countries.rows.map(row => [row.countryName, row.countryCode]))
     expect(codes.get('Turkey')).toBe('tur')
@@ -113,7 +114,7 @@ describe('parseGenerativeAiReportExport with the real gscdump.com export', () =>
     const bytes = report()
     const { upload } = await parsedUpload({ bytes })
     expect(upload.sourceSha256).toBe(createHash('sha256').update(bytes).digest('hex'))
-    expect(upload.sourceFilename).toBe(REAL_FILENAME)
+    expect(upload.sourceFilename).toBe(FIXTURE_FILENAME)
     expect(upload.searchTypeFilter).toBe('Web (text-based)')
     expect(upload.parserVersion).toBe(1)
     expect(upload.warnings).toEqual([])
@@ -127,9 +128,9 @@ describe('parseGenerativeAiReportExport with the real gscdump.com export', () =>
 
 describe('site identity', () => {
   it('warns on a filename for another host and still parses', async () => {
-    const { upload } = await parsedUpload({ filename: 'other.com-Performance-on-Search-Generative-AI-Features-2026-11-07.zip' })
-    expect(upload.warnings).toEqual([{ _tag: 'filename_site_mismatch', prefix: 'other.com', host: 'gscdump.com' }])
-    expect(upload.pages.rows).toHaveLength(21)
+    const { upload } = await parsedUpload({ filename: 'other.com-Performance-on-Search-Generative-AI-Features-2026-04-02.zip' })
+    expect(upload.warnings).toEqual([{ _tag: 'filename_site_mismatch', prefix: 'other.com', host: 'example.com' }])
+    expect(upload.pages.rows).toHaveLength(7)
   })
 
   it('warns on a renamed file and still parses', async () => {
@@ -138,29 +139,29 @@ describe('site identity', () => {
   })
 
   it('accepts a parent domain prefix and a property prefix with no warning', async () => {
-    const pages = 'Top pages,Impressions\nhttps://blog.gscdump.com/,5'
-    const parent = await parsedUpload({ bytes: report({ 'Pages.csv': pages }), site: { registeredHost: 'blog.gscdump.com', gscProperty: null } })
+    const pages = 'Top pages,Impressions\nhttps://blog.example.com/,5'
+    const parent = await parsedUpload({ bytes: report({ 'Pages.csv': pages }), site: { registeredHost: 'blog.example.com', gscProperty: null } })
     expect(parent.upload.warnings).toEqual([])
     const property = await parsedUpload({
       bytes: report({ 'Pages.csv': pages }),
-      filename: 'www.example.com-Performance-on-Search-Generative-AI-Features-2026-11-07.zip',
-      site: { registeredHost: 'blog.gscdump.com', gscProperty: 'https://www.example.com/' },
+      filename: 'www.example.com-Performance-on-Search-Generative-AI-Features-2026-04-02.zip',
+      site: { registeredHost: 'blog.example.com', gscProperty: 'https://www.example.com/' },
     })
     expect(property.upload.warnings).toEqual([])
   })
 
   it('refuses an export with Pages rows but none on the registered host', async () => {
-    expect(await parseError({ site: { registeredHost: 'nuxtseo.com', gscProperty: null } })).toEqual({
+    expect(await parseError({ site: { registeredHost: 'other.example', gscProperty: null } })).toEqual({
       _tag: 'no_registered_host_rows',
-      host: 'nuxtseo.com',
-      pageRows: 21,
+      host: 'other.example',
+      pageRows: 7,
     })
   })
 
   it('keeps on-host rows only and counts the rest, ignoring the scheme', async () => {
-    const pages = 'Top pages,Impressions\nhttp://gscdump.com/a,4\nhttps://docs.gscdump.com/b,7\nhttps://other.com/c,0'
+    const pages = 'Top pages,Impressions\nhttp://example.com/a,4\nhttps://docs.example.com/b,7\nhttps://other.com/c,0'
     const { upload } = await parsedUpload({ bytes: report({ 'Pages.csv': pages }) })
-    expect(upload.pages.rows).toEqual([{ url: 'http://gscdump.com/a', impressions: { _tag: 'reported', value: 4 } }])
+    expect(upload.pages.rows).toEqual([{ url: 'http://example.com/a', impressions: { _tag: 'reported', value: 4 } }])
     expect(upload.pages.offHostRows).toBe(2)
     expect(upload.pages.offHostImpressions).toBe(7)
   })
@@ -171,7 +172,7 @@ describe('site identity', () => {
     expect(upload.pages.coverage).toEqual({ _tag: 'truncated', limit: 1000 })
     expect(upload.pages.rows).toEqual([])
     expect(upload.pages.offHostRows).toBe(1000)
-    expect(upload.warnings).toEqual([{ _tag: 'no_registered_host_rows_at_row_cap', host: 'gscdump.com' }])
+    expect(upload.warnings).toEqual([{ _tag: 'no_registered_host_rows_at_row_cap', host: 'example.com' }])
   })
 
   it('does not refuse an export whose Pages tab has no rows', async () => {
@@ -206,59 +207,59 @@ describe('field rules', () => {
   })
 
   it('accepts a quoted URL that holds a comma, an escaped quote, CRLF, and a trailing newline', async () => {
-    const pages = 'Top pages,Impressions\r\n"https://gscdump.com/a,b",3\r\n"https://gscdump.com/say""hi",2\r\n'
+    const pages = 'Top pages,Impressions\r\n"https://example.com/a,b",3\r\n"https://example.com/say""hi",2\r\n'
     const { upload } = await parsedUpload({ bytes: report({ 'Pages.csv': pages }) })
-    expect(upload.pages.rows.map(row => row.url)).toEqual(['https://gscdump.com/a,b', 'https://gscdump.com/say"hi'])
+    expect(upload.pages.rows.map(row => row.url)).toEqual(['https://example.com/a,b', 'https://example.com/say"hi'])
   })
 })
 
 describe('refusals name what broke', () => {
   it.each([
-    ['a Chart gap', { 'Chart.csv': 'Date,Impressions\n2026-08-05,1\n2026-08-07,1' }, { _tag: 'invalid_chart_dates', reason: 'not_consecutive', found: '2026-08-07' }],
-    ['a duplicate Chart date', { 'Chart.csv': 'Date,Impressions\n2026-08-05,1\n2026-08-05,1' }, { _tag: 'invalid_chart_dates', reason: 'not_consecutive', found: '2026-08-05' }],
-    ['a Chart date out of order', { 'Chart.csv': 'Date,Impressions\n2026-08-06,1\n2026-08-05,1' }, { _tag: 'invalid_chart_dates', reason: 'not_consecutive', found: '2026-08-05' }],
+    ['a Chart gap', { 'Chart.csv': 'Date,Impressions\n2026-03-05,1\n2026-03-07,1' }, { _tag: 'invalid_chart_dates', reason: 'not_consecutive', found: '2026-03-07' }],
+    ['a duplicate Chart date', { 'Chart.csv': 'Date,Impressions\n2026-03-05,1\n2026-03-05,1' }, { _tag: 'invalid_chart_dates', reason: 'not_consecutive', found: '2026-03-05' }],
+    ['a Chart date out of order', { 'Chart.csv': 'Date,Impressions\n2026-03-06,1\n2026-03-05,1' }, { _tag: 'invalid_chart_dates', reason: 'not_consecutive', found: '2026-03-05' }],
     ['an impossible Chart date', { 'Chart.csv': 'Date,Impressions\n2026-02-30,1' }, { _tag: 'invalid_chart_dates', reason: 'not_iso', found: '2026-02-30' }],
-    ['a Chart date in the future', { 'Chart.csv': 'Date,Impressions\n2026-11-08,1' }, { _tag: 'invalid_chart_dates', reason: 'future', found: '2026-11-08' }],
+    ['a Chart date in the future', { 'Chart.csv': 'Date,Impressions\n2026-04-03,1' }, { _tag: 'invalid_chart_dates', reason: 'future', found: '2026-04-03' }],
     ['a Chart with no rows', { 'Chart.csv': 'Date,Impressions' }, { _tag: 'invalid_chart_dates', reason: 'empty', found: null }],
     ['a formatted number', { 'Devices.csv': 'Device,Impressions\nDesktop,"1,000"' }, { _tag: 'invalid_impressions', file: 'Devices.csv', found: '1,000' }],
     ['a negative number', { 'Devices.csv': 'Device,Impressions\nDesktop,-3' }, { _tag: 'invalid_impressions', file: 'Devices.csv', found: '-3' }],
-    ['a decimal number', { 'Pages.csv': 'Top pages,Impressions\nhttps://gscdump.com/,1.5' }, { _tag: 'invalid_impressions', file: 'Pages.csv', found: '1.5' }],
+    ['a decimal number', { 'Pages.csv': 'Top pages,Impressions\nhttps://example.com/,1.5' }, { _tag: 'invalid_impressions', file: 'Pages.csv', found: '1.5' }],
     ['a relative URL', { 'Pages.csv': 'Top pages,Impressions\n/about,1' }, { _tag: 'invalid_page_url', found: '/about' }],
-    ['another URL scheme', { 'Pages.csv': 'Top pages,Impressions\nftp://gscdump.com/,1' }, { _tag: 'invalid_page_url', found: 'ftp://gscdump.com/' }],
+    ['another URL scheme', { 'Pages.csv': 'Top pages,Impressions\nftp://example.com/,1' }, { _tag: 'invalid_page_url', found: 'ftp://example.com/' }],
     ['an unknown device', { 'Devices.csv': 'Device,Impressions\nWatch,1' }, { _tag: 'invalid_device', found: 'Watch' }],
-    ['a duplicate page', { 'Pages.csv': 'Top pages,Impressions\nhttps://gscdump.com/,1\nhttps://gscdump.com/,2' }, { _tag: 'duplicate_rows', file: 'Pages.csv', found: 'https://gscdump.com/' }],
+    ['a duplicate page', { 'Pages.csv': 'Top pages,Impressions\nhttps://example.com/,1\nhttps://example.com/,2' }, { _tag: 'duplicate_rows', file: 'Pages.csv', found: 'https://example.com/' }],
     ['a duplicate country', { 'Countries.csv': 'Country,Impressions\nSpain,1\nSpain,2' }, { _tag: 'duplicate_rows', file: 'Countries.csv', found: 'Spain' }],
-    ['a renamed header', { 'Pages.csv': 'Page,Impressions\nhttps://gscdump.com/,1' }, { _tag: 'unrecognized_headers', file: 'Pages.csv', expected: ['Top pages', 'Impressions'], found: ['Page', 'Impressions'] }],
+    ['a renamed header', { 'Pages.csv': 'Page,Impressions\nhttps://example.com/,1' }, { _tag: 'unrecognized_headers', file: 'Pages.csv', expected: ['Top pages', 'Impressions'], found: ['Page', 'Impressions'] }],
     ['an empty tab', { 'Devices.csv': '' }, { _tag: 'unrecognized_headers', file: 'Devices.csv', expected: ['Device', 'Impressions'], found: [] }],
-    ['a translated header, from a non-English UI', { 'Chart.csv': 'Fecha,Impresiones\n2026-08-05,1' }, { _tag: 'unrecognized_headers', file: 'Chart.csv', expected: ['Date', 'Impressions'], found: ['Fecha', 'Impresiones'] }],
+    ['a translated header, from a non-English UI', { 'Chart.csv': 'Fecha,Impresiones\n2026-03-05,1' }, { _tag: 'unrecognized_headers', file: 'Chart.csv', expected: ['Date', 'Impressions'], found: ['Fecha', 'Impresiones'] }],
     ['a translated filter sheet, from a non-English UI', { 'Filters.csv': 'Filtro,Valor\nTipo de busqueda,Web' }, { _tag: 'unrecognized_headers', file: 'Filters.csv', expected: ['Filter', 'Value'], found: ['Filtro', 'Valor'] }],
     ['a translated filter name', { 'Filters.csv': 'Filter,Value\nTipo de busqueda,Web (text-based)\nDate,Last 3 months' }, { _tag: 'unsupported_filter', filter: 'Tipo de busqueda', value: 'Web (text-based)' }],
     ['the Multimodal filter', { 'Filters.csv': 'Filter,Value\nSearch type,Multimodal\nDate,Last 3 months' }, { _tag: 'unsupported_filter', filter: 'Search type', value: 'Multimodal' }],
     ['a translated search type value', { 'Filters.csv': 'Filter,Value\nSearch type,Web (solo texto)\nDate,Last 3 months' }, { _tag: 'unsupported_filter', filter: 'Search type', value: 'Web (solo texto)' }],
-    ['an extra URL filter', { 'Filters.csv': 'Filter,Value\nSearch type,Web (text-based)\nDate,Last 3 months\nPage,https://gscdump.com/' }, { _tag: 'unsupported_filter', filter: 'Page', value: 'https://gscdump.com/' }],
+    ['an extra URL filter', { 'Filters.csv': 'Filter,Value\nSearch type,Web (text-based)\nDate,Last 3 months\nPage,https://example.com/' }, { _tag: 'unsupported_filter', filter: 'Page', value: 'https://example.com/' }],
     ['a repeated filter', { 'Filters.csv': 'Filter,Value\nSearch type,Web (text-based)\nSearch type,Web (text-based)\nDate,Last 3 months' }, { _tag: 'unsupported_filter', filter: 'Search type', value: 'Web (text-based)' }],
     ['a missing Date filter', { 'Filters.csv': 'Filter,Value\nSearch type,Web (text-based)' }, { _tag: 'unsupported_filter', filter: 'Date', value: null }],
-    ['classic Chart columns', { 'Chart.csv': 'Date,Clicks,Impressions,CTR,Position\n2026-08-05,1,2,50%,3' }, { _tag: 'not_generative_ai_report', file: 'Chart.csv', found: ['Date', 'Clicks', 'Impressions', 'CTR', 'Position'] }],
+    ['classic Chart columns', { 'Chart.csv': 'Date,Clicks,Impressions,CTR,Position\n2026-03-05,1,2,50%,3' }, { _tag: 'not_generative_ai_report', file: 'Chart.csv', found: ['Date', 'Clicks', 'Impressions', 'CTR', 'Position'] }],
     ['a query column', { 'Pages.csv': 'Top queries,Impressions\nfoo,1' }, { _tag: 'not_generative_ai_report', file: 'Pages.csv', found: ['Top queries', 'Impressions'] }],
     ['an extra field', { 'Devices.csv': 'Device,Impressions\nDesktop,1,2' }, { _tag: 'invalid_encoding', file: 'Devices.csv', reason: 'malformed_csv', line: 2 }],
-    ['an unclosed quote', { 'Pages.csv': 'Top pages,Impressions\n"https://gscdump.com/,1' }, { _tag: 'invalid_encoding', file: 'Pages.csv', reason: 'malformed_csv', line: 2 }],
-    ['a control character', { 'Pages.csv': 'Top pages,Impressions\nhttps://gscdump.com/\u0007,1' }, { _tag: 'invalid_encoding', file: 'Pages.csv', reason: 'control_character', line: null }],
+    ['an unclosed quote', { 'Pages.csv': 'Top pages,Impressions\n"https://example.com/,1' }, { _tag: 'invalid_encoding', file: 'Pages.csv', reason: 'malformed_csv', line: 2 }],
+    ['a control character', { 'Pages.csv': 'Top pages,Impressions\nhttps://example.com/\u0007,1' }, { _tag: 'invalid_encoding', file: 'Pages.csv', reason: 'control_character', line: null }],
   ] as const)('refuses %s', async (_name, overrides, expected) => {
     expect(await parseError({ bytes: report(overrides) })).toEqual(expected)
   })
 
   it('refuses bytes that are not UTF-8', async () => {
-    const bytes = zipOf({ ...realFiles, 'Pages.csv': new Uint8Array([0x54, 0xFF, 0x70]) })
+    const bytes = zipOf({ ...fixtureFiles, 'Pages.csv': new Uint8Array([0x54, 0xFF, 0x70]) })
     expect(await parseError({ bytes })).toEqual({ _tag: 'invalid_encoding', file: 'Pages.csv', reason: 'not_utf8', line: null })
   })
 
   it('refuses the classic export by its Queries.csv entry', async () => {
-    const bytes = zipOf({ ...realFiles, 'Queries.csv': 'Top queries,Clicks\nfoo,1' })
+    const bytes = zipOf({ ...fixtureFiles, 'Queries.csv': 'Top queries,Clicks\nfoo,1' })
     expect(await parseError({ bytes })).toEqual({ _tag: 'not_generative_ai_report', file: 'Queries.csv', found: [] })
   })
 
   it('refuses more than 1,000 rows in a tab', async () => {
-    const rows = Array.from({ length: 1001 }, (_, index) => `https://gscdump.com/${index},1`).join('\n')
+    const rows = Array.from({ length: 1001 }, (_, index) => `https://example.com/${index},1`).join('\n')
     expect(await parseError({ bytes: report({ 'Pages.csv': `Top pages,Impressions\n${rows}` }) })).toEqual({
       _tag: 'too_many_rows',
       file: 'Pages.csv',
@@ -268,17 +269,17 @@ describe('refusals name what broke', () => {
   })
 
   it('refuses a Discover filename', async () => {
-    expect(await parseError({ filename: 'gscdump.com-Performance-on-Discover-Generative-AI-Features-2026-11-07.zip' })).toEqual({
+    expect(await parseError({ filename: 'example.com-Performance-on-Discover-Generative-AI-Features-2026-04-02.zip' })).toEqual({
       _tag: 'discover_not_supported',
-      filename: 'gscdump.com-Performance-on-Discover-Generative-AI-Features-2026-11-07.zip',
+      filename: 'example.com-Performance-on-Discover-Generative-AI-Features-2026-04-02.zip',
     })
   })
 
   it('does not read Discover in a Site name as the Discover report', async () => {
     const { upload } = await parsedUpload({
-      filename: 'discover.gscdump.com-Performance-on-Search-Generative-AI-Features-2026-11-07.zip',
+      filename: 'discover.example.com-Performance-on-Search-Generative-AI-Features-2026-04-02.zip',
     })
-    expect(upload.warnings).toEqual([{ _tag: 'filename_site_mismatch', prefix: 'discover.gscdump.com', host: 'gscdump.com' }])
+    expect(upload.warnings).toEqual([{ _tag: 'filename_site_mismatch', prefix: 'discover.example.com', host: 'example.com' }])
   })
 })
 
@@ -302,7 +303,7 @@ function localHeaderOffset(bytes: Uint8Array, name: string): number {
 
 describe('the untrusted zip', () => {
   it('refuses bytes that are not a zip', async () => {
-    expect(await parseError({ bytes: strToU8('Date,Impressions\n2026-08-05,1') })).toMatchObject({ _tag: 'not_a_report_zip' })
+    expect(await parseError({ bytes: strToU8('Date,Impressions\n2026-03-05,1') })).toMatchObject({ _tag: 'not_a_report_zip' })
     expect(await parseError({ bytes: new Uint8Array() })).toMatchObject({ _tag: 'not_a_report_zip' })
   })
 
@@ -317,24 +318,24 @@ describe('the untrusted zip', () => {
   })
 
   it.each([
-    ['an extra entry', { ...realFiles, 'Extra.csv': 'a,b' }],
-    ['a path traversal entry', { ...realFiles, '../evil.csv': 'a,b' }],
-    ['an absolute path entry', { ...realFiles, '/etc/evil.csv': 'a,b' }],
-    ['a backslash path entry', { ...realFiles, '..\\evil.csv': 'a,b' }],
-    ['a directory entry', { ...realFiles, 'nested/': new Uint8Array() }],
-    ['a nested archive', { ...realFiles, 'inner.zip': zipOf({ 'Chart.csv': realFiles['Chart.csv'] }) }],
+    ['an extra entry', { ...fixtureFiles, 'Extra.csv': 'a,b' }],
+    ['a path traversal entry', { ...fixtureFiles, '../evil.csv': 'a,b' }],
+    ['an absolute path entry', { ...fixtureFiles, '/etc/evil.csv': 'a,b' }],
+    ['a backslash path entry', { ...fixtureFiles, '..\\evil.csv': 'a,b' }],
+    ['a directory entry', { ...fixtureFiles, 'nested/': new Uint8Array() }],
+    ['a nested archive', { ...fixtureFiles, 'inner.zip': zipOf({ 'Chart.csv': fixtureFiles['Chart.csv'] }) }],
   ])('refuses %s', async (_name, files) => {
     expect(await parseError({ bytes: zipOf(files) })).toMatchObject({ _tag: 'unexpected_entries', reason: 'names' })
   })
 
   it('refuses an allowlisted file that sits inside a directory', async () => {
-    const { 'Chart.csv': chart, ...rest } = realFiles
+    const { 'Chart.csv': chart, ...rest } = fixtureFiles
     const error = await parseError({ bytes: zipOf({ ...rest, 'x/Chart.csv': chart }) })
     expect(error).toMatchObject({ _tag: 'unexpected_entries', reason: 'names', missing: ['Chart.csv'] })
   })
 
   it('refuses a missing file and names it', async () => {
-    const { 'Filters.csv': _filters, ...rest } = realFiles
+    const { 'Filters.csv': _filters, ...rest } = fixtureFiles
     expect(await parseError({ bytes: zipOf(rest) })).toEqual({
       _tag: 'unexpected_entries',
       reason: 'names',
@@ -369,7 +370,7 @@ describe('the untrusted zip', () => {
   })
 
   it('refuses an entry that declares more than 4 MB', async () => {
-    const bytes = zipOf({ ...realFiles, 'Pages.csv': new Uint8Array(4 * 1024 * 1024 + 1) })
+    const bytes = zipOf({ ...fixtureFiles, 'Pages.csv': new Uint8Array(4 * 1024 * 1024 + 1) })
     expect(await parseError({ bytes })).toEqual({
       _tag: 'file_too_large',
       scope: 'entry',
@@ -381,12 +382,12 @@ describe('the untrusted zip', () => {
 
   it('refuses entries that declare more than 8 MB in total', async () => {
     const big = new Uint8Array(3 * 1024 * 1024)
-    const bytes = zipOf({ 'Chart.csv': big, 'Pages.csv': big, 'Countries.csv': big, 'Devices.csv': realFiles['Devices.csv'], 'Filters.csv': realFiles['Filters.csv'] })
+    const bytes = zipOf({ 'Chart.csv': big, 'Pages.csv': big, 'Countries.csv': big, 'Devices.csv': fixtureFiles['Devices.csv'], 'Filters.csv': fixtureFiles['Filters.csv'] })
     expect(await parseError({ bytes })).toMatchObject({ _tag: 'file_too_large', scope: 'total', file: null, limit: 8 * 1024 * 1024 })
   })
 
   it('stops inflating an entry that lies about its size', async () => {
-    const bytes = zipOf({ ...realFiles, 'Pages.csv': new Uint8Array(32 * 1024 * 1024) })
+    const bytes = zipOf({ ...fixtureFiles, 'Pages.csv': new Uint8Array(32 * 1024 * 1024) })
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
     view.setUint32(centralHeaderOffset(bytes, 'Pages.csv') + 24, 100, true)
     const error = await parseError({ bytes })
