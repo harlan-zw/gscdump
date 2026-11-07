@@ -71,6 +71,11 @@
       "import": "./dist/gsc-error.mjs",
       "default": "./dist/gsc-error.mjs"
     },
+    "./generative-ai-report": {
+      "types": "./dist/generative-ai-report.d.mts",
+      "import": "./dist/generative-ai-report.mjs",
+      "default": "./dist/generative-ai-report.mjs"
+    },
     "./period-presets": {
       "types": "./dist/gsc-period-presets.d.mts",
       "import": "./dist/gsc-period-presets.mjs",
@@ -152,6 +157,7 @@
   },
   "dependencies": {
     "@gscdump/contracts": "workspace:^",
+    "fflate": "catalog:deps",
     "gscdump": "workspace:^",
     "ofetch": "catalog:deps",
     "zod": "catalog:"

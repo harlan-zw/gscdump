@@ -114,6 +114,7 @@ catalogs:
     '@clack/prompts': ^1.8.1
     citty: ^0.2.2
     consola: ^3.4.2
+    fflate: ^0.8.3
     google-auth-library: ^11.1.0
     ofetch: ^1.5.1
     open: ^11.0.4

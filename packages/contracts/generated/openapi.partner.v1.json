@@ -851,6 +851,349 @@
           }
         ]
       },
+      "partner.sites.generative_ai.get.error": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "enum": [
+                  "invalid_request",
+                  "unauthorized",
+                  "forbidden",
+                  "site_not_found",
+                  "rate_limited",
+                  "internal_error",
+                  "contract_violation",
+                  "generative_ai_report_upload_not_found"
+                ],
+                "type": "string"
+              },
+              "details": {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/partner.sites.generative_ai.get.error.__schema0"
+                },
+                "propertyNames": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              "message": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "requestId": {
+                "pattern": "^req_[\\w-]+$",
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "requestId",
+              "retryable",
+              "details"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "partner.sites.generative_ai.get.error.__schema0": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          },
+          {
+            "items": {
+              "$ref": "#/components/schemas/partner.sites.generative_ai.get.error.__schema0"
+            },
+            "type": "array"
+          },
+          {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/partner.sites.generative_ai.get.error.__schema0"
+            },
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": "object"
+          }
+        ]
+      },
+      "partner.sites.generative_ai.uploads.create.error": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "enum": [
+                  "invalid_request",
+                  "unauthorized",
+                  "forbidden",
+                  "site_not_found",
+                  "rate_limited",
+                  "internal_error",
+                  "contract_violation",
+                  "no_registered_host_rows"
+                ],
+                "type": "string"
+              },
+              "details": {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/partner.sites.generative_ai.uploads.create.error.__schema0"
+                },
+                "propertyNames": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              "message": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "requestId": {
+                "pattern": "^req_[\\w-]+$",
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "requestId",
+              "retryable",
+              "details"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "partner.sites.generative_ai.uploads.create.error.__schema0": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          },
+          {
+            "items": {
+              "$ref": "#/components/schemas/partner.sites.generative_ai.uploads.create.error.__schema0"
+            },
+            "type": "array"
+          },
+          {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/partner.sites.generative_ai.uploads.create.error.__schema0"
+            },
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": "object"
+          }
+        ]
+      },
+      "partner.sites.generative_ai.uploads.list.error": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "enum": [
+                  "invalid_request",
+                  "unauthorized",
+                  "forbidden",
+                  "site_not_found",
+                  "rate_limited",
+                  "internal_error",
+                  "contract_violation"
+                ],
+                "type": "string"
+              },
+              "details": {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/partner.sites.generative_ai.uploads.list.error.__schema0"
+                },
+                "propertyNames": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              "message": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "requestId": {
+                "pattern": "^req_[\\w-]+$",
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "requestId",
+              "retryable",
+              "details"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "partner.sites.generative_ai.uploads.list.error.__schema0": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          },
+          {
+            "items": {
+              "$ref": "#/components/schemas/partner.sites.generative_ai.uploads.list.error.__schema0"
+            },
+            "type": "array"
+          },
+          {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/partner.sites.generative_ai.uploads.list.error.__schema0"
+            },
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": "object"
+          }
+        ]
+      },
+      "partner.sites.generative_ai.uploads.remove.error": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "enum": [
+                  "invalid_request",
+                  "unauthorized",
+                  "forbidden",
+                  "site_not_found",
+                  "rate_limited",
+                  "internal_error",
+                  "contract_violation",
+                  "generative_ai_report_upload_not_found"
+                ],
+                "type": "string"
+              },
+              "details": {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/partner.sites.generative_ai.uploads.remove.error.__schema0"
+                },
+                "propertyNames": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              "message": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "requestId": {
+                "pattern": "^req_[\\w-]+$",
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "requestId",
+              "retryable",
+              "details"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "partner.sites.generative_ai.uploads.remove.error.__schema0": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          },
+          {
+            "items": {
+              "$ref": "#/components/schemas/partner.sites.generative_ai.uploads.remove.error.__schema0"
+            },
+            "type": "array"
+          },
+          {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/partner.sites.generative_ai.uploads.remove.error.__schema0"
+            },
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": "object"
+          }
+        ]
+      },
       "partner.sites.index.percent.get.error": {
         "additionalProperties": false,
         "properties": {
@@ -11382,6 +11725,2336 @@
           "readConsistency": "primary",
           "retry": "idempotent",
           "sideEffects": "none"
+        },
+        "x-gscdump-visibility": "public"
+      }
+    },
+    "/api/partner/v1/sites/{siteId}/generative-ai": {
+      "get": {
+        "description": "Returns the Generative AI impressions of one upload, with its source, window, freshness, and the scope of each tab. Page rows count each URL on the registered host. Chart, country, and device rows count the whole property. So this response has no total field. A zero reads as `zero-or-unavailable`, and a page with no row reads as `not-listed`.",
+        "operationId": "partner.sites.generative_ai.get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "siteId",
+            "required": true,
+            "schema": {
+              "pattern": "^s_[\\w-]+$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageUrl",
+            "required": false,
+            "schema": {
+              "format": "uri",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "uploadId",
+            "required": false,
+            "schema": {
+              "pattern": "^[\\w-]{1,128}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "pattern": "^req_[\\w-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "oneOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "_tag": {
+                              "const": "empty",
+                              "type": "string"
+                            },
+                            "reason": {
+                              "const": "no-upload",
+                              "type": "string"
+                            },
+                            "report": {
+                              "const": "search",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "_tag",
+                            "report",
+                            "reason"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "_tag": {
+                              "const": "available",
+                              "type": "string"
+                            },
+                            "chart": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "rows": {
+                                  "items": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "date": {
+                                        "format": "date",
+                                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                        "type": "string"
+                                      },
+                                      "impressions": {
+                                        "oneOf": [
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "_tag": {
+                                                "const": "reported",
+                                                "type": "string"
+                                              },
+                                              "value": {
+                                                "exclusiveMinimum": 0,
+                                                "maximum": 9007199254740991,
+                                                "type": "integer"
+                                              }
+                                            },
+                                            "required": [
+                                              "_tag",
+                                              "value"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "_tag": {
+                                                "const": "zero-or-unavailable",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "_tag"
+                                            ],
+                                            "type": "object"
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "date",
+                                      "impressions"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                },
+                                "scope": {
+                                  "const": "property",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "scope",
+                                "rows"
+                              ],
+                              "type": "object"
+                            },
+                            "countries": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "rows": {
+                                  "items": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "countryCode": {
+                                        "anyOf": [
+                                          {
+                                            "pattern": "^[a-z]{3}$",
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "countryName": {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "impressions": {
+                                        "oneOf": [
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "_tag": {
+                                                "const": "reported",
+                                                "type": "string"
+                                              },
+                                              "value": {
+                                                "exclusiveMinimum": 0,
+                                                "maximum": 9007199254740991,
+                                                "type": "integer"
+                                              }
+                                            },
+                                            "required": [
+                                              "_tag",
+                                              "value"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "_tag": {
+                                                "const": "zero-or-unavailable",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "_tag"
+                                            ],
+                                            "type": "object"
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "countryName",
+                                      "countryCode",
+                                      "impressions"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                },
+                                "scope": {
+                                  "const": "property",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "scope",
+                                "rows"
+                              ],
+                              "type": "object"
+                            },
+                            "devices": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "rows": {
+                                  "items": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "device": {
+                                        "enum": [
+                                          "desktop",
+                                          "mobile",
+                                          "tablet"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "impressions": {
+                                        "oneOf": [
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "_tag": {
+                                                "const": "reported",
+                                                "type": "string"
+                                              },
+                                              "value": {
+                                                "exclusiveMinimum": 0,
+                                                "maximum": 9007199254740991,
+                                                "type": "integer"
+                                              }
+                                            },
+                                            "required": [
+                                              "_tag",
+                                              "value"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "_tag": {
+                                                "const": "zero-or-unavailable",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "_tag"
+                                            ],
+                                            "type": "object"
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "device",
+                                      "impressions"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                },
+                                "scope": {
+                                  "const": "property",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "scope",
+                                "rows"
+                              ],
+                              "type": "object"
+                            },
+                            "freshness": {
+                              "enum": [
+                                "current",
+                                "stale"
+                              ],
+                              "type": "string"
+                            },
+                            "page": {
+                              "anyOf": [
+                                {
+                                  "oneOf": [
+                                    {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "_tag": {
+                                          "const": "listed",
+                                          "type": "string"
+                                        },
+                                        "impressions": {
+                                          "oneOf": [
+                                            {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "_tag": {
+                                                  "const": "reported",
+                                                  "type": "string"
+                                                },
+                                                "value": {
+                                                  "exclusiveMinimum": 0,
+                                                  "maximum": 9007199254740991,
+                                                  "type": "integer"
+                                                }
+                                              },
+                                              "required": [
+                                                "_tag",
+                                                "value"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "_tag": {
+                                                  "const": "zero-or-unavailable",
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "_tag"
+                                              ],
+                                              "type": "object"
+                                            }
+                                          ]
+                                        },
+                                        "otherSchemeRows": {
+                                          "items": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "impressions": {
+                                                "oneOf": [
+                                                  {
+                                                    "additionalProperties": false,
+                                                    "properties": {
+                                                      "_tag": {
+                                                        "const": "reported",
+                                                        "type": "string"
+                                                      },
+                                                      "value": {
+                                                        "exclusiveMinimum": 0,
+                                                        "maximum": 9007199254740991,
+                                                        "type": "integer"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "_tag",
+                                                      "value"
+                                                    ],
+                                                    "type": "object"
+                                                  },
+                                                  {
+                                                    "additionalProperties": false,
+                                                    "properties": {
+                                                      "_tag": {
+                                                        "const": "zero-or-unavailable",
+                                                        "type": "string"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "_tag"
+                                                    ],
+                                                    "type": "object"
+                                                  }
+                                                ]
+                                              },
+                                              "url": {
+                                                "format": "uri",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "url",
+                                              "impressions"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          "type": "array"
+                                        },
+                                        "url": {
+                                          "format": "uri",
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "_tag",
+                                        "url",
+                                        "impressions",
+                                        "otherSchemeRows"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "_tag": {
+                                          "const": "not-listed",
+                                          "type": "string"
+                                        },
+                                        "otherSchemeRows": {
+                                          "items": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "impressions": {
+                                                "oneOf": [
+                                                  {
+                                                    "additionalProperties": false,
+                                                    "properties": {
+                                                      "_tag": {
+                                                        "const": "reported",
+                                                        "type": "string"
+                                                      },
+                                                      "value": {
+                                                        "exclusiveMinimum": 0,
+                                                        "maximum": 9007199254740991,
+                                                        "type": "integer"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "_tag",
+                                                      "value"
+                                                    ],
+                                                    "type": "object"
+                                                  },
+                                                  {
+                                                    "additionalProperties": false,
+                                                    "properties": {
+                                                      "_tag": {
+                                                        "const": "zero-or-unavailable",
+                                                        "type": "string"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "_tag"
+                                                    ],
+                                                    "type": "object"
+                                                  }
+                                                ]
+                                              },
+                                              "url": {
+                                                "format": "uri",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "url",
+                                              "impressions"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          "type": "array"
+                                        }
+                                      },
+                                      "required": [
+                                        "_tag",
+                                        "otherSchemeRows"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "pages": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "coverage": {
+                                  "oneOf": [
+                                    {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "_tag": {
+                                          "const": "complete",
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "_tag"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "_tag": {
+                                          "const": "truncated",
+                                          "type": "string"
+                                        },
+                                        "limit": {
+                                          "const": 1000,
+                                          "type": "number"
+                                        }
+                                      },
+                                      "required": [
+                                        "_tag",
+                                        "limit"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  ]
+                                },
+                                "offHostRows": {
+                                  "maximum": 9007199254740991,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "rows": {
+                                  "items": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "impressions": {
+                                        "oneOf": [
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "_tag": {
+                                                "const": "reported",
+                                                "type": "string"
+                                              },
+                                              "value": {
+                                                "exclusiveMinimum": 0,
+                                                "maximum": 9007199254740991,
+                                                "type": "integer"
+                                              }
+                                            },
+                                            "required": [
+                                              "_tag",
+                                              "value"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "_tag": {
+                                                "const": "zero-or-unavailable",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "_tag"
+                                            ],
+                                            "type": "object"
+                                          }
+                                        ]
+                                      },
+                                      "url": {
+                                        "format": "uri",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "url",
+                                      "impressions"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                },
+                                "scope": {
+                                  "const": "registered-host",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "scope",
+                                "coverage",
+                                "offHostRows",
+                                "rows"
+                              ],
+                              "type": "object"
+                            },
+                            "report": {
+                              "const": "search",
+                              "type": "string"
+                            },
+                            "source": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "_tag": {
+                                  "const": "upload",
+                                  "type": "string"
+                                },
+                                "sourceFilename": {
+                                  "maxLength": 512,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "uploadId": {
+                                  "type": "string"
+                                },
+                                "uploadedAt": {
+                                  "format": "date-time",
+                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "_tag",
+                                "uploadId",
+                                "uploadedAt",
+                                "sourceFilename"
+                              ],
+                              "type": "object"
+                            },
+                            "warnings": {
+                              "items": {
+                                "oneOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "_tag": {
+                                        "const": "filename_site_mismatch",
+                                        "type": "string"
+                                      },
+                                      "host": {
+                                        "type": "string"
+                                      },
+                                      "prefix": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "_tag",
+                                      "prefix",
+                                      "host"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "_tag": {
+                                        "const": "filename_unrecognized",
+                                        "type": "string"
+                                      },
+                                      "filename": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "_tag",
+                                      "filename"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "_tag": {
+                                        "const": "no_registered_host_rows_at_row_cap",
+                                        "type": "string"
+                                      },
+                                      "host": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "_tag",
+                                      "host"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              },
+                              "type": "array"
+                            },
+                            "window": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "endDate": {
+                                  "format": "date",
+                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                  "type": "string"
+                                },
+                                "label": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "startDate": {
+                                  "format": "date",
+                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "startDate",
+                                "endDate",
+                                "label"
+                              ],
+                              "type": "object"
+                            }
+                          },
+                          "required": [
+                            "_tag",
+                            "report",
+                            "freshness",
+                            "source",
+                            "window",
+                            "chart",
+                            "pages",
+                            "countries",
+                            "devices",
+                            "warnings",
+                            "page"
+                          ],
+                          "type": "object"
+                        }
+                      ]
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "requestId": {
+                          "pattern": "^req_[\\w-]+$",
+                          "type": "string"
+                        },
+                        "surface": {
+                          "const": "partner",
+                          "type": "string"
+                        },
+                        "version": {
+                          "const": "1.0",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "requestId",
+                        "surface",
+                        "version"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.sites.generative_ai.get.error"
+                }
+              }
+            },
+            "description": "Declared client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.sites.generative_ai.get.error"
+                }
+              }
+            },
+            "description": "Safe internal or contract error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.sites.generative_ai.get.error"
+                }
+              }
+            },
+            "description": "Stable error envelope"
+          }
+        },
+        "security": [
+          {
+            "user_key": []
+          },
+          {
+            "partner_key": []
+          }
+        ],
+        "summary": "Read the Generative AI report",
+        "tags": [
+          "Analytics"
+        ],
+        "x-gscdump-errors": [
+          "invalid_request",
+          "unauthorized",
+          "forbidden",
+          "site_not_found",
+          "rate_limited",
+          "internal_error",
+          "contract_violation",
+          "generative_ai_report_upload_not_found"
+        ],
+        "x-gscdump-examples": {
+          "request": {
+            "params": {
+              "siteId": "s_01"
+            },
+            "query": {
+              "pageUrl": "https://example.com/"
+            }
+          },
+          "response": {
+            "data": {
+              "_tag": "empty",
+              "reason": "no-upload",
+              "report": "search"
+            },
+            "meta": {
+              "requestId": "req_01",
+              "surface": "partner",
+              "version": "1.0"
+            }
+          }
+        },
+        "x-gscdump-lifecycle": {
+          "introduced": "1.8.0"
+        },
+        "x-gscdump-ownership": [
+          {
+            "credential": "user_key",
+            "rule": "authorized_site"
+          },
+          {
+            "credential": "partner_key",
+            "rule": "authorized_site"
+          }
+        ],
+        "x-gscdump-resources": {
+          "changes": [],
+          "reads": [
+            {
+              "idFrom": "params.siteId",
+              "type": "site.analytics"
+            }
+          ]
+        },
+        "x-gscdump-scopes": [
+          "analytics:read"
+        ],
+        "x-gscdump-semantics": {
+          "idempotent": true,
+          "kind": "query",
+          "readConsistency": "primary",
+          "retry": "idempotent",
+          "sideEffects": "none"
+        },
+        "x-gscdump-visibility": "public"
+      }
+    },
+    "/api/partner/v1/sites/{siteId}/generative-ai/uploads": {
+      "get": {
+        "description": "Returns every Generative AI report upload for this Site, with its source file, window, and coverage.",
+        "operationId": "partner.sites.generative_ai.uploads.list",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "siteId",
+            "required": true,
+            "schema": {
+              "pattern": "^s_[\\w-]+$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "pattern": "^req_[\\w-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "uploads": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "offHostImpressions": {
+                                "maximum": 9007199254740991,
+                                "minimum": 0,
+                                "type": "integer"
+                              },
+                              "offHostRows": {
+                                "maximum": 9007199254740991,
+                                "minimum": 0,
+                                "type": "integer"
+                              },
+                              "pagesCoverage": {
+                                "oneOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "_tag": {
+                                        "const": "complete",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "_tag"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "_tag": {
+                                        "const": "truncated",
+                                        "type": "string"
+                                      },
+                                      "limit": {
+                                        "const": 1000,
+                                        "type": "number"
+                                      }
+                                    },
+                                    "required": [
+                                      "_tag",
+                                      "limit"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              },
+                              "parserVersion": {
+                                "exclusiveMinimum": 0,
+                                "maximum": 9007199254740991,
+                                "type": "integer"
+                              },
+                              "report": {
+                                "const": "search",
+                                "type": "string"
+                              },
+                              "rowCounts": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "chart": {
+                                    "maximum": 9007199254740991,
+                                    "minimum": 0,
+                                    "type": "integer"
+                                  },
+                                  "countries": {
+                                    "maximum": 9007199254740991,
+                                    "minimum": 0,
+                                    "type": "integer"
+                                  },
+                                  "devices": {
+                                    "maximum": 9007199254740991,
+                                    "minimum": 0,
+                                    "type": "integer"
+                                  },
+                                  "pages": {
+                                    "maximum": 9007199254740991,
+                                    "minimum": 0,
+                                    "type": "integer"
+                                  }
+                                },
+                                "required": [
+                                  "chart",
+                                  "pages",
+                                  "countries",
+                                  "devices"
+                                ],
+                                "type": "object"
+                              },
+                              "sourceFilename": {
+                                "maxLength": 512,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "sourceSha256": {
+                                "pattern": "^[a-f0-9]{64}$",
+                                "type": "string"
+                              },
+                              "uploadId": {
+                                "pattern": "^[\\w-]{1,128}$",
+                                "type": "string"
+                              },
+                              "uploadedAt": {
+                                "format": "date-time",
+                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                "type": "string"
+                              },
+                              "warnings": {
+                                "items": {
+                                  "oneOf": [
+                                    {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "_tag": {
+                                          "const": "filename_site_mismatch",
+                                          "type": "string"
+                                        },
+                                        "host": {
+                                          "type": "string"
+                                        },
+                                        "prefix": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "_tag",
+                                        "prefix",
+                                        "host"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "_tag": {
+                                          "const": "filename_unrecognized",
+                                          "type": "string"
+                                        },
+                                        "filename": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "_tag",
+                                        "filename"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "_tag": {
+                                          "const": "no_registered_host_rows_at_row_cap",
+                                          "type": "string"
+                                        },
+                                        "host": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "_tag",
+                                        "host"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  ]
+                                },
+                                "type": "array"
+                              },
+                              "window": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "endDate": {
+                                    "format": "date",
+                                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                    "type": "string"
+                                  },
+                                  "label": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "startDate": {
+                                    "format": "date",
+                                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "startDate",
+                                  "endDate",
+                                  "label"
+                                ],
+                                "type": "object"
+                              }
+                            },
+                            "required": [
+                              "uploadId",
+                              "report",
+                              "sourceFilename",
+                              "sourceSha256",
+                              "parserVersion",
+                              "uploadedAt",
+                              "offHostRows",
+                              "offHostImpressions",
+                              "window",
+                              "pagesCoverage",
+                              "warnings",
+                              "rowCounts"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "uploads"
+                      ],
+                      "type": "object"
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "requestId": {
+                          "pattern": "^req_[\\w-]+$",
+                          "type": "string"
+                        },
+                        "surface": {
+                          "const": "partner",
+                          "type": "string"
+                        },
+                        "version": {
+                          "const": "1.0",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "requestId",
+                        "surface",
+                        "version"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.sites.generative_ai.uploads.list.error"
+                }
+              }
+            },
+            "description": "Declared client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.sites.generative_ai.uploads.list.error"
+                }
+              }
+            },
+            "description": "Safe internal or contract error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.sites.generative_ai.uploads.list.error"
+                }
+              }
+            },
+            "description": "Stable error envelope"
+          }
+        },
+        "security": [
+          {
+            "user_key": []
+          },
+          {
+            "partner_key": []
+          }
+        ],
+        "summary": "List Generative AI report uploads",
+        "tags": [
+          "Analytics"
+        ],
+        "x-gscdump-errors": [
+          "invalid_request",
+          "unauthorized",
+          "forbidden",
+          "site_not_found",
+          "rate_limited",
+          "internal_error",
+          "contract_violation"
+        ],
+        "x-gscdump-examples": {
+          "request": {
+            "params": {
+              "siteId": "s_01"
+            }
+          },
+          "response": {
+            "data": {
+              "uploads": []
+            },
+            "meta": {
+              "requestId": "req_01",
+              "surface": "partner",
+              "version": "1.0"
+            }
+          }
+        },
+        "x-gscdump-lifecycle": {
+          "introduced": "1.8.0"
+        },
+        "x-gscdump-ownership": [
+          {
+            "credential": "user_key",
+            "rule": "authorized_site"
+          },
+          {
+            "credential": "partner_key",
+            "rule": "authorized_site"
+          }
+        ],
+        "x-gscdump-resources": {
+          "changes": [],
+          "reads": [
+            {
+              "idFrom": "params.siteId",
+              "type": "site.analytics"
+            }
+          ]
+        },
+        "x-gscdump-scopes": [
+          "analytics:read"
+        ],
+        "x-gscdump-semantics": {
+          "idempotent": true,
+          "kind": "query",
+          "readConsistency": "primary",
+          "retry": "idempotent",
+          "sideEffects": "none"
+        },
+        "x-gscdump-visibility": "public"
+      },
+      "post": {
+        "description": "Stores one normalized Generative AI report upload for this Site. The caller parses the zip with `@gscdump/sdk/generative-ai-report`. The same content returns the same `uploadId` with `deduped: true`. An export with Pages rows but none on the registered host returns `no_registered_host_rows`. Each read states that an upload is the source, because the server cannot prove the numbers came from Google.",
+        "operationId": "partner.sites.generative_ai.uploads.create",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "siteId",
+            "required": true,
+            "schema": {
+              "pattern": "^s_[\\w-]+$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "pattern": "^req_[\\w-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "chart": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "rows": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "date": {
+                              "format": "date",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                              "type": "string"
+                            },
+                            "impressions": {
+                              "oneOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "_tag": {
+                                      "const": "reported",
+                                      "type": "string"
+                                    },
+                                    "value": {
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 9007199254740991,
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [
+                                    "_tag",
+                                    "value"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "_tag": {
+                                      "const": "zero-or-unavailable",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "_tag"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "date",
+                            "impressions"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 1000,
+                        "minItems": 1,
+                        "type": "array"
+                      }
+                    },
+                    "required": [
+                      "rows"
+                    ],
+                    "type": "object"
+                  },
+                  "countries": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "rows": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "countryCode": {
+                              "anyOf": [
+                                {
+                                  "pattern": "^[a-z]{3}$",
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "countryName": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "impressions": {
+                              "oneOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "_tag": {
+                                      "const": "reported",
+                                      "type": "string"
+                                    },
+                                    "value": {
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 9007199254740991,
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [
+                                    "_tag",
+                                    "value"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "_tag": {
+                                      "const": "zero-or-unavailable",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "_tag"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "countryName",
+                            "countryCode",
+                            "impressions"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 1000,
+                        "type": "array"
+                      }
+                    },
+                    "required": [
+                      "rows"
+                    ],
+                    "type": "object"
+                  },
+                  "devices": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "rows": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "device": {
+                              "enum": [
+                                "desktop",
+                                "mobile",
+                                "tablet"
+                              ],
+                              "type": "string"
+                            },
+                            "impressions": {
+                              "oneOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "_tag": {
+                                      "const": "reported",
+                                      "type": "string"
+                                    },
+                                    "value": {
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 9007199254740991,
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [
+                                    "_tag",
+                                    "value"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "_tag": {
+                                      "const": "zero-or-unavailable",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "_tag"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "device",
+                            "impressions"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 3,
+                        "type": "array"
+                      }
+                    },
+                    "required": [
+                      "rows"
+                    ],
+                    "type": "object"
+                  },
+                  "pages": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "coverage": {
+                        "oneOf": [
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "_tag": {
+                                "const": "complete",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "_tag"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "_tag": {
+                                "const": "truncated",
+                                "type": "string"
+                              },
+                              "limit": {
+                                "const": 1000,
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "_tag",
+                              "limit"
+                            ],
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "offHostImpressions": {
+                        "maximum": 9007199254740991,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "offHostRows": {
+                        "maximum": 9007199254740991,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "rows": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "impressions": {
+                              "oneOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "_tag": {
+                                      "const": "reported",
+                                      "type": "string"
+                                    },
+                                    "value": {
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 9007199254740991,
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [
+                                    "_tag",
+                                    "value"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "_tag": {
+                                      "const": "zero-or-unavailable",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "_tag"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
+                            },
+                            "url": {
+                              "format": "uri",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "url",
+                            "impressions"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 1000,
+                        "type": "array"
+                      }
+                    },
+                    "required": [
+                      "coverage",
+                      "offHostRows",
+                      "offHostImpressions",
+                      "rows"
+                    ],
+                    "type": "object"
+                  },
+                  "parserVersion": {
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991,
+                    "type": "integer"
+                  },
+                  "report": {
+                    "const": "search",
+                    "type": "string"
+                  },
+                  "searchTypeFilter": {
+                    "const": "Web (text-based)",
+                    "type": "string"
+                  },
+                  "sourceFilename": {
+                    "maxLength": 512,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "sourceSha256": {
+                    "pattern": "^[a-f0-9]{64}$",
+                    "type": "string"
+                  },
+                  "warnings": {
+                    "items": {
+                      "oneOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "_tag": {
+                              "const": "filename_site_mismatch",
+                              "type": "string"
+                            },
+                            "host": {
+                              "type": "string"
+                            },
+                            "prefix": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "_tag",
+                            "prefix",
+                            "host"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "_tag": {
+                              "const": "filename_unrecognized",
+                              "type": "string"
+                            },
+                            "filename": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "_tag",
+                            "filename"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "_tag": {
+                              "const": "no_registered_host_rows_at_row_cap",
+                              "type": "string"
+                            },
+                            "host": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "_tag",
+                            "host"
+                          ],
+                          "type": "object"
+                        }
+                      ]
+                    },
+                    "type": "array"
+                  },
+                  "window": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "endDate": {
+                        "format": "date",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                        "type": "string"
+                      },
+                      "label": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "startDate": {
+                        "format": "date",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "startDate",
+                      "endDate",
+                      "label"
+                    ],
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "report",
+                  "parserVersion",
+                  "sourceSha256",
+                  "sourceFilename",
+                  "window",
+                  "searchTypeFilter",
+                  "chart",
+                  "pages",
+                  "countries",
+                  "devices",
+                  "warnings"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "deduped": {
+                          "type": "boolean"
+                        },
+                        "rowCounts": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "chart": {
+                              "maximum": 9007199254740991,
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "countries": {
+                              "maximum": 9007199254740991,
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "devices": {
+                              "maximum": 9007199254740991,
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "pages": {
+                              "maximum": 9007199254740991,
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "chart",
+                            "pages",
+                            "countries",
+                            "devices"
+                          ],
+                          "type": "object"
+                        },
+                        "unmappedCountries": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "uploadId": {
+                          "pattern": "^[\\w-]{1,128}$",
+                          "type": "string"
+                        },
+                        "warnings": {
+                          "items": {
+                            "oneOf": [
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "_tag": {
+                                    "const": "filename_site_mismatch",
+                                    "type": "string"
+                                  },
+                                  "host": {
+                                    "type": "string"
+                                  },
+                                  "prefix": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "_tag",
+                                  "prefix",
+                                  "host"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "_tag": {
+                                    "const": "filename_unrecognized",
+                                    "type": "string"
+                                  },
+                                  "filename": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "_tag",
+                                  "filename"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "_tag": {
+                                    "const": "no_registered_host_rows_at_row_cap",
+                                    "type": "string"
+                                  },
+                                  "host": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "_tag",
+                                  "host"
+                                ],
+                                "type": "object"
+                              }
+                            ]
+                          },
+                          "type": "array"
+                        },
+                        "window": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "endDate": {
+                              "format": "date",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                              "type": "string"
+                            },
+                            "label": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "startDate": {
+                              "format": "date",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "startDate",
+                            "endDate",
+                            "label"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "uploadId",
+                        "deduped",
+                        "warnings",
+                        "unmappedCountries",
+                        "window",
+                        "rowCounts"
+                      ],
+                      "type": "object"
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "requestId": {
+                          "pattern": "^req_[\\w-]+$",
+                          "type": "string"
+                        },
+                        "surface": {
+                          "const": "partner",
+                          "type": "string"
+                        },
+                        "version": {
+                          "const": "1.0",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "requestId",
+                        "surface",
+                        "version"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.sites.generative_ai.uploads.create.error"
+                }
+              }
+            },
+            "description": "Declared client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.sites.generative_ai.uploads.create.error"
+                }
+              }
+            },
+            "description": "Safe internal or contract error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.sites.generative_ai.uploads.create.error"
+                }
+              }
+            },
+            "description": "Stable error envelope"
+          }
+        },
+        "security": [
+          {
+            "user_key": []
+          },
+          {
+            "partner_key": []
+          }
+        ],
+        "summary": "Upload a Generative AI report",
+        "tags": [
+          "Analytics"
+        ],
+        "x-gscdump-errors": [
+          "invalid_request",
+          "unauthorized",
+          "forbidden",
+          "site_not_found",
+          "rate_limited",
+          "internal_error",
+          "contract_violation",
+          "no_registered_host_rows"
+        ],
+        "x-gscdump-examples": {
+          "request": {
+            "body": {
+              "chart": {
+                "rows": [
+                  {
+                    "date": "2026-11-04",
+                    "impressions": {
+                      "_tag": "reported",
+                      "value": 4
+                    }
+                  }
+                ]
+              },
+              "countries": {
+                "rows": [
+                  {
+                    "countryCode": "tur",
+                    "countryName": "Turkey",
+                    "impressions": {
+                      "_tag": "reported",
+                      "value": 4
+                    }
+                  }
+                ]
+              },
+              "devices": {
+                "rows": [
+                  {
+                    "device": "desktop",
+                    "impressions": {
+                      "_tag": "reported",
+                      "value": 4
+                    }
+                  }
+                ]
+              },
+              "pages": {
+                "coverage": {
+                  "_tag": "complete"
+                },
+                "offHostImpressions": 0,
+                "offHostRows": 0,
+                "rows": [
+                  {
+                    "impressions": {
+                      "_tag": "reported",
+                      "value": 4
+                    },
+                    "url": "https://example.com/"
+                  }
+                ]
+              },
+              "parserVersion": 1,
+              "report": "search",
+              "searchTypeFilter": "Web (text-based)",
+              "sourceFilename": "example.com-Performance-on-Search-Generative-AI-Features-2026-11-07.zip",
+              "sourceSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "warnings": [],
+              "window": {
+                "endDate": "2026-11-04",
+                "label": "Last 3 months",
+                "startDate": "2026-11-04"
+              }
+            },
+            "params": {
+              "siteId": "s_01"
+            }
+          },
+          "response": {
+            "data": {
+              "deduped": false,
+              "rowCounts": {
+                "chart": 1,
+                "countries": 1,
+                "devices": 1,
+                "pages": 1
+              },
+              "unmappedCountries": [],
+              "uploadId": "gau_01",
+              "warnings": [],
+              "window": {
+                "endDate": "2026-11-04",
+                "label": "Last 3 months",
+                "startDate": "2026-11-04"
+              }
+            },
+            "meta": {
+              "requestId": "req_01",
+              "surface": "partner",
+              "version": "1.0"
+            }
+          }
+        },
+        "x-gscdump-lifecycle": {
+          "introduced": "1.8.0"
+        },
+        "x-gscdump-ownership": [
+          {
+            "credential": "user_key",
+            "rule": "authorized_site"
+          },
+          {
+            "credential": "partner_key",
+            "rule": "authorized_site"
+          }
+        ],
+        "x-gscdump-resources": {
+          "changes": [
+            {
+              "idFrom": "params.siteId",
+              "type": "site.analytics"
+            }
+          ],
+          "reads": [
+            {
+              "idFrom": "params.siteId",
+              "type": "site.analytics"
+            }
+          ]
+        },
+        "x-gscdump-scopes": [
+          "sites:write"
+        ],
+        "x-gscdump-semantics": {
+          "idempotent": true,
+          "kind": "mutation",
+          "readConsistency": null,
+          "retry": "idempotent",
+          "sideEffects": "state"
+        },
+        "x-gscdump-visibility": "public"
+      }
+    },
+    "/api/partner/v1/sites/{siteId}/generative-ai/uploads/{uploadId}": {
+      "delete": {
+        "description": "Deletes one Generative AI report upload and its rows, for example after an upload to the wrong Site.",
+        "operationId": "partner.sites.generative_ai.uploads.remove",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "siteId",
+            "required": true,
+            "schema": {
+              "pattern": "^s_[\\w-]+$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "uploadId",
+            "required": true,
+            "schema": {
+              "pattern": "^[\\w-]{1,128}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "pattern": "^req_[\\w-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "removed": {
+                          "const": true,
+                          "type": "boolean"
+                        },
+                        "uploadId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "uploadId",
+                        "removed"
+                      ],
+                      "type": "object"
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "requestId": {
+                          "pattern": "^req_[\\w-]+$",
+                          "type": "string"
+                        },
+                        "surface": {
+                          "const": "partner",
+                          "type": "string"
+                        },
+                        "version": {
+                          "const": "1.0",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "requestId",
+                        "surface",
+                        "version"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.sites.generative_ai.uploads.remove.error"
+                }
+              }
+            },
+            "description": "Declared client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.sites.generative_ai.uploads.remove.error"
+                }
+              }
+            },
+            "description": "Safe internal or contract error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.sites.generative_ai.uploads.remove.error"
+                }
+              }
+            },
+            "description": "Stable error envelope"
+          }
+        },
+        "security": [
+          {
+            "user_key": []
+          },
+          {
+            "partner_key": []
+          }
+        ],
+        "summary": "Remove a Generative AI report upload",
+        "tags": [
+          "Analytics"
+        ],
+        "x-gscdump-errors": [
+          "invalid_request",
+          "unauthorized",
+          "forbidden",
+          "site_not_found",
+          "rate_limited",
+          "internal_error",
+          "contract_violation",
+          "generative_ai_report_upload_not_found"
+        ],
+        "x-gscdump-examples": {
+          "request": {
+            "params": {
+              "siteId": "s_01",
+              "uploadId": "gau_01"
+            }
+          },
+          "response": {
+            "data": {
+              "removed": true,
+              "uploadId": "gau_01"
+            },
+            "meta": {
+              "requestId": "req_01",
+              "surface": "partner",
+              "version": "1.0"
+            }
+          }
+        },
+        "x-gscdump-lifecycle": {
+          "introduced": "1.8.0"
+        },
+        "x-gscdump-ownership": [
+          {
+            "credential": "user_key",
+            "rule": "authorized_site"
+          },
+          {
+            "credential": "partner_key",
+            "rule": "authorized_site"
+          }
+        ],
+        "x-gscdump-resources": {
+          "changes": [
+            {
+              "idFrom": "params.siteId",
+              "type": "site.analytics"
+            }
+          ],
+          "reads": [
+            {
+              "idFrom": "params.siteId",
+              "type": "site.analytics"
+            }
+          ]
+        },
+        "x-gscdump-scopes": [
+          "sites:write"
+        ],
+        "x-gscdump-semantics": {
+          "idempotent": true,
+          "kind": "mutation",
+          "readConsistency": null,
+          "retry": "idempotent",
+          "sideEffects": "state"
         },
         "x-gscdump-visibility": "public"
       }
