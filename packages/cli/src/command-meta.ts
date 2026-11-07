@@ -107,3 +107,4 @@ export const papercutCommandMeta = {
   description: 'Report a CLI problem to gscdump.com (anonymous, sanitized)',
 }
 export const bingCommandMeta = { name: 'bing', description: 'Authenticate Bing, list sites, dump data, and read Indexing Evidence' }
+export const generativeAiCommandMeta = { name: 'generative-ai', description: 'Upload and read Generative AI report exports from Search Console (Hosted mode)' }

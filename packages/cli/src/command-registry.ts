@@ -7,6 +7,7 @@ import {
   doctorCommandMeta,
   dumpCommandMeta,
   entitiesCommandMeta,
+  generativeAiCommandMeta,
   indexingCommandMeta,
   initCommandMeta,
   inspectCommandMeta,
@@ -165,95 +166,99 @@ async function findSubCommand(subCommands: SubCommandsDef, name: string): Promis
 }
 
 export const CLI_SUBCOMMANDS = {
-  bing: shallowCommand(
+  'bing': shallowCommand(
     bingCommandMeta,
     () => import('./commands/bing').then(module => module.bingCommand),
   ),
-  init: shallowCommand(
+  'generative-ai': shallowCommand(
+    generativeAiCommandMeta,
+    () => import('./commands/generative-ai').then(module => module.generativeAiCommand),
+  ),
+  'init': shallowCommand(
     initCommandMeta,
     () => import('./commands/init').then(module => module.initCommand),
   ),
-  dump: shallowCommand(
+  'dump': shallowCommand(
     dumpCommandMeta,
     () => import('./commands/dump').then(module => module.dumpCommand),
   ),
-  query: shallowCommand(
+  'query': shallowCommand(
     queryCommandMeta,
     () => import('./commands/query').then(module => module.queryCommand),
   ),
-  sites: shallowCommand(
+  'sites': shallowCommand(
     sitesCommandMeta,
     () => import('./commands/sites').then(module => module.sitesCommand),
   ),
-  sitemaps: shallowCommand(
+  'sitemaps': shallowCommand(
     sitemapsCommandMeta,
     () => import('./commands/sitemaps').then(module => module.sitemapsCommand),
   ),
-  sync: shallowCommand(
+  'sync': shallowCommand(
     syncCommandMeta,
     () => import('./commands/sync').then(module => module.syncCommand),
   ),
-  store: shallowCommand(
+  'store': shallowCommand(
     storeCommandMeta,
     () => import('./commands/store').then(module => module.storeCommand),
   ),
-  inspect: shallowCommand(
+  'inspect': shallowCommand(
     inspectCommandMeta,
     () => import('./commands/inspect').then(module => module.inspectCommand),
   ),
-  indexing: shallowCommand(
+  'indexing': shallowCommand(
     indexingCommandMeta,
     () => import('./commands/indexing').then(module => module.indexingCommand),
   ),
-  entities: shallowCommand(
+  'entities': shallowCommand(
     entitiesCommandMeta,
     () => import('./commands/entities').then(module => module.entitiesCommand),
   ),
-  analyze: shallowCommand(
+  'analyze': shallowCommand(
     analyzeCommandMeta,
     () => import('./commands/analyze').then(module => module.analyzeCommand),
   ),
-  report: shallowCommand(
+  'report': shallowCommand(
     reportCommandMeta,
     () => import('./commands/report').then(module => module.reportCommand),
   ),
-  auth: shallowCommand(
+  'auth': shallowCommand(
     authCommandMeta.auth,
     () => import('./commands/auth').then(module => module.authCommand),
   ),
-  login: shallowCommand(
+  'login': shallowCommand(
     authCommandMeta.login,
     () => import('./commands/auth').then(module => module.loginCommand),
   ),
-  logout: shallowCommand(
+  'logout': shallowCommand(
     authCommandMeta.logout,
     () => import('./commands/auth').then(module => module.logoutCommand),
   ),
-  status: shallowCommand(
+  'status': shallowCommand(
     authCommandMeta.status,
     () => import('./commands/auth').then(module => module.statusCommand),
   ),
-  config: shallowCommand(
+  'config': shallowCommand(
     configCommandMeta,
     () => import('./commands/config').then(module => module.configCommand),
   ),
-  profile: shallowCommand(
+  'profile': shallowCommand(
     profileCommandMeta,
     () => import('./commands/profile').then(module => module.profileCommand),
   ),
-  doctor: shallowCommand(
+  'doctor': shallowCommand(
     doctorCommandMeta,
     () => import('./commands/doctor').then(module => module.doctorCommand),
   ),
-  mcp: shallowCommand(
+  'mcp': shallowCommand(
     mcpCommandMeta,
     () => import('./commands/mcp').then(module => module.mcpCommand),
   ),
-  skill: shallowCommand(
+  'skill': shallowCommand(
     skillCommandMeta,
     () => import('./commands/skill').then(module => module.skillCommand),
   ),
-  papercut: shallowCommand(
+  'papercut': shallowCommand(
     papercutCommandMeta,
     () => import('./commands/papercut').then(module => module.papercutCommand),
   ),

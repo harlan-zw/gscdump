@@ -1,6 +1,6 @@
 ---
 name: gscdump
-description: Drive the `gscdump` CLI for Google Search Console and Bing in Local or Hosted mode. Sync Google rows to a local Store, export Bing datasets, run SEO Analyzers and Reports, inspect Indexing Evidence, and manage sitemaps. Use when the user mentions gscdump, Search Console data, Bing Webmaster data, or GSC automation.
+description: Drive the `gscdump` CLI for Google Search Console and Bing in Local or Hosted mode. Sync Google rows to a local Store, export Bing datasets, run SEO Analyzers and Reports, inspect Indexing Evidence, manage sitemaps, and upload Generative AI report exports. Use when the user mentions gscdump, Search Console data, Bing Webmaster data, AI Overviews, AI Mode, generative AI data, or GSC automation.
 license: MIT
 compatibility: "Requires the gscdump CLI and Node.js 22.13+ in the 22 release line, or Node.js 24+. API tasks need network access and credentials."
 ---
@@ -75,7 +75,8 @@ gscdump query --site example.com -d page -f json
 
 Hosted mode can run only these commands: `sites`, `query`, `sitemaps current`, `sitemaps history`, `sitemaps membership`,
 `sitemaps lastmod`, `sitemaps export`, `sitemaps inspect`, `indexing urls`, `indexing inspect --yes`, `indexing summary`, `indexing watch list|add|remove`,
-and the `bing` commands `login --site`, `sites`, `status`, `dump`, `inspect`, and `verify`.
+the `bing` commands `login --site`, `sites`, `status`, `dump`, `inspect`, and `verify`,
+and the `generative-ai` commands `upload`, `list`, `remove`, and `show`.
 Direct Google commands need Local mode: `sync`, `inspect`, `query --live`, `analyze --live`, `report --live`,
 `sites add|get|delete|verify*`, `sitemaps list|get|submit|delete`, `indexing submit|remove|status|batch`, `entities`, and `mcp`.
 In Hosted mode these commands stop with this error: `This command calls Google, so it needs Local mode.`
@@ -260,6 +261,9 @@ A routing stop also has `siteUrl`. `STORE_RANGE_NOT_COVERED` adds `missingDates`
 | `RECORD_NOT_READY` | gscdump has not prepared the Site's record for reads yet |
 | `RANGE_NOT_SYNCED` | The hosted record does not hold the requested dates |
 | `QUOTA_USED_UP` | A Google API quota is used up. The message says when it resets |
+| `GENERATIVE_AI_EXPORT_REFUSED` | The file is not an accepted Generative AI report export, or it has no page on the Site. `refusal._tag` names the cause. Tell the user the `message` |
+| `GENERATIVE_AI_UPLOAD_NOT_FOUND` | No Generative AI report upload has that id for the Site |
+| `GENERATIVE_AI_UNAVAILABLE` | The hosted API does not serve Generative AI report uploads. Tell the user to keep the zip |
 
 ## Commands
 
@@ -281,6 +285,7 @@ A routing stop also has `siteUrl`. `STORE_RANGE_NOT_COVERED` adds `missingDates`
 | `gscdump indexing inspect <url...> --yes` | Hosted: refresh up to 10 URLs through the platform, spending shared URL Inspections. Never retry automatically |
 | `gscdump indexing summary` | Hosted: the coverage ladder per day, with the time gscdump counted the verdicts |
 | `gscdump indexing watch` | Hosted: list, add, and remove Watched URLs and read their Watched URL inspections |
+| `gscdump generative-ai` | Hosted: upload a Generative AI report export, and list, remove, or show uploads. See [Generative AI data](#ai-overviews-ai-mode-and-generative-ai-data) |
 | `gscdump dump` | Export Store tables, inspections, sitemaps, and Bing data as Parquet, CSV, JSON, NDJSON, SQLite, or DuckDB |
 | `gscdump store` | Store stats, compaction, garbage collection, resets |
 | `gscdump entities` | Read saved inspections; snapshot Indexing API metadata |
@@ -387,6 +392,34 @@ gscdump analyze striking-distance --site example.com --json
 ## Hosted inspection
 
 Before hosted inspection, indexing, Sitemap coverage, or Watch tasks, read [Hosted inspection](references/hosted-inspection.md).
+
+## AI Overviews, AI Mode, and generative AI data
+
+If the user asks for AI Overviews, AI Mode, or other generative AI data, tell them:
+
+1. Google has no API for this data. `query`, `analyze`, `report`, and the `gscdump mcp` tools cannot return it.
+2. To provide it, open Search Console > Performance > Generative AI features > choose the date range > Export > Download CSV. The download is a zip.
+3. Upload the zip in Hosted mode: `gscdump generative-ai upload <zip> --site <site>`.
+4. The data is Generative AI impressions only, with no queries and no clicks. It is fresh as of the last upload.
+
+```sh
+gscdump generative-ai upload ./example.com-Performance-on-Search-Generative-AI-Features-2026-11-07.zip --site example.com --json
+gscdump generative-ai show --site example.com --json
+gscdump generative-ai show --site example.com --page-url https://example.com/guide --json
+gscdump generative-ai list --site example.com --json
+gscdump generative-ai remove UPLOAD_ID --site example.com --json
+```
+
+- The CLI parses the zip on this machine and uploads only its rows. Google's file does not name the Site, so always pass the Site the user names.
+- `show` returns `_tag: "empty"` with `reason: "no-upload"` when the Site has no upload. Give the user the 4 steps above. Never report it as zero impressions.
+- A `_tag: "available"` read states `source`, `window`, and `freshness`. Quote the window end date and the upload date.
+  If `freshness` is `stale`, the data ends more than 35 days ago. Tell the user to upload a newer export.
+- `impressions._tag: "zero-or-unavailable"` means zero or unavailable, because Google writes both as zero. Never write it as 0.
+- A page with no row is not listed in this export. Never say the page is absent from AI features.
+- `pages` rows count URLs on the Site. `chart`, `countries`, and `devices` count the whole Search Console property. Never sum one tab and compare it with another.
+- Never call these impressions traffic, clicks, visits, citations, or rankings. Never give a cause. The data has no queries, positions, or clicks.
+- Use `remove` only when the user asks, for example after an upload to the wrong Site.
+- Discover exports are not supported yet. Local mode cannot store uploads.
 
 ## Report a papercut
 
