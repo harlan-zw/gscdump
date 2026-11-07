@@ -35,6 +35,7 @@
   isCommitServerError: function
   isCommitTransient: function
   mergeIcebergManifests: function
+  planIcebergSnapshotRetention: function
   sweepUncommittedOrphans: function
 ./provisioning:
   adoptCatalog: function
