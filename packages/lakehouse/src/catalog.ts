@@ -424,12 +424,13 @@ export interface IcebergTableOpResult {
 }
 
 /**
- * Drop tables from the catalog namespace, purging their data objects.
+ * Drop tables from the catalog namespace. Set purge to false to preserve their objects.
  * Defaults to every table currently in the namespace.
  */
 export async function dropIcebergTables(
   conn: IcebergConnection,
   tables?: readonly string[],
+  options: { purge: boolean } = { purge: true },
 ): Promise<IcebergTableOpResult[]> {
   const targets = tables
     ?? (await restCatalogListTables(conn.catalog, { namespace: conn.namespace }))
@@ -441,7 +442,7 @@ export async function dropIcebergTables(
       catalog: conn.catalog,
       namespace: conn.namespace,
       table,
-      purgeRequested: true,
+      purgeRequested: options.purge,
     }).then(
       () => results.push({ table, ok: true }),
       (e: unknown) => results.push({ table, ok: false, error: e instanceof Error ? e.message : String(e) }),

@@ -197,6 +197,33 @@ An uncertain response may follow a successful commit, so deleting staged files c
 The operation never expires historical snapshots or deletes historical manifests.
 Keep those objects while authenticated receipts or append retries still need them.
 
+## Table restoration
+
+Use `restoreIcebergTable(connection, table, options)` from `@gscdump/lakehouse/maintenance` for an empty Catalog target.
+Restore every referenced metadata, manifest, and data object before registering the table.
+Preserve their S3 locations, table UUID, snapshot IDs, and immutable bytes.
+The caller owns the target and excludes concurrent writers through settlement.
+
+Supply the saved metadata location, SHA-256, table UUID, head snapshot ID, and complete snapshot ID inventory.
+The operation checks the target, saved metadata bytes, and identity before registration.
+It registers with `overwrite: false` and verifies the returned identity.
+Existing tables produce `target-exists`, including tables with matching saved identities.
+Malformed bytes or mismatched identities produce `backup-invalid` before registration.
+
+Supply `confirmAuthority` to recheck ownership before access, immediately before registration, and after acknowledgement.
+This callback does not create an atomic transaction with external state.
+`Restored` confirms the acknowledged table identity. It does not verify every referenced data object.
+After restoration, run the application's receipt, object hash, and query checks through fresh read sessions.
+Supply `cache` to invalidate its saved snapshot pointer after success.
+
+`Unknown` means registration may have committed.
+Keep the restored objects and inspect fresh Catalog metadata before deciding the next action.
+The operation never retries, overwrites, or removes objects after an uncertain response.
+Other infrastructure failures propagate.
+
+To detach a registration while retaining its objects, use `dropIcebergTables(connection, tables, { purge: false })`.
+The default still requests purging. Use explicit table names for a restore drill.
+
 ## License
 
 [MIT](../../LICENSE)
