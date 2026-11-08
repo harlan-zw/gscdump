@@ -18,5 +18,7 @@ export type {
   SweepUncommittedOrphansResult,
 } from './orphan-sweep'
 export { expireIcebergSnapshots, planIcebergSnapshotRetention } from './snapshot-retention'
-
 export type { ExpireIcebergSnapshotsOptions, ExpireIcebergSnapshotsResult, PlanIcebergSnapshotRetentionOptions, PlanIcebergSnapshotRetentionResult } from './snapshot-retention'
+export { restoreIcebergTable } from './table-restore'
+
+export type { RestoreIcebergTableOptions, RestoreIcebergTableResult } from './table-restore'
