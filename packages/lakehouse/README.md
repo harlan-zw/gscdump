@@ -206,6 +206,8 @@ The caller owns the target and excludes concurrent writers through settlement.
 
 Supply the saved metadata location, SHA-256, table UUID, head snapshot ID, and complete snapshot ID inventory.
 The operation checks the target, saved metadata bytes, and identity before registration.
+Metadata can use plain JSON or gzip. The byte limit applies to stored and expanded bytes.
+The SHA-256 always authenticates the stored object bytes before decompression.
 It registers with `overwrite: false` and verifies the returned identity.
 Existing tables produce `target-exists`, including tables with matching saved identities.
 Malformed bytes or mismatched identities produce `backup-invalid` before registration.

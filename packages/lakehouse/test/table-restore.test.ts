@@ -1,4 +1,5 @@
 import type { IcebergConnection } from '../src/catalog'
+import { gzipSync } from 'node:zlib'
 import { afterEach, expect, it, vi } from 'vitest'
 import { dropIcebergTables } from '../src/index'
 import { restoreIcebergTable } from '../src/maintenance'
@@ -9,10 +10,12 @@ const uuid = '00000000-0000-4000-8000-000000000001'
 const location = 's3://drill-bucket/source/metadata/backup.json'
 const head = '9007199254740993'
 
-async function fixture(options: { exists?: boolean, postFailure?: boolean, wrongIdentity?: boolean, oversized?: boolean, malformed?: boolean } = {}) {
+async function fixture(options: { exists?: boolean, postFailure?: boolean, wrongIdentity?: boolean, oversized?: boolean, malformed?: boolean, gzip?: boolean, padding?: number, truncatedGzip?: boolean } = {}) {
   const metadata = { 'format-version': 2, 'table-uuid': uuid, 'current-snapshot-id': head, 'snapshots': [{ 'snapshot-id': '1', 'timestamp-ms': 1 }, { 'snapshot-id': head, 'timestamp-ms': 2 }] }
-  const json = options.malformed ? 'invalid json' : JSON.stringify(metadata).replaceAll(`"${head}"`, head)
-  const bytes = new TextEncoder().encode(json)
+  const json = options.malformed ? 'invalid json' : JSON.stringify({ ...metadata, ...(options.padding ? { padding: 'a'.repeat(options.padding) } : {}) }).replaceAll(`"${head}"`, head)
+  const plain = new TextEncoder().encode(json)
+  const packed = options.gzip ? new Uint8Array(gzipSync(plain)) : plain
+  const bytes = options.truncatedGzip ? packed.slice(0, packed.byteLength - 5) : packed
   const digest = await crypto.subtle.digest('SHA-256', bytes)
   const sha256 = [...new Uint8Array(digest)].map(value => value.toString(16).padStart(2, '0')).join('')
   const posts: unknown[] = []
@@ -42,6 +45,24 @@ it('registers an intact backup in an empty target without replacing a table', as
   const f = await fixture()
   expect(await restoreIcebergTable(f.conn, 'queries', f.policy)).toEqual({ _tag: 'Restored', tableUuid: uuid, snapshotIds: ['1', head] })
   expect(f.posts).toEqual([{ 'name': 'queries', 'metadata-location': location, 'overwrite': false }])
+})
+
+it('registers gzipped metadata after checking the compressed object hash', async () => {
+  const f = await fixture({ gzip: true })
+  expect(await restoreIcebergTable(f.conn, 'queries', f.policy)).toEqual({ _tag: 'Restored', tableUuid: uuid, snapshotIds: ['1', head] })
+  expect(f.posts).toEqual([{ 'name': 'queries', 'metadata-location': location, 'overwrite': false }])
+})
+
+it('refuses a gzip stream that expands past the metadata limit before registration', async () => {
+  const f = await fixture({ gzip: true, padding: 100_000 })
+  expect(await restoreIcebergTable(f.conn, 'queries', { ...f.policy, maxMetadataBytes: 1000 })).toEqual({ _tag: 'Err', reason: 'backup-invalid' })
+  expect(f.posts).toEqual([])
+})
+
+it('refuses a truncated gzip stream before registration even when its stored hash matches', async () => {
+  const f = await fixture({ gzip: true, truncatedGzip: true })
+  expect(await restoreIcebergTable(f.conn, 'queries', f.policy)).toEqual({ _tag: 'Err', reason: 'backup-invalid' })
+  expect(f.posts).toEqual([])
 })
 
 it('refuses an occupied target, including one with matching backup identity', async () => {
