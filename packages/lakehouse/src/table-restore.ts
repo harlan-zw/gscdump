@@ -14,7 +14,7 @@ export interface RestoreIcebergTableOptions {
   snapshotIds: readonly string[]
   /** The caller excludes writers and owns the target through settlement. */
   confirmAuthority: () => Promise<boolean>
-  /** Defaults to 16 MiB. The maximum is 64 MiB. */
+  /** Bounds stored and expanded metadata. Defaults to 16 MiB. The maximum is 64 MiB. */
   maxMetadataBytes?: number
   cache?: CatalogCache
 }
@@ -54,6 +54,40 @@ function matchesBackup(loaded: { metadataLocation: unknown, metadata: unknown },
     && new Set(ids).size === expected.size && ids.every(id => expected.has(id))
 }
 
+async function expandMetadata(bytes: Uint8Array<ArrayBuffer>, maxBytes: number): Promise<Uint8Array<ArrayBuffer> | null> {
+  if (bytes[0] !== 0x1F || bytes[1] !== 0x8B)
+    return bytes
+  const reader = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip')).getReader()
+  try {
+    const chunks: Uint8Array[] = []
+    let total = 0
+    for (;;) {
+      const chunk = await reader.read()
+      if (chunk.done)
+        break
+      total += chunk.value.byteLength
+      if (total > maxBytes) {
+        await reader.cancel()
+        return null
+      }
+      chunks.push(chunk.value)
+    }
+    const expanded = new Uint8Array(total)
+    let offset = 0
+    for (const chunk of chunks) {
+      expanded.set(chunk, offset)
+      offset += chunk.byteLength
+    }
+    return expanded
+  }
+  catch {
+    return null // Corrupt or truncated gzip is an expected archive failure before registration.
+  }
+  finally {
+    reader.releaseLock()
+  }
+}
+
 /** Restore a verified metadata pointer into an empty target. Never replace an existing table. */
 export async function restoreIcebergTable(conn: IcebergConnection, table: string, options: RestoreIcebergTableOptions): Promise<RestoreIcebergTableResult> {
   if (!validOptions(table, options))
@@ -81,9 +115,12 @@ export async function restoreIcebergTable(conn: IcebergConnection, table: string
   const sha256 = [...new Uint8Array(digest)].map(value => value.toString(16).padStart(2, '0')).join('')
   if (sha256 !== options.metadataSha256)
     return { _tag: 'Err', reason: 'backup-invalid' }
+  const expanded = await expandMetadata(bytes, maxBytes)
+  if (!expanded)
+    return { _tag: 'Err', reason: 'backup-invalid' }
   let metadata: unknown
   try {
-    metadata = parseIcebergJson(new TextDecoder('utf-8', { fatal: true }).decode(bytes))
+    metadata = parseIcebergJson(new TextDecoder('utf-8', { fatal: true }).decode(expanded))
   }
   catch {
     // Malformed archive bytes are an expected backup failure, before any registration.
