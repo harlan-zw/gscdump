@@ -33,6 +33,7 @@ export const AGENT_REQUEST_HEADERS = {
 /** Defense in depth for free text. Callers must still remove private content. */
 export function redactAgentFeedbackText(value: string): string {
   return value
+    .replace(/(["'])(authorization|proxy-authorization|x-api-key|api[-_]?key|set-cookie|cookie|(?:[a-z\d]+[_-])*(?:access[_-]?token|refresh[_-]?token|token|secret|password))\1\s*:\s*(?:"(?:\\.|[^"\\])*"?|'(?:\\.|[^'\\])*'?|[^\s,;}]+)/gi, '$1$2$1:$1[redacted]$1')
     .replace(/\b(Bearer|Basic)\s+[^\s,;"']+/gi, '$1 [redacted]')
     .replace(/\b(authorization|proxy-authorization|x-api-key|api[-_]key|set-cookie|cookie)\s*:[^\r\n]+/gi, '$1: [redacted]')
     .replace(/\b((?:[a-z\d]+[_-])*(?:access[_-]?token|refresh[_-]?token|token|api[_-]?key|secret|password))\s*[:=]\s*(?:"(?:\\.|[^"\\])*"?|'(?:\\.|[^'\\])*'?|[^\s,;"']+)/gi, '$1=[redacted]')

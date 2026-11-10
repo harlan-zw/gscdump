@@ -36,6 +36,11 @@ describe('agent feedback boundary', () => {
     'x-api-key: first-second-third',
     'Authorization: Token first-second-third',
     'apiKey: "first second third"',
+    '{"password":"first second third"}',
+    '{"api_key":"first-second-third"}',
+    '{"access_token":"first-second-third","result":"timeout"}',
+    '{"Authorization":"Token first-second-third"}',
+    '{"Cookie":"session=first; refresh=second-third"}',
   ])('removes the complete credential from transmitted reports: %s', (credential) => {
     const parsed = cliPapercutBodySchema.parse({ ...report, comment: `Agent report by Codex. ${credential}` })
     expect(parsed.comment).not.toContain('first')
@@ -45,6 +50,11 @@ describe('agent feedback boundary', () => {
 
   it('preserves simultaneous evidence limits on a declared outcome', () => {
     expect(agentOutcomeBodySchema.parse({ eventId: 'evt_01', workflowId: 'task_01', surface: 'cli', operation: 'indexing.summary', step: 'complete', outcome: 'success', semanticFlags: ['partial', 'stale', 'truncated'], quality: 'unknown' })).toMatchObject({ semanticFlags: ['partial', 'stale', 'truncated'], quality: 'unknown' })
+  })
+
+  it('preserves non-secret JSON evidence when redacting a credential', () => {
+    const result = redactAgentFeedbackText('{"access_token":"fixture-secret","result":"timeout","retry":false}')
+    expect(JSON.parse(result)).toEqual({ access_token: '[redacted]', result: 'timeout', retry: false })
   })
 
   it('refuses client-supplied verification and raw content', () => {
