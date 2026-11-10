@@ -15,6 +15,12 @@ function fakeFetch(response: { status: number, body?: unknown, headers?: Record<
 }
 
 describe('buildPapercutBody', () => {
+  it('keeps safe correlation and redacts credentials before submission', () => {
+    const result = buildPapercutBody({ command: 'indexing watch list', comment: 'Agent report by Codex. Authorization: Bearer secret-token', agent: 'Codex', requestId: 'req_01', origin: 'requestindexing.com', surface: 'cli' })
+    expect(result).toMatchObject({ _tag: 'Ok', body: { requestId: 'req_01', origin: 'requestindexing.com', surface: 'cli' } })
+    if (result._tag === 'Ok')
+      expect(result.body.comment).not.toContain('secret-token')
+  })
   it('stamps the CLI version, node, and platform onto a valid report', () => {
     const built = buildPapercutBody({ command: 'report triage', comment: 'Agent report by Codex. Expected x. Received y.', agent: 'Codex' })
     expect(built._tag).toBe('Ok')

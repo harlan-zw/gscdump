@@ -2,6 +2,11 @@
   accountNextActions: object
   accountStatuses: object
   addPartnerTeamMemberSchema: object
+  AGENT_REQUEST_HEADERS: object
+  agentFeedbackContextSchema: object
+  agentOutcomeBodySchema: object
+  agentOutcomeReceiptSchema: object
+  agentRequestContextSchema: object
   ALLOWANCE_NOTICE_METERS: object
   ALLOWANCE_NOTICE_THRESHOLDS: object
   analyticsEndpointSchemas: object
@@ -22,6 +27,7 @@
   CANONICAL_WEBHOOK_EVENTS: object
   canonicalDifferenceKindSchema: object
   canonicalWebhookEventTypeSchema: object
+  cliPapercutBodySchema: object
   countriesResponseSchema: object
   countryRowSchema: object
   COVERAGE_LADDER: object
@@ -162,6 +168,7 @@
   querySourceModes: object
   RECORD_READ_REFUSAL_REASONS: object
   recordReadRefusalSchema: object
+  redactAgentFeedbackText: function
   refineIndexingSitemapFilter: function
   registerPartnerSiteSchema: object
   registerPartnerUserSchema: object
@@ -268,6 +275,8 @@
 ./search-types:
   GSC_SEARCH_TYPES: object
 ./v1:
+  AGENT_REQUEST_HEADERS: object
+  agentRequestContextSchema: object
   analyticsCoverageQueryV1Schema: object
   analyticsCoverageV1Schemas: object
   bingAuthorizationRequestV1Schema: object
@@ -345,6 +354,8 @@
   REALTIME_V1_EVENT_SEMANTICS: object
   REALTIME_V1_RESOURCE_TYPES: object
   resolveHttpOperation: function
+  runReportV1DataSchemas: object
+  runReportV1RequestSchema: object
   serializeContractDocument: function
   siteIndexingApiGrantV1Schema: object
   siteIndexingApiGrantV1Schemas: object
@@ -354,10 +365,13 @@
   sitemapSubmissionStateV1Schemas: object
   sitemapSubmissionV1Schemas: object
   sitemapSubmitResultV1Schemas: object
+  userIntegrationActivityV1Schemas: object
 ./v1/browser:
   createGscdumpV1BrowserSchemas: function
   GSCDUMP_V1_ANALYTICS_DIMENSIONS: object
 ./v1/http:
+  AGENT_REQUEST_HEADERS: object
+  agentRequestContextSchema: object
   analyticsCoverageQueryV1Schema: object
   analyticsCoverageV1Schemas: object
   bingAuthorizationRequestV1Schema: object
@@ -415,6 +429,8 @@
   listHttpOperations: function
   parseGoogleSubmissionRefusal: function
   resolveHttpOperation: function
+  runReportV1DataSchemas: object
+  runReportV1RequestSchema: object
   siteIndexingApiGrantV1Schema: object
   siteIndexingApiGrantV1Schemas: object
   sitemapEvidenceV1Schemas: object
@@ -423,6 +439,7 @@
   sitemapSubmissionStateV1Schemas: object
   sitemapSubmissionV1Schemas: object
   sitemapSubmitResultV1Schemas: object
+  userIntegrationActivityV1Schemas: object
 ./v1/paths:
   createGscdumpV1Paths: function
   isUnknownHttpV1OperationError: function

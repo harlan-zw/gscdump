@@ -10,7 +10,9 @@ import { defineCommand } from 'citty'
 import { getLatestGscDate } from 'gscdump/dates'
 import { unwrapResult } from 'gscdump/result'
 import { analysisNeeds, analyzerSources, analyzerTables, resolveAnalysisSource } from '../analysis-local'
+import { resolveAuthentication } from '../auth-state'
 import { reportCommandMeta } from '../command-meta'
+import { runHostedReport } from '../hosted-report'
 import { renderCliReport } from '../render/report'
 import { terminalOutputOptions } from '../render/terminal'
 import { logger, parseFetchBudget, setJsonOutput } from '../utils'
@@ -107,6 +109,7 @@ function makeReportCommand(report: DefinedReport): CommandDef<any> {
       'prev-end': { type: 'string', description: 'Override comparison end (pass with --prev-start)' },
       'fetch-budget': { type: 'string', description: `Max rows each live fetch reads (default: ${DEFAULT_FETCH_BUDGET}, max: ${MAX_FETCH_BUDGET})` },
       'live': { type: 'boolean', default: false, description: 'Force live GSC API; bypass local store' },
+      'force': { type: 'boolean', default: false, description: 'Regenerate a Hosted report instead of reading its cache' },
       'json': { type: 'boolean', default: false, description: 'Emit full ReportResult JSON' },
       'explain': { type: 'boolean', default: false, description: 'Print plan steps + window without executing' },
       'dry-run': { type: 'boolean', default: false, description: 'Alias for --explain' },
@@ -125,6 +128,28 @@ function makeReportCommand(report: DefinedReport): CommandDef<any> {
         console.log(JSON.stringify({ id: report.id, window, plan: dry.steps }, null, 2))
         return
       }
+
+      if (!args.live && (await resolveAuthentication())._tag === 'Hosted') {
+        const result = await runHostedReport(report.id, args)
+        if (args.json) {
+          console.log(JSON.stringify(result, null, 2))
+          return
+        }
+        console.log(`${report.id}: ${result.site}\n${result.window.start} to ${result.window.end}`)
+        for (const section of result.sections) {
+          console.log(`\n${section.title}${section.dataUnavailable ? ' (unavailable)' : ''}`)
+          for (const finding of section.findings)
+            console.log(`${finding.entity.value}: ${Object.entries(finding.metrics).map(([key, value]) => `${key}=${value}`).join(', ')}`)
+          if (section.truncated)
+            logger.warn(`${section.id}: ${section.truncated.kept} of ${section.truncated.total} findings returned.`)
+        }
+        if (result.meta.degraded)
+          logger.warn('Report evidence is incomplete. Read section coverage before drawing conclusions.')
+        return
+      }
+
+      if (args.force)
+        throw new Error('--force regenerates a Hosted report. Select Hosted mode to use it.')
 
       const steps = (window: ResolvedWindow): Array<{ type: string, params: AnalysisParams, required: boolean }> =>
         report.plan(params, window).map(step => ({ type: step.type, params: { ...step.params, type: step.type } as AnalysisParams, required: step.required === true }))

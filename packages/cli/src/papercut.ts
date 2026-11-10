@@ -1,4 +1,5 @@
 import process from 'node:process'
+import { cliPapercutBodySchema } from '@gscdump/contracts'
 import { z } from 'zod'
 import { VERSION } from './utils'
 
@@ -6,23 +7,7 @@ export const DEFAULT_PAPERCUT_BASE_URL = 'https://gscdump.com'
 export const PAPERCUT_PATH = '/api/cli/papercuts'
 const REQUEST_TIMEOUT_MS = 10_000
 
-/**
- * The wire shape gscdump.com accepts. Keep it in sync with
- * `server/api/cli/papercuts.post.ts` in the gscdump.com repository.
- */
-// Single-line fields refuse control characters: they render as one line in
-// the operator's report, and gscdump.com rejects them with a 400 otherwise.
-const singleLine = (max: number): z.ZodString => z.string().trim().min(1).max(max).regex(/^\P{Cc}*$/u, 'must be a single line without control characters')
-
-export const papercutBodySchema = z.strictObject({
-  command: singleLine(200),
-  comment: z.string().trim().min(1).max(2000),
-  agent: singleLine(100),
-  intent: z.enum(['bug', 'improvement']).default('bug'),
-  cliVersion: singleLine(64),
-  node: singleLine(64),
-  platform: singleLine(32),
-})
+export const papercutBodySchema = cliPapercutBodySchema
 
 export type PapercutBody = z.infer<typeof papercutBodySchema>
 
@@ -37,16 +22,9 @@ export type PapercutResult
 
 const receiptSchema = z.object({ id: z.string().min(1), status: z.literal('new') })
 
-export function buildPapercutBody(input: {
-  command: unknown
-  comment: unknown
-  agent: unknown
-  intent?: unknown
-}): { _tag: 'Ok', body: PapercutBody } | { _tag: 'Err', message: string } {
+export function buildPapercutBody(input: { command: unknown, comment: unknown, agent: unknown, intent?: unknown } & Partial<Record<'requestId' | 'parentRequestId' | 'workflowId' | 'origin' | 'product' | 'surface' | 'operation' | 'skillDigest' | 'skillVersion', unknown>>): { _tag: 'Ok', body: PapercutBody } | { _tag: 'Err', message: string } {
   const parsed = papercutBodySchema.safeParse({
-    command: input.command,
-    comment: input.comment,
-    agent: input.agent,
+    ...input,
     intent: input.intent ?? 'bug',
     cliVersion: VERSION,
     node: process.versions.node,
@@ -99,13 +77,13 @@ export async function submitPapercut(
     }
   }
   if (response.status === 400 || response.status === 422) {
-    const text = await response.text().catch(() => '')
+    const text = await response.text()
     return { _tag: 'Err', reason: 'invalid_input', message: `gscdump.com rejected the papercut: ${text.slice(0, 300) || response.status}` }
   }
   if (!response.ok)
     return { _tag: 'Err', reason: 'rejected', message: `gscdump.com answered ${response.status}.` }
 
-  const json: unknown = await response.json().catch(() => null)
+  const json: unknown = await response.json().catch((cause: unknown) => ({ invalidResponse: cause instanceof Error ? cause.message : String(cause) }))
   const receipt = receiptSchema.safeParse(json)
   if (!receipt.success)
     return { _tag: 'Err', reason: 'rejected', message: 'gscdump.com answered without a papercut id.' }

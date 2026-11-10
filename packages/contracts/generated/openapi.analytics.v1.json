@@ -171,6 +171,91 @@
           }
         ]
       },
+      "analytics.reports.run.error": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "enum": [
+                  "invalid_request",
+                  "unauthorized",
+                  "forbidden",
+                  "site_not_found",
+                  "rate_limited",
+                  "internal_error",
+                  "contract_violation"
+                ],
+                "type": "string"
+              },
+              "details": {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/analytics.reports.run.error.__schema0"
+                },
+                "propertyNames": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              "message": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "requestId": {
+                "pattern": "^req_[\\w-]+$",
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "requestId",
+              "retryable",
+              "details"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "analytics.reports.run.error.__schema0": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          },
+          {
+            "items": {
+              "$ref": "#/components/schemas/analytics.reports.run.error.__schema0"
+            },
+            "type": "array"
+          },
+          {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/analytics.reports.run.error.__schema0"
+            },
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": "object"
+          }
+        ]
+      },
       "analytics.rows.query.error": {
         "additionalProperties": false,
         "properties": {
@@ -1488,6 +1573,592 @@
         },
         "x-gscdump-lifecycle": {
           "introduced": "1.0.0"
+        },
+        "x-gscdump-ownership": [
+          {
+            "credential": "user_key",
+            "rule": "authorized_site"
+          },
+          {
+            "credential": "partner_key",
+            "rule": "authorized_site"
+          }
+        ],
+        "x-gscdump-resources": {
+          "changes": [],
+          "reads": [
+            {
+              "idFrom": "params.siteId",
+              "type": "site.analytics"
+            }
+          ]
+        },
+        "x-gscdump-scopes": [
+          "analytics:execute"
+        ],
+        "x-gscdump-semantics": {
+          "idempotent": true,
+          "kind": "query",
+          "readConsistency": "primary",
+          "retry": "idempotent",
+          "sideEffects": "none"
+        },
+        "x-gscdump-visibility": "public"
+      }
+    },
+    "/api/analytics/v1/sites/{siteId}/reports/run": {
+      "post": {
+        "description": "Returns deterministic report evidence, coverage, and capture clocks without advice or severity.",
+        "operationId": "analytics.reports.run",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "siteId",
+            "required": true,
+            "schema": {
+              "pattern": "^s_[\\w-]+$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "pattern": "^req_[\\w-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "brandTerms": {
+                    "maxLength": 2000,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "comparison": {
+                    "enum": [
+                      "none",
+                      "prev-period",
+                      "yoy"
+                    ],
+                    "type": "string"
+                  },
+                  "end": {
+                    "format": "date",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                    "type": "string"
+                  },
+                  "force": {
+                    "default": false,
+                    "type": "boolean"
+                  },
+                  "period": {
+                    "enum": [
+                      "last-7d",
+                      "last-28d",
+                      "last-30d",
+                      "last-90d",
+                      "last-180d",
+                      "last-365d",
+                      "mtd",
+                      "qtd",
+                      "ytd",
+                      "last-quarter",
+                      "custom"
+                    ],
+                    "type": "string"
+                  },
+                  "reportId": {
+                    "enum": [
+                      "health",
+                      "risks",
+                      "opportunities",
+                      "movers",
+                      "growth",
+                      "triage",
+                      "brand",
+                      "pre-publish"
+                    ],
+                    "type": "string"
+                  },
+                  "start": {
+                    "format": "date",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                    "type": "string"
+                  },
+                  "target": {
+                    "maxLength": 2048,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "targetKind": {
+                    "enum": [
+                      "page",
+                      "query"
+                    ],
+                    "type": "string"
+                  },
+                  "topic": {
+                    "maxLength": 2000,
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "reportId",
+                  "force"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "cached": {
+                          "type": "boolean"
+                        },
+                        "generatedAt": {
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                          "type": "string"
+                        },
+                        "meta": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "degraded": {
+                              "type": "boolean"
+                            },
+                            "durationMs": {
+                              "minimum": 0,
+                              "type": "number"
+                            },
+                            "rowsScanned": {
+                              "minimum": 0,
+                              "type": "number"
+                            },
+                            "steps": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "coverage": {
+                                    "oneOf": [
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "kind": {
+                                            "const": "complete",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "kind"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "fetched": {
+                                            "maximum": 9007199254740991,
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          },
+                                          "kind": {
+                                            "const": "truncated",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "kind",
+                                          "fetched"
+                                        ],
+                                        "type": "object"
+                                      }
+                                    ]
+                                  },
+                                  "error": {
+                                    "type": "string"
+                                  },
+                                  "key": {
+                                    "type": "string"
+                                  },
+                                  "status": {
+                                    "enum": [
+                                      "pending",
+                                      "running",
+                                      "done",
+                                      "skipped",
+                                      "error"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "type": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "key",
+                                  "type",
+                                  "status"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            }
+                          },
+                          "required": [
+                            "durationMs",
+                            "rowsScanned",
+                            "degraded",
+                            "steps"
+                          ],
+                          "type": "object"
+                        },
+                        "sections": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "coverage": {
+                                "enum": [
+                                  "full",
+                                  "partial"
+                                ],
+                                "type": "string"
+                              },
+                              "dataUnavailable": {
+                                "const": true,
+                                "type": "boolean"
+                              },
+                              "findings": {
+                                "items": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "delta": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "current": {
+                                          "type": "number"
+                                        },
+                                        "metric": {
+                                          "type": "string"
+                                        },
+                                        "pct": {
+                                          "type": "number"
+                                        },
+                                        "prior": {
+                                          "type": "number"
+                                        }
+                                      },
+                                      "required": [
+                                        "metric",
+                                        "prior",
+                                        "current",
+                                        "pct"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "entity": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "kind": {
+                                          "enum": [
+                                            "page",
+                                            "query"
+                                          ],
+                                          "type": "string"
+                                        },
+                                        "value": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "value"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "metrics": {
+                                      "additionalProperties": {
+                                        "type": "number"
+                                      },
+                                      "propertyNames": {
+                                        "type": "string"
+                                      },
+                                      "type": "object"
+                                    },
+                                    "why": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "entity",
+                                    "metrics"
+                                  ],
+                                  "type": "object"
+                                },
+                                "type": "array"
+                              },
+                              "id": {
+                                "type": "string"
+                              },
+                              "summary": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "delta": {
+                                    "type": "number"
+                                  },
+                                  "direction": {
+                                    "enum": [
+                                      "up",
+                                      "down",
+                                      "flat"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "magnitudeLabel": {
+                                    "type": "string"
+                                  }
+                                },
+                                "type": "object"
+                              },
+                              "title": {
+                                "type": "string"
+                              },
+                              "truncated": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "kept": {
+                                    "maximum": 9007199254740991,
+                                    "minimum": 0,
+                                    "type": "integer"
+                                  },
+                                  "total": {
+                                    "maximum": 9007199254740991,
+                                    "minimum": 0,
+                                    "type": "integer"
+                                  }
+                                },
+                                "required": [
+                                  "kept",
+                                  "total"
+                                ],
+                                "type": "object"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "title",
+                              "summary",
+                              "coverage",
+                              "findings"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "site": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "window": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "comparison": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "end": {
+                                  "format": "date",
+                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                  "type": "string"
+                                },
+                                "start": {
+                                  "format": "date",
+                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "start",
+                                "end"
+                              ],
+                              "type": "object"
+                            },
+                            "days": {
+                              "exclusiveMinimum": 0,
+                              "maximum": 9007199254740991,
+                              "type": "integer"
+                            },
+                            "end": {
+                              "format": "date",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                              "type": "string"
+                            },
+                            "start": {
+                              "format": "date",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "start",
+                            "end",
+                            "days"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "site",
+                        "generatedAt",
+                        "cached",
+                        "window",
+                        "meta",
+                        "sections"
+                      ],
+                      "type": "object"
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "requestId": {
+                          "pattern": "^req_[\\w-]+$",
+                          "type": "string"
+                        },
+                        "surface": {
+                          "enum": [
+                            "partner",
+                            "analytics",
+                            "realtime"
+                          ],
+                          "type": "string"
+                        },
+                        "version": {
+                          "const": "1.0",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "requestId",
+                        "surface",
+                        "version"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/analytics.reports.run.error"
+                }
+              }
+            },
+            "description": "Declared client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/analytics.reports.run.error"
+                }
+              }
+            },
+            "description": "Safe internal or contract error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/analytics.reports.run.error"
+                }
+              }
+            },
+            "description": "Stable error envelope"
+          }
+        },
+        "security": [
+          {
+            "user_key": []
+          },
+          {
+            "partner_key": []
+          }
+        ],
+        "summary": "Run a retained search evidence report",
+        "tags": [
+          "Analytics reports"
+        ],
+        "x-gscdump-errors": [
+          "invalid_request",
+          "unauthorized",
+          "forbidden",
+          "site_not_found",
+          "rate_limited",
+          "internal_error",
+          "contract_violation"
+        ],
+        "x-gscdump-examples": {
+          "request": {
+            "body": {
+              "reportId": "health"
+            },
+            "params": {
+              "siteId": "s_01"
+            }
+          },
+          "response": {
+            "data": {
+              "cached": false,
+              "generatedAt": "2026-11-10T00:00:00.000Z",
+              "meta": {
+                "degraded": false,
+                "durationMs": 1,
+                "rowsScanned": 0,
+                "steps": []
+              },
+              "sections": [],
+              "site": "https://example.com/",
+              "window": {
+                "days": 28,
+                "end": "2026-10-28",
+                "start": "2026-10-01"
+              }
+            },
+            "meta": {
+              "requestId": "req_01",
+              "surface": "analytics",
+              "version": "1.0"
+            }
+          }
+        },
+        "x-gscdump-lifecycle": {
+          "introduced": "7.12.0"
         },
         "x-gscdump-ownership": [
           {

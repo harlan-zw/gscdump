@@ -4,7 +4,9 @@ import type { BingDumpDataset, BingDumpSummary, parseBingDumpOptions } from './b
 import { createGscdumpV1Client } from '@gscdump/sdk/v1'
 import { getHostedAccount, hostedCredential, siteManagerOf } from './auth-state'
 import { writeBingDump } from './bing-data'
+import { hostedRequestContext } from './hosted-context'
 import { noSitesStop } from './hosted-site'
+import { useCliRuntime } from './runtime'
 import { stopError } from './stop'
 import { logger } from './utils'
 
@@ -17,7 +19,7 @@ interface HostedBingSite {
 }
 
 export function hostedBingClient(state: HostedAuthentication): GscdumpV1Client {
-  return createGscdumpV1Client({ apiRoot: state.apiRoot, credential: hostedCredential(state) })
+  return createGscdumpV1Client({ apiRoot: state.apiRoot, credential: hostedCredential(state), requestContext: hostedRequestContext(useCliRuntime().environment) })
 }
 
 export async function listHostedBingSites(state: HostedAuthentication): Promise<HostedBingSite[]> {

@@ -2,7 +2,7 @@ import os from 'node:os'
 import process from 'node:process'
 import { defineCommand } from 'citty'
 import { skillCommandMeta } from '../command-meta'
-import { installSkill, SKILL_AGENTS, SKILL_NAME } from '../skill'
+import { inspectSkillInstallation, installSkill, SKILL_AGENTS, SKILL_NAME } from '../skill'
 import { applyOutputMode, displayPath, logger, OUTPUT_ARGS } from '../utils'
 
 const installCommand = defineCommand({
@@ -38,5 +38,17 @@ export const skillCommand = defineCommand({
   meta: skillCommandMeta,
   subCommands: {
     install: installCommand,
+    status: defineCommand({
+      meta: { name: 'status', description: 'Compare installed skill content with the packaged artifact' },
+      args: { agent: { type: 'string', default: 'claude', description: `Agent skill directory: ${SKILL_AGENTS.join(' or ')}` }, target: { type: 'string', description: 'Inspect this directory instead of the agent home directory' }, ...OUTPUT_ARGS },
+      async run({ args }) {
+        applyOutputMode(args)
+        const agent = SKILL_AGENTS.find(name => name === args.agent)
+        if (!agent)
+          throw new Error(`Unknown agent "${args.agent}". Use ${SKILL_AGENTS.join(' or ')}.`)
+        const result = await inspectSkillInstallation({ agent, homeDirectory: os.homedir(), target: args.target })
+        console.log(JSON.stringify(result))
+      },
+    }),
   },
 })

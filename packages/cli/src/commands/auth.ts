@@ -45,6 +45,7 @@ function loginNextStep(state: HostedAuthentication, siteCount: number, issuer: K
 export const HOSTED_COMMANDS = [
   'sites',
   'query',
+  'report',
   'sitemaps current',
   'sitemaps history',
   'sitemaps membership',

@@ -22,7 +22,8 @@
     "release": "pnpm build && bumpp --output=CHANGELOG.md packages/*/package.json",
     "test:packed": "node scripts/test-packed-cli.mjs",
     "test:live": "node scripts/test-live.mjs",
-    "check:release": "pnpm lint && pnpm --filter \"./packages/*\" run build && pnpm typecheck && pnpm test",
+    "check:release": "pnpm lint && pnpm --filter \"./packages/*\" run build && pnpm typecheck && pnpm check:agent-artifacts && pnpm test",
+    "check:agent-artifacts": "node --experimental-strip-types scripts/check-agent-artifacts.ts",
     "eval:cli": "node scripts/evals/run.mjs",
     "eval:skill": "node scripts/evals/run.mjs --agents",
     "test:evals": "vitest run scripts/evals"

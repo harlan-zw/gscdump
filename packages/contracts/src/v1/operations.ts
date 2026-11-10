@@ -73,6 +73,7 @@ import {
   siteVersionPreviewRequestSchema,
   siteVersionPreviewSchema,
 } from '../site-version'
+import { userIntegrationActivityV1Schemas } from './agent-usage'
 import { analyticsCoverageQueryV1Schema, analyticsCoverageV1Schemas } from './analytics-coverage'
 import { bingConnectionV1Schemas } from './bing'
 import { bingDataQueryV1Schema, bingDataV1Schemas } from './bing-data'
@@ -117,6 +118,7 @@ import {
   GSCDUMP_REALTIME_TICKET_TTL_SECONDS,
   REALTIME_V1_EVENT_SEMANTICS,
 } from './realtime'
+import { runReportV1DataSchemas, runReportV1RequestSchema } from './report'
 import { gscdumpV1OperationRoute, gscdumpV1Surface } from './route-catalog'
 import { sitemapEvidenceV1Schemas, sitemapInspectQueryV1Schema } from './sitemap-evidence'
 import { sitemapSubmissionV1Schemas, sitemapSubmitResultV1Schemas } from './sitemap-submission'
@@ -174,6 +176,8 @@ export function createGscdumpV1Protocol() {
     surface: z.literal('partner'),
     version: z.literal(GSCDUMP_HTTP_V1_VERSION),
   })
+  const userIntegrationActivityResponse = defineSuccessResponse(userIntegrationActivityV1Schemas, partnerResponseMeta)
+  const runReportResponse = defineSuccessResponse(runReportV1DataSchemas, responseMeta)
   const realtimeResponseMeta = defineResponseObject({
     requestId: realtimeSchemas.publicRequestId,
     surface: z.literal('realtime'),
@@ -3439,6 +3443,22 @@ export function createGscdumpV1Protocol() {
           },
         },
       }),
+      getUserIntegrationActivity: defineHttpOperation({
+        ...gscdumpV1OperationRoute('partner.users.integration_activity.get'),
+        visibility: 'public',
+        semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
+        auth: { credentials: ['partner_key'], scopes: ['users:read'], ownership: [{ credential: 'partner_key', rule: 'linked_user' }] },
+        request: { params: z.strictObject({ userId: realtimeSchemas.publicUserId }), query: null, headers: requestHeaders, body: null },
+        responses: { 200: userIntegrationActivityResponse },
+        errors: partnerUserErrors,
+        errorResponse: errorEnvelopeSchemas(partnerUserErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [{ type: 'partner.user', idFrom: 'params.userId' }], changes: [] },
+        lifecycle: { introduced: '7.12.0' },
+        docs: { summary: 'Read partner integration activity', description: 'Reads retained activity attributed to credentials issued by this partner. Unknown counts remain null.', tags: ['Users'], examples: {
+          request: { params: { userId: 'u_01' } },
+          response: { data: { measuredAt: '2026-11-10T00:00:00.000Z', activities: [] }, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } },
+        } },
+      }),
       deleteUser: defineHttpOperation({
         ...gscdumpV1OperationRoute('partner.users.delete'),
         visibility: 'public',
@@ -3785,6 +3805,22 @@ export function createGscdumpV1Protocol() {
   const analytics = defineHttpSurface({
     ...gscdumpV1Surface('analytics'),
     operations: {
+      runReport: defineHttpOperation({
+        ...gscdumpV1OperationRoute('analytics.reports.run'),
+        visibility: 'public',
+        semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
+        auth: { credentials: ['user_key', 'partner_key'], scopes: ['analytics:execute'], ownership: [{ credential: 'user_key', rule: 'authorized_site' }, { credential: 'partner_key', rule: 'authorized_site' }] },
+        request: { params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }), query: null, headers: requestHeaders, body: runReportV1RequestSchema },
+        responses: { 200: runReportResponse },
+        errors: analyticsRowsErrors,
+        errorResponse: errorEnvelopeSchemas(analyticsRowsErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [{ type: 'site.analytics', idFrom: 'params.siteId' }], changes: [] },
+        lifecycle: { introduced: '7.12.0' },
+        docs: { summary: 'Run a retained search evidence report', description: 'Returns deterministic report evidence, coverage, and capture clocks without advice or severity.', tags: ['Analytics reports'], examples: {
+          request: { params: { siteId: 's_01' }, body: { reportId: 'health' } },
+          response: { data: { site: 'https://example.com/', generatedAt: '2026-11-10T00:00:00.000Z', cached: false, window: { start: '2026-10-01', end: '2026-10-28', days: 28 }, meta: { durationMs: 1, rowsScanned: 0, degraded: false, steps: [] }, sections: [] }, meta: { requestId: 'req_01', surface: 'analytics', version: '1.0' } },
+        } },
+      }),
       queryRows: defineHttpOperation({
         ...gscdumpV1OperationRoute('analytics.rows.query'),
         visibility: 'public',
