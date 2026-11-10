@@ -1658,6 +1658,16 @@
                     "default": false,
                     "type": "boolean"
                   },
+                  "maxFindings": {
+                    "maximum": 1000,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "minClicksChange": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
                   "period": {
                     "enum": [
                       "last-7d",

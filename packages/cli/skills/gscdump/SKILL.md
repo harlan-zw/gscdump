@@ -128,6 +128,7 @@ Its JSON preserves `cached`, `generatedAt`, the resolved `window`, section `cove
 Its `meta.requestId` correlates successful reads with feedback. `meta.source` is `hosted`.
 A section with `dataUnavailable: true` is unavailable evidence, not an empty finding.
 `--force` regenerates the Hosted report. `--prev-start`, `--prev-end`, and `--fetch-budget` need Local mode.
+Hosted reports preserve `--max-findings` from 1 to 1000. Movers also preserves `--min-clicks-change`.
 `analyze` reads the Store only in Hosted mode. When the Store cannot answer, it stops with the Local mode command.
 
 `query`, `analyze`, and `report` choose one source for each run. One run never

@@ -11,6 +11,8 @@ export const runReportV1RequestSchema = z.strictObject({
   targetKind: z.enum(['page', 'query']).optional(),
   brandTerms: z.string().min(1).max(2000).optional(),
   topic: z.string().min(1).max(2000).optional(),
+  maxFindings: z.number().int().min(1).max(1000).optional(),
+  minClicksChange: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
   force: z.boolean().default(false),
 }).superRefine((value, context) => {
   if (Boolean(value.start) !== Boolean(value.end) || (value.period === 'custom' && !value.start))
@@ -21,6 +23,8 @@ export const runReportV1RequestSchema = z.strictObject({
     context.addIssue({ code: 'custom', path: ['target'], message: 'Triage requires target and targetKind.' })
   if (value.reportId === 'pre-publish' && !value.topic)
     context.addIssue({ code: 'custom', path: ['topic'], message: 'Pre-publish requires topic.' })
+  if (value.reportId !== 'movers' && value.minClicksChange !== undefined)
+    context.addIssue({ code: 'custom', path: ['minClicksChange'], message: 'minClicksChange applies to movers.' })
 })
 
 const range = z.strictObject({ start: z.iso.date(), end: z.iso.date() })

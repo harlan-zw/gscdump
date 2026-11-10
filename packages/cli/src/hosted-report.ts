@@ -19,6 +19,8 @@ export function hostedReportRequest(reportId: string, args: Record<string, unkno
     targetKind: args['target-kind'],
     brandTerms: args['brand-terms'],
     topic: args.topic,
+    maxFindings: args['max-findings'] !== undefined ? Number(args['max-findings']) : undefined,
+    minClicksChange: args['min-clicks-change'] !== undefined ? Number(args['min-clicks-change']) : undefined,
     force: Boolean(args.force),
   })
 }

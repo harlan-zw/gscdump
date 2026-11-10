@@ -110,7 +110,7 @@ function makeReportCommand(report: DefinedReport): CommandDef<any> {
       'fetch-budget': { type: 'string', description: `Max rows each live fetch reads (default: ${DEFAULT_FETCH_BUDGET}, max: ${MAX_FETCH_BUDGET})` },
       'live': { type: 'boolean', default: false, description: 'Force live GSC API; bypass local store' },
       'force': { type: 'boolean', default: false, description: 'Regenerate a Hosted report instead of reading its cache' },
-      'json': { type: 'boolean', default: false, description: 'Emit full ReportResult JSON' },
+      'json': { type: 'boolean', default: false, description: 'Emit report JSON with evidence coverage' },
       'explain': { type: 'boolean', default: false, description: 'Print plan steps + window without executing' },
       'dry-run': { type: 'boolean', default: false, description: 'Alias for --explain' },
       ...reportArgs,

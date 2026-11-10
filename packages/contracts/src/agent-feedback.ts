@@ -34,8 +34,8 @@ export const AGENT_REQUEST_HEADERS = {
 export function redactAgentFeedbackText(value: string): string {
   return value
     .replace(/\b(Bearer|Basic)\s+[^\s,;"']+/gi, '$1 [redacted]')
-    .replace(/\b(?:set-cookie|cookie)\s*:[^\r\n]+/gi, 'Cookie: [redacted]')
-    .replace(/\b((?:[a-z\d]+[_-])*(?:access_token|refresh_token|token|api_key|secret|password))\s*[:=]\s*["']?[^\s,;"']+/gi, '$1=[redacted]')
+    .replace(/\b(authorization|proxy-authorization|x-api-key|api[-_]key|set-cookie|cookie)\s*:[^\r\n]+/gi, '$1: [redacted]')
+    .replace(/\b((?:[a-z\d]+[_-])*(?:access[_-]?token|refresh[_-]?token|token|api[_-]?key|secret|password))\s*[:=]\s*(?:"(?:\\.|[^"\\])*"?|'(?:\\.|[^'\\])*'?|[^\s,;"']+)/gi, '$1=[redacted]')
     .replace(/\b(?:gsd_(?:user|team|partner|prod|dev)_|sk-|ya29\.)[\w.-]+/gi, '[redacted]')
     .replace(/\b[\w.!#$%&'*+/=?^`{|}~-]+@[a-z\d](?:[a-z\d.-]*[a-z\d])?\.[a-z]{2,}\b/gi, '[redacted email]')
     .replace(/\bhttps?:\/\/[^\s<>"']+/gi, '[redacted URL]')

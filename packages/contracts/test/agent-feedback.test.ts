@@ -29,6 +29,20 @@ describe('agent feedback boundary', () => {
     expect(result).not.toContain('secret123')
   })
 
+  it.each([
+    'PASSWORD="first second third"',
+    'password=\'first second third\'',
+    'PASSWORD="first second third',
+    'x-api-key: first-second-third',
+    'Authorization: Token first-second-third',
+    'apiKey: "first second third"',
+  ])('removes the complete credential from transmitted reports: %s', (credential) => {
+    const parsed = cliPapercutBodySchema.parse({ ...report, comment: `Agent report by Codex. ${credential}` })
+    expect(parsed.comment).not.toContain('first')
+    expect(parsed.comment).not.toContain('second')
+    expect(parsed.comment).not.toContain('third')
+  })
+
   it('preserves simultaneous evidence limits on a declared outcome', () => {
     expect(agentOutcomeBodySchema.parse({ eventId: 'evt_01', workflowId: 'task_01', surface: 'cli', operation: 'indexing.summary', step: 'complete', outcome: 'success', semanticFlags: ['partial', 'stale', 'truncated'], quality: 'unknown' })).toMatchObject({ semanticFlags: ['partial', 'stale', 'truncated'], quality: 'unknown' })
   })

@@ -72,10 +72,10 @@ describe('hosted mode commands', () => {
   const run = (args: string[]) => runCli({ rawArgs: args, runtime })
 
   it('runs a hosted report without a local Store or Google calls', async () => {
-    await expect(run(['report', 'health', '--site', 'example.com', '--period', '28d', '--json'])).resolves.toBe(0)
+    await expect(run(['report', 'health', '--site', 'example.com', '--period', '28d', '--max-findings', '1', '--json'])).resolves.toBe(0)
     expect(JSON.parse(stdout.join('\n'))).toMatchObject({ cached: true, meta: { degraded: true, requestId: 'req_report', source: 'hosted' }, sections: [{ dataUnavailable: true }] })
     expect(requests.map(request => request.url.pathname)).toEqual(['/api/cli/me', '/api/analytics/v1/sites/s_site/reports/run'])
-    expect(requests[1]?.body).toMatchObject({ reportId: 'health', period: 'last-28d' })
+    expect(requests[1]?.body).toMatchObject({ reportId: 'health', period: 'last-28d', maxFindings: 1 })
   })
 
   it('lists hosted Sites from the hosted record', async () => {
