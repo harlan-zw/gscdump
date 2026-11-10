@@ -1,4 +1,5 @@
 import type { CliRuntime } from './runtime'
+import os from 'node:os'
 import process from 'node:process'
 import { defineCommand, renderUsage, runCommand } from 'citty'
 import { parseAuthMode } from './auth-state'
@@ -9,6 +10,7 @@ import { resolveCliEnvironment } from './environment'
 import { reportCliError } from './error-handler'
 import { resolveOutputOptions, terminalOutputOptions } from './render/terminal'
 import { createCliRuntime, runWithCliRuntime, useCliRuntime } from './runtime'
+import { inspectSkillInstallation, SKILL_AGENTS } from './skill'
 import { commandLineError } from './stop'
 import { setNoColor, showSplash, VERSION, withConfiguredOutput } from './utils'
 
@@ -192,6 +194,15 @@ export async function runCli(opts: RunCliOptions = {}): Promise<number> {
       const argumentError = await checkCliArgs(main, rawArgs)
       if (argumentError)
         throw commandLineError(argumentError)
+      if (rawArgs[0] !== 'skill' && !rawArgs.some(arg => HELP_FLAGS.has(arg) || arg === '--version') && runtime.environment.GSCDUMP_NO_SKILL_CHECK !== '1') {
+        const states = await Promise.all(SKILL_AGENTS.map(agent => inspectSkillInstallation({ agent, homeDirectory: os.homedir() })))
+        for (const state of states) {
+          if (state.state === 'stale')
+            runtime.logger.warn(`The ${state.agent} skill differs from this CLI. Run gscdump skill install --agent ${state.agent}, then re-read SKILL.md.`)
+          if (state.state === 'unavailable')
+            runtime.logger.warn(`Could not check the ${state.agent} skill: ${state.message}`)
+        }
+      }
       await withConfiguredOutput(() => runMainCommand(rawArgs))
       return 0
     }

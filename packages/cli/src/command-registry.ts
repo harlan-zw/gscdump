@@ -20,6 +20,7 @@ import {
   skillCommandMeta,
   storeCommandMeta,
   syncCommandMeta,
+  telemetryCommandMeta,
 } from './command-meta'
 
 type CommandLoader = () => Promise<CommandDef<any>>
@@ -256,5 +257,9 @@ export const CLI_SUBCOMMANDS = {
   papercut: shallowCommand(
     papercutCommandMeta,
     () => import('./commands/papercut').then(module => module.papercutCommand),
+  ),
+  telemetry: shallowCommand(
+    telemetryCommandMeta,
+    () => import('./commands/telemetry').then(module => module.telemetryCommand),
   ),
 } satisfies SubCommandsDef
