@@ -1,3 +1,4 @@
+import type { AgentRequestContext } from '@gscdump/contracts'
 import type {
   GscdumpV1Operation as ContractGscdumpV1Operation,
   GscdumpV1OperationId as ContractGscdumpV1OperationId,
@@ -84,6 +85,8 @@ export interface CreateGscdumpV1ClientOptions {
   credential: GscdumpV1CredentialResolver
   fetch?: typeof fetch
   headers?: GscdumpV1HeadersResolver
+  /** Declared correlation only. The server derives ownership from the credential. */
+  requestContext?: AgentRequestContext
   retry?: GscdumpV1RetryOptions
   /** Share concurrent identical queries within this client. Defaults to true. */
   dedupe?: boolean
@@ -375,6 +378,13 @@ async function buildRequestHeaders(
       resolveCredential(options.credential),
     ])
     const headers = new Headers(baseHeaders)
+    // Load validation with the existing deferred contract registry. Client construction stays lightweight.
+    const { parseRequestContext, requestContextHeaders } = await getRuntime()
+    const requestContext = parseRequestContext(options.requestContext ?? {})
+    for (const key of Object.keys(requestContextHeaders) as Array<keyof AgentRequestContext>) {
+      if (requestContext[key] !== undefined)
+        headers.set(requestContextHeaders[key], requestContext[key])
+    }
     for (const [key, value] of Object.entries(prepared.headers)) {
       if (value !== undefined)
         headers.set(key, String(value))
@@ -511,6 +521,8 @@ interface GscdumpV1Runtime {
   isUnknownOperationError: (error: unknown) => boolean
   registry: HttpV1Registry<GscdumpV1ProtocolShape>
   protocol: GscdumpV1ProtocolShape
+  parseRequestContext: (input: unknown) => AgentRequestContext
+  requestContextHeaders: Record<keyof AgentRequestContext, string>
 }
 
 let runtimePromise: Promise<GscdumpV1Runtime> | undefined
@@ -520,12 +532,16 @@ function getRuntime(): Promise<GscdumpV1Runtime> {
     createGscdumpV1Protocol,
     createHttpV1Registry,
     isUnknownHttpV1OperationError,
+    agentRequestContextSchema,
+    AGENT_REQUEST_HEADERS,
   }) => {
     const protocol = createGscdumpV1Protocol()
     return {
       isUnknownOperationError: isUnknownHttpV1OperationError,
       protocol,
       registry: createHttpV1Registry(protocol),
+      parseRequestContext: input => agentRequestContextSchema.parse(input),
+      requestContextHeaders: AGENT_REQUEST_HEADERS,
     }
   })
 }
@@ -835,6 +851,7 @@ export function createGscdumpV1Client(options: CreateGscdumpV1ClientOptions): Gs
     getTeamCatalog: (input, executeOptions) => execute('partner.teams.catalog.get' satisfies MethodId<'getTeamCatalog'>, input, executeOptions),
     bindTeamCatalog: (input, executeOptions) => execute('partner.teams.catalog.bind' satisfies MethodId<'bindTeamCatalog'>, input, executeOptions),
     getSiteIntIdCrosswalk: (input, executeOptions) => execute('partner.users.sites.crosswalk.get' satisfies MethodId<'getSiteIntIdCrosswalk'>, input, executeOptions),
+    getUserIntegrationActivity: (input, executeOptions) => execute('partner.users.integration_activity.get' satisfies MethodId<'getUserIntegrationActivity'>, input, executeOptions),
     deleteUser: (input, executeOptions) => execute('partner.users.delete' satisfies MethodId<'deleteUser'>, input, executeOptions),
     createVerificationToken: (input, executeOptions) => execute('partner.users.verification.token.create' satisfies MethodId<'createVerificationToken'>, input, executeOptions),
     addAndVerifySite: (input, executeOptions) => execute('partner.users.sites.verify.create' satisfies MethodId<'addAndVerifySite'>, input, executeOptions),
@@ -842,6 +859,7 @@ export function createGscdumpV1Client(options: CreateGscdumpV1ClientOptions): Gs
     listUserApiKeys: (input, executeOptions) => execute('partner.users.api_keys.list' satisfies MethodId<'listUserApiKeys'>, input, executeOptions),
     revokeUserApiKey: (input, executeOptions) => execute('partner.users.api_keys.revoke' satisfies MethodId<'revokeUserApiKey'>, input, executeOptions),
     queryAnalyticsRows: (input, executeOptions) => execute('analytics.rows.query' satisfies MethodId<'queryAnalyticsRows'>, input, executeOptions),
+    runReport: (input, executeOptions) => execute('analytics.reports.run' satisfies MethodId<'runReport'>, input, executeOptions),
     queryAnalyticsReport: (input, executeOptions) => execute('analytics.reports.query' satisfies MethodId<'queryAnalyticsReport'>, input, executeOptions),
     queryAnalyticsReportDetail: (input, executeOptions) => execute('analytics.reports.detail.query' satisfies MethodId<'queryAnalyticsReportDetail'>, input, executeOptions),
     getRealtimeStreamHead: (input = {}, executeOptions) => execute('realtime.stream.head.get' satisfies MethodId<'getRealtimeStreamHead'>, input, executeOptions),

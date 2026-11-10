@@ -30,10 +30,13 @@
 ./date:
   toIcebergDayCount: function
 ./maintenance:
+  expireIcebergSnapshots: function
   isCommitRateLimited: function
   isCommitServerError: function
   isCommitTransient: function
   mergeIcebergManifests: function
+  planIcebergSnapshotRetention: function
+  restoreIcebergTable: function
   sweepUncommittedOrphans: function
 ./provisioning:
   adoptCatalog: function

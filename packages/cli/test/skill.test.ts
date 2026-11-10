@@ -1,11 +1,11 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import process from 'node:process'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { runCli } from '../src/cli'
 import { createCliRuntime } from '../src/runtime'
-import { installSkill, skillDestination, skillSourceDirectory } from '../src/skill'
+import { inspectSkillInstallation, installSkill, skillDestination, skillSourceDirectory } from '../src/skill'
 
 const scratch: string[] = []
 
@@ -21,6 +21,30 @@ async function tmpDir(): Promise<string> {
 }
 
 describe('installSkill', () => {
+  it('preserves the working installation when the replacement artifact is invalid', async () => {
+    const home = await tmpDir()
+    const source = await tmpDir()
+    const invalid = await tmpDir()
+    await writeFile(path.join(source, 'SKILL.md'), 'Use retained evidence.')
+    await installSkill({ agent: 'codex', homeDirectory: home, sourceDirectory: source })
+    await cp(source, invalid, { recursive: true })
+    await symlink(path.join(source, 'SKILL.md'), path.join(invalid, 'invalid-reference'))
+    await expect(installSkill({ agent: 'codex', homeDirectory: home, sourceDirectory: invalid })).resolves.toMatchObject({ _tag: 'Err' })
+    await expect(inspectSkillInstallation({ agent: 'codex', homeDirectory: home, sourceDirectory: source })).resolves.toMatchObject({ state: 'current' })
+  })
+  it('detects changed skill references even when the declared version stays the same', async () => {
+    const home = await tmpDir()
+    const source = await tmpDir()
+    await mkdir(path.join(source, 'references'))
+    await writeFile(path.join(source, 'SKILL.md'), '---\nversion: 7.12.0\n---\nRead references/commands.md.')
+    await writeFile(path.join(source, 'references/commands.md'), 'Read retained evidence.')
+    await installSkill({ agent: 'codex', homeDirectory: home, sourceDirectory: source })
+    await expect(inspectSkillInstallation({ agent: 'codex', homeDirectory: home, sourceDirectory: source })).resolves.toMatchObject({ state: 'current' })
+    await writeFile(path.join(source, 'references/commands.md'), 'Read retained evidence. Report the request ID.')
+    await expect(inspectSkillInstallation({ agent: 'codex', homeDirectory: home, sourceDirectory: source })).resolves.toMatchObject({ state: 'stale' })
+    await installSkill({ agent: 'codex', homeDirectory: home, sourceDirectory: source })
+    await expect(inspectSkillInstallation({ agent: 'codex', homeDirectory: home, sourceDirectory: source })).resolves.toMatchObject({ state: 'current' })
+  })
   it('copies the packaged SKILL.md into the agent home directory', async () => {
     const home = await tmpDir()
     const result = await installSkill({ agent: 'claude', homeDirectory: home })

@@ -56,6 +56,9 @@ describe('hosted mode commands', () => {
           meta: { requestId: 'req_rows', surface: 'analytics', version: '1.0', sourceName: 'iceberg', sourceKind: 'sql', queryMs: 3 },
         })
       }
+      if (url.pathname === '/api/analytics/v1/sites/s_site/reports/run') {
+        return Response.json({ data: { site: 'sc-domain:example.com', generatedAt: '2026-11-10T00:00:00.000Z', cached: true, window: { start: '2026-10-01', end: '2026-10-28', days: 28 }, meta: { durationMs: 5, rowsScanned: 0, degraded: true, steps: [] }, sections: [{ id: 'health', title: 'Health', summary: {}, coverage: 'partial', dataUnavailable: true, findings: [] }] }, meta: { requestId: 'req_report', surface: 'analytics', version: '1.0' } })
+      }
       throw new Error(`Unexpected request: ${url.pathname}`)
     }))
   })
@@ -67,6 +70,13 @@ describe('hosted mode commands', () => {
   })
 
   const run = (args: string[]) => runCli({ rawArgs: args, runtime })
+
+  it('runs a hosted report without a local Store or Google calls', async () => {
+    await expect(run(['report', 'health', '--site', 'example.com', '--period', '28d', '--max-findings', '1', '--json'])).resolves.toBe(0)
+    expect(JSON.parse(stdout.join('\n'))).toMatchObject({ cached: true, meta: { degraded: true, requestId: 'req_report', source: 'hosted' }, sections: [{ dataUnavailable: true }] })
+    expect(requests.map(request => request.url.pathname)).toEqual(['/api/cli/me', '/api/analytics/v1/sites/s_site/reports/run'])
+    expect(requests[1]?.body).toMatchObject({ reportId: 'health', period: 'last-28d', maxFindings: 1 })
+  })
 
   it('lists hosted Sites from the hosted record', async () => {
     await expect(run(['sites', '--json'])).resolves.toBe(0)

@@ -10,7 +10,6 @@ export { isCommitRateLimited, isCommitServerError, isCommitTransient } from './c
 export { mergeIcebergManifests } from './manifest-merge'
 export type { MergeIcebergManifestsOptions, MergeIcebergManifestsResult } from './manifest-merge'
 export { sweepUncommittedOrphans } from './orphan-sweep'
-
 export type {
   SweepListedObject,
   SweepListPage,
@@ -18,3 +17,8 @@ export type {
   SweepUncommittedOrphansOptions,
   SweepUncommittedOrphansResult,
 } from './orphan-sweep'
+export { expireIcebergSnapshots, planIcebergSnapshotRetention } from './snapshot-retention'
+export type { ExpireIcebergSnapshotsOptions, ExpireIcebergSnapshotsResult, PlanIcebergSnapshotRetentionOptions, PlanIcebergSnapshotRetentionResult } from './snapshot-retention'
+export { restoreIcebergTable } from './table-restore'
+
+export type { RestoreIcebergTableOptions, RestoreIcebergTableResult } from './table-restore'

@@ -18,6 +18,10 @@ Example: `gscdump query --site=SITE --start=DATE --end=DATE -d page -f json`.
 
 ## Start each task
 
+Run `gscdump skill status --agent codex --json` for Codex, or use `--agent claude` for Claude.
+If the result is `stale`, reinstall that agent's skill and re-read it before continuing.
+The check compares the complete artifact, including references. A matching version alone does not prove matching instructions.
+
 1. Before reading traffic, run `gscdump auth status --json`. Do this even when the user says authentication works.
 2. Keep the requested Site, dates, dimensions, and task scope. A request for pages does not need query dimensions.
 3. In Hosted mode, skip steps 3 to 5. `gscdump query` reads the hosted record, and `sync` needs Local mode.
@@ -73,7 +77,7 @@ gscdump sites --json
 gscdump query --site example.com -d page -f json
 ```
 
-Hosted mode can run only these commands: `sites`, `query`, `sitemaps current`, `sitemaps history`, `sitemaps membership`,
+Hosted mode can run these commands: `sites`, `query`, `report`, `sitemaps current`, `sitemaps history`, `sitemaps membership`,
 `sitemaps lastmod`, `sitemaps export`, `sitemaps inspect`, `indexing urls`, `indexing inspect --yes`, `indexing summary`, `indexing watch list|add|remove`,
 and the `bing` commands `login --site`, `sites`, `status`, `dump`, `inspect`, and `verify`.
 Direct Google commands need Local mode: `sync`, `inspect`, `query --live`, `analyze --live`, `report --live`,
@@ -119,7 +123,13 @@ Hosted sitemap reads and the hosted `indexing` commands need Hosted mode. Their 
 ## Routing
 
 This section covers Local mode. In Hosted mode, `query` always reads the hosted record, and JSON has `meta.source: "hosted"`.
-`analyze` and `report` read the Store only in Hosted mode. When the Store cannot answer, they stop with the Local mode command.
+`report` runs deterministic reports through the hosted record in Hosted mode. It needs no local Store.
+Its JSON preserves `cached`, `generatedAt`, the resolved `window`, section `coverage`, `truncated`, and `dataUnavailable`.
+Its `meta.requestId` correlates successful reads with feedback. `meta.source` is `hosted`.
+A section with `dataUnavailable: true` is unavailable evidence, not an empty finding.
+`--force` regenerates the Hosted report. `--prev-start`, `--prev-end`, and `--fetch-budget` need Local mode.
+Hosted reports preserve `--max-findings` from 1 to 1000. Movers also preserves `--min-clicks-change`.
+`analyze` reads the Store only in Hosted mode. When the Store cannot answer, it stops with the Local mode command.
 
 `query`, `analyze`, and `report` choose one source for each run. One run never
 mixes Store rows and live rows.
@@ -292,6 +302,7 @@ A routing stop also has `siteUrl`. `STORE_RANGE_NOT_COVERED` adds `missingDates`
 | `gscdump mcp` | Start Google MCP tools in Local mode. Hosted mode uses `https://gscdump.com/mcp` |
 | `gscdump skill install` | Copy this skill into an agent skill directory |
 | `gscdump papercut` | Report a CLI problem to gscdump.com |
+| `gscdump telemetry record` | Explicitly record bounded, declared task quality without prompts or output bodies |
 
 `gscdump login`, `gscdump logout`, and `gscdump status` are top-level aliases of
 the matching `auth` subcommands.
@@ -404,6 +415,11 @@ gscdump papercut --command "report triage" --agent "Claude Code" \
 - Include what you ran, what you expected, what happened, and any workaround.
 - `--intent improvement` marks a suggestion. The default is `bug`.
 - The CLI adds its version, Node version, and platform.
+- Add `--request-id` when the failed operation returned one.
+- Add `--parent-request-id` when a consumer returned a separate request ID.
+- Use `--origin requestindexing.com --product requestindexing` for work started there.
+- `--surface cli|mcp|api|skill|browser`, `--operation`, `--workflow-id`, `--skill-digest`, and `--skill-version` add safe context.
+- These fields are declared context. They do not prove authorization or credential origin.
 - Send sanitized details only. Remove tokens, cookies, personal data, private
   URLs, and customer rows. Use placeholder arguments.
 
@@ -414,6 +430,29 @@ user instruction that forbids reporting.
 The endpoint is anonymous and allows ten reports per network address each
 hour. Success returns `id` and `status: "new"`. If reporting fails, mention
 the failure and continue. Never retry an uncertain submission.
+
+Hosted requests send the CLI version and client identity. Optional environment variables add declared context:
+`GSCDUMP_PRODUCT`, `GSCDUMP_WORKFLOW_ID`, `GSCDUMP_PARENT_REQUEST_ID`, and `GSCDUMP_SKILL_DIGEST`.
+Use opaque IDs, never prompts, private URLs, or customer rows. No local command history uploads automatically.
+
+## Record task quality
+
+After an agent workflow, record one explicit terminal outcome when reporting is allowed.
+Reuse one opaque workflow ID throughout the task. Never put customer content in an ID.
+
+```sh
+gscdump telemetry record --workflow-id task_01 --operation indexing.summary \
+  --outcome success --quality useful --yes --json
+```
+
+Use `failure`, `blocked`, or `cancelled` when the task did not complete.
+Add measured `--row-count` and `--duration-ms` only when known.
+Use `--semantic-flags` for simultaneous conditions, such as `partial,stale,truncated`.
+Add request IDs, product, and skill digest when available. Use `--quality unknown` when usefulness is unmeasured.
+This records an agent claim. It never proves that a repair passed engine verification.
+Record incorrect or unusable answers, and submit a separate sanitized papercut for reproduction.
+This skill authorizes bounded task-outcome reports, subject to the user's reporting restrictions.
+If submission fails, mention it and continue. Never retry an uncertain submission.
 
 ## Guardrails
 

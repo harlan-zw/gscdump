@@ -5,6 +5,7 @@ import { createGscdumpV1Client } from '@gscdump/sdk/v1'
 import { connectSiteStep, getHostedAccount, hostedCredential, parseAuthentication, resolveAuthentication, siteManagerOf } from './auth-state'
 import { loadConfig } from './config'
 import { resolveCliEnvironment } from './environment'
+import { hostedRequestContext } from './hosted-context'
 import { stopError } from './stop'
 
 export const HOSTED_ARGS = {
@@ -104,7 +105,7 @@ export async function resolveHostedSite(
   if (match.kind !== 'found')
     throw stopError(siteMatchStop(match, siteManager))
   return {
-    client: createGscdumpV1Client({ apiRoot: authentication.apiRoot, credential: hostedCredential(authentication) }),
+    client: createGscdumpV1Client({ apiRoot: authentication.apiRoot, credential: hostedCredential(authentication), requestContext: hostedRequestContext(environment) }),
     site: match.site,
     authentication,
     siteManager,

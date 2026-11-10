@@ -1,5 +1,7 @@
 # Release readiness
 
+The [AI surface parity brief](docs/work/ai-parity-2026-11.md) defines package and consumer acceptance checks.
+
 Last updated: 2026-09-10
 
 Published line: **`3.5.x`**. Hosted API wire version: **`1.0`**.
