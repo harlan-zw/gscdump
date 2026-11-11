@@ -1,5 +1,10 @@
+import type { TableMetadata } from 'icebird'
 import type { IcebergConnection } from '../src/catalog'
 import { ByteWriter } from 'hyparquet-writer'
+import { icebergManifests } from 'icebird'
+import { avroMetadata } from 'icebird/src/avro/avro.metadata.js'
+import { avroRead } from 'icebird/src/avro/avro.read.js'
+import { avroWrite } from 'icebird/src/avro/avro.write.js'
 import { afterEach, expect, it, vi } from 'vitest'
 import { defineIcebergDataset } from '../src/dataset'
 
@@ -73,6 +78,33 @@ function fixture() {
 }
 
 afterEach(() => vi.unstubAllGlobals())
+
+it.each([17, 18])('resolves a new append beside deleted history for Site %s', async (oldSiteId) => {
+  const { conn, metadata } = fixture()
+  await dataset.appendBatches(conn, () => [[{ site_id: oldSiteId, url: '/deleted' }]], { appendId: 'deleted' })
+  const [prior] = await icebergManifests({ metadata: metadata as TableMetadata, resolver: conn.resolver })
+  const buffer = await conn.resolver.reader(prior!.url)
+  const bytes = await buffer.slice(0, buffer.byteLength)
+  const reader = { view: new DataView(bytes), offset: 0 }
+  const decoded = avroMetadata(reader)
+  const records = avroRead({ reader, ...decoded })
+  records[0]!.status = 2
+  records[0]!.snapshot_id = prior!.entries[0]!.snapshot_id
+  records[0]!.sequence_number = prior!.entries[0]!.sequence_number
+  records[0]!.file_sequence_number = prior!.entries[0]!.file_sequence_number
+  await avroWrite({ writer: conn.resolver.writer!(prior!.url), schema: decoded.metadata['avro.schema'], records })
+
+  await dataset.appendBatches(conn, () => [[{ site_id: 17, url: '/current' }]], { appendId: 'current' })
+  const resolver = await dataset.createAppendFileResolver(conn)
+  const current = resolver.currentFiles(17)
+  const published = await resolver('current', 17)
+  expect(current).toMatchObject({ _tag: 'Ok', files: [{ rowCount: 1 }] })
+  expect(published).toMatchObject({ _tag: 'Ok', files: [{ rowCount: 1 }] })
+  if (current._tag === 'Ok' && published._tag === 'Ok')
+    expect(published.files).toEqual(current.files)
+  expect(await resolver('deleted', oldSiteId)).toEqual({ _tag: 'Err', reason: 'append-unavailable' })
+  expect(await resolver.confirmCurrent()).toBe(true)
+})
 
 it('refuses an oversized immutable manifest before reading its full bytes', async () => {
   const { conn } = fixture()

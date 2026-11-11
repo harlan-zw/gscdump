@@ -1178,7 +1178,9 @@ export async function createIcebergAppendFileResolver(conn: IcebergConnection, t
     const files: IcebergListedDataFile[] = []
     for (const manifest of manifests) {
       for (const entry of manifest.entries) {
-        if (entry.status === 2 || entry.data_file.content !== 0)
+        if (entry.status === 2)
+          continue
+        if (entry.data_file.content !== 0)
           return { _tag: 'Err', reason: 'append-unavailable' }
         if (entry.status !== 1 || entry.snapshot_id == null || String(entry.snapshot_id) !== String(snapshotId))
           continue
