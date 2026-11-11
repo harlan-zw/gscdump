@@ -2,9 +2,9 @@
 
 The [AI surface parity brief](docs/work/ai-parity-2026-11.md) defines package and consumer acceptance checks.
 
-Last updated: 2026-09-10
+Last reviewed: 2026-11-11
 
-Published line: **`3.5.x`**. Hosted API wire version: **`1.0`**.
+Read package manifests and npm dist-tags for release versions. Hosted API wire version: **`1.0`**.
 
 This file tracks release checks and remaining consumer migrations.
 Package version and hosted wire version are separate contracts.
@@ -22,6 +22,7 @@ Package version and hosted wire version are separate contracts.
 - `@gscdump/cloudflare`
 - `@gscdump/sdk`
 - `@gscdump/cli` (including `gscdump mcp`)
+- `@gscdump/devframe`
 
 `@gscdump/nuxt` and `@gscdump/mcp` were deleted. Nuxt integration is owned by
 consumer layers, and the MCP server is owned by the CLI.
@@ -95,5 +96,19 @@ Package delivery needs passing build, typecheck, unit, packed-install, browser, 
 Live Google verification must exercise data rather than skip.
 
 Hosted cutover and legacy storage removal need their consumer deployment evidence before those changes ship.
-The July consumer notes above remain the last recorded deployment status.
-They do not prove the current hosted rollout state.
+Use the dated consumer records below to assess their stated scopes.
+
+## Warehouse release evidence, 2026-11-11
+
+[Release v7.12.1](https://github.com/harlan-zw/gscdump/releases/tag/v7.12.1) published all twelve packages.
+[Release run 42932874203](https://github.com/harlan-zw/gscdump/actions/runs/42932874203) passed for commit `abba58d15aec771056adcff8e1e9b6ab8cfa236f`.
+The patch repairs append verification beside historical deleted entries in an Iceberg manifest.
+
+The owner merged [release PR #284](https://github.com/harlan-zw/gscdump/pull/284) after both existing Google test logins failed refresh.
+That storage patch has package, browser, Workers, and publication evidence. It has no successful live Google refresh evidence.
+Keep the live Google verification gate above for future releases.
+
+The hosted service adopted the package in [PR #1148](https://github.com/harlan-zw/gscdump.com/pull/1148).
+[Production run 42960783347](https://github.com/harlan-zw/gscdump.com/actions/runs/42960783347) later deployed release `6ea6c9dde96db7e9f9b9579454883206660965a6`, including that adoption.
+Seven owned stored API/MCP reads preserved their fixed-window totals and dates on that release.
+These checks cover storage adoption. Use consumer rollout and route telemetry evidence for the broader v1 cutover gate.
