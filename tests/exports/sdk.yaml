@@ -33,6 +33,51 @@
   sourceInfoQuery: function
   tablesQuery: function
   withDefaultSearchType: function
+./indexing:
+  belongsToIndexCohort: function
+  bucketIndexingSeries: function
+  buildIndexCohortDiagnosis: function
+  buildIndexCohortsFromIndexingUrls: function
+  buildIndexingOverviewModel: function
+  buildIndexingPortfolioMarkdown: function
+  clampIndexedPercent: function
+  classifyCurrentSitemapDrop: function
+  COHORT_MIN_CELL_SIZE: number
+  COHORT_MIN_ENUMERATED_SHARE: number
+  compareCurrentSitemapScope: function
+  computeTrustGate: function
+  countInspectionStages: function
+  crawlErrorCount: function
+  getSiteIndexingIssues: function
+  indexCohortFilterValue: function
+  indexedRateChange: function
+  INDEXING_MAX_READ_DAYS: number
+  indexingActionForIssue: function
+  indexingMarkdownBucketDays: function
+  indexingWindow: function
+  indexingWindowNote: function
+  issueStack: function
+  isTrustDegraded: function
+  notIndexedCount: function
+  notIndexedStack: function
+  parseIndexCohortFilter: function
+  portfolioIndexingTrend: function
+  portfolioIssueCounts: function
+  portfolioRateChangeOver: function
+  rankIndexCohortSections: function
+  readingDatesInWindow: function
+  readSiteIndexing: function
+  sampledIndexStateMessage: function
+  selectIndexCohortLead: function
+  selectIndexCohortUrls: function
+  selectIndexingRegressionLead: function
+  SITE_WIDE_NOT_INDEXED_RATE: number
+  siteIndexingReading: function
+  sitemapHistoryCollapsed: function
+  STALE_DOWNLOAD_DAYS: number
+  TRUST_DEGRADED_STATES: object
+  wilsonInterval: function
+  windowReadings: function
 ./indexing-issues:
   issueDetails: object
   issueGroups: object

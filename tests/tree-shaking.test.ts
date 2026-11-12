@@ -112,6 +112,11 @@ const cases: readonly TreeShakeCase[] = [
     maxBytes: 20_000,
     allowedImports: ['@gscdump/contracts/v1/realtime'],
   },
+  {
+    entry: 'packages/sdk/dist/indexing.mjs',
+    exportName: 'portfolioIssueCounts',
+    maxBytes: 2_500,
+  },
 ]
 
 async function bundleExport(testCase: TreeShakeCase): Promise<{

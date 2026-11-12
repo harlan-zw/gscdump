@@ -47,12 +47,19 @@ describe.skipIf(!built)('published import graph budgets', () => {
       ['packages/lakehouse/dist/schema.mjs', 500],
       ['packages/analysis/dist/source/index.mjs', 5_000],
       ['packages/sdk/dist/period.mjs', 10_000],
+      ['packages/sdk/dist/indexing.mjs', 70_000],
+      ['packages/analysis/dist/sitemap-health.mjs', 5_000],
     ] as const
 
     for (const [path, budget] of entries) {
       const closure = await staticClosure(join(root, path))
       expect(closure.bytes, path).toBeLessThan(budget)
     }
+  })
+
+  it('keeps the indexing maths off the storage engine', async () => {
+    const closure = await staticClosure(join(root, 'packages/sdk/dist/indexing.mjs'))
+    expect([...closure.external].filter(specifier => specifier.startsWith('@gscdump/'))).toEqual(['@gscdump/analysis/sitemap-health'])
   })
 
   it('shares gscdump chunks across public entries', async () => {

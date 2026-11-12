@@ -68,6 +68,14 @@ flowchart LR
 | Watched URL | `partner.sites.indexing.watched.*`; `WATCHED_URL_LIMIT` | `@gscdump/contracts` | Site 1—N Watched URL, at most 50 | "watched URL" |
 | Watched URL inspection | `watchedUrlCheckpointSchema`; `checkpoints` | `@gscdump/contracts` | Watched URL 1—N Watched URL inspection, newest 12 returned | "Watched URL inspection" |
 | Count freshness | `indexingCaptureSchema`; `capture` | `@gscdump/contracts` | Indexing summary 1—1 Count freshness | "count freshness" |
+| Portfolio | `IndexingPortfolioSite`; `portfolioIssueCounts`, `portfolioIndexingTrend` in `@gscdump/sdk/indexing` | `@gscdump/sdk` | Portfolio 1—N Site | "portfolio", "across sites" |
+| Indexing window | `IndexingWindow`; `indexingWindow` in `@gscdump/sdk/indexing` | `@gscdump/sdk` | Portfolio view 1—1 Indexing window | "date range" |
+| Held reading | `windowReadings` in `@gscdump/sdk/indexing` | `@gscdump/sdk` | (Site, Indexing window) 1—0..1 Held reading | not surfaced |
+| Inspection stages | `InspectionStageCounts`; `countInspectionStages` in `@gscdump/sdk/indexing` | `@gscdump/sdk` | Site 1—1 Inspection stages per URL list read | "Inspected, Crawled, Indexable, Indexed" |
+| Indexing overview | `IndexingOverviewModel`; `buildIndexingOverviewModel` in `@gscdump/sdk/indexing` | `@gscdump/sdk` | Site 1—1 Indexing overview per read | "indexing overview" |
+| Trust gate | `TrustGate`; `computeTrustGate` in `@gscdump/sdk/indexing` | `@gscdump/sdk` | Site 1—1 Trust gate per read | none; its `reason` sentence shows |
+| Index cohort | `IndexCohortCell`; `buildIndexCohortsFromIndexingUrls` in `@gscdump/sdk/indexing` | `@gscdump/sdk` | Site 1—N Index cohort | "route family", "pages under /path" |
+| Regression lead | `IndexingRegressionLead`; `selectIndexingRegressionLead` in `@gscdump/sdk/indexing` | `@gscdump/sdk` | Index cohort 1—0..1 Regression lead | "Google dropped N pages" headline |
 | Team | `gscdumpTeamRowSchema` | `contracts/partner` | Team 1—N Site | "team" |
 | Engine | `packages/engine` + 3 adapters | `@gscdump/engine` | Engine 1—1 Driver | not surfaced |
 | Driver | (runtime handle) | `@gscdump/engine` | — | not surfaced |
@@ -258,6 +266,54 @@ The existing `healthy` tag means no warning threshold was exceeded. Missing URL 
 The existing `quality_rejection` tag combines crawled-not-indexed and soft-404 observations. It does not establish a quality cause.
 The existing `not_indexed` classification starts at 30% of known URLs, with over 50 affected URLs.
 Known URLs are the supplied denominator, not proof of every URL on the Site.
+
+### Portfolio
+**Is:** the set of Sites one dashboard view shows together, such as a user's Sites or a Site group.
+**Use for:** `IndexingPortfolioSite`, `portfolioIssueCounts`, `portfolioIndexingTrend`, and `buildIndexingPortfolioMarkdown` in `@gscdump/sdk/indexing`.
+**Never:** fleet, group (as a name for the set), Team (Team is the tenant), rollup (Rollup is a stored engine table).
+**Casing:** `Portfolio` in prose, `portfolio` in identifiers.
+
+### Indexing window
+**Is:** the UTC days a Portfolio indexing view shows, both ends inclusive. A current window ends today and keeps its Period length. A past window keeps its own days.
+**Use for:** `IndexingWindow` and `indexingWindow`. `readDays` and `readFrom` say how far the capped 90-day indexing read reaches.
+**Never:** period (Period names the selector the window comes from), range.
+**Casing:** `Indexing window` in prose, `indexingWindow` in identifiers.
+
+### Held reading
+**Is:** a Site's last indexing trend reading before the Indexing window. The Site holds that level until its next reading, so a skipped day never reads as a change.
+**Use for:** `windowReadings` and every Portfolio stack and trend.
+**Never:** carried value, stale point, fill.
+**Casing:** `Held reading` in prose.
+
+### Inspection stages
+**Is:** four counts from one complete URL list read: Inspected, Crawled, Indexable, and Indexed. A partial list or a population mismatch has no Inspection stages.
+**Use for:** `InspectionStageCounts`, `countInspectionStages`, and the `stages` field of the Indexing overview.
+**Never:** funnel, pipeline, pipeline evidence. The Coverage ladder is a different, Google-defined sequence.
+**Casing:** `Inspection stages` in prose, `inspectionStage` in identifiers.
+
+### Indexing overview
+**Is:** the one state a Site's indexing Overview shows: `waiting`, `trust_failure`, `verify_scope`, `partial_scope`, or `diagnosis`.
+**Use for:** `IndexingOverviewModel` and `buildIndexingOverviewModel`. The caller passes its own diagnosis function.
+**Never:** verdict (a Coverage state is Google's verdict), indexing status.
+**Casing:** `Indexing overview` in prose, `indexingOverview` in identifiers.
+
+### Trust gate
+**Is:** whether a Site's indexing figures can be trusted, from its setup, a live sitemap probe, and stored corroboration. A probe failure turns `broken` only with a stale download or a sitemap collapse.
+**Use for:** `TrustGate`, `TrustGateState`, and `computeTrustGate`.
+**Never:** health check, liveness (liveness names the probe input only).
+**Casing:** `Trust gate` in prose, `trustGate` in identifiers.
+
+### Index cohort
+**Is:** a section path or a lifecycle group of inspected URLs that Google indexes measurably worse than the rest of the Site. A cohort must clear a Bonferroni-corrected Wilson interval against its complement.
+**Use for:** `IndexCohortCell`, `buildIndexCohortDiagnosis`, `buildIndexCohortsFromIndexingUrls`, and `selectIndexCohortLead`.
+**Never:** cluster, segment, bucket.
+**Casing:** `Index cohort` in prose, `indexCohort` in identifiers.
+
+### Regression lead
+**Is:** the previously indexed URLs under one Index cohort's path whose saved URL Inspection verdict changed away from PASS. Inspection dates bound the change window; they do not date the change.
+**Use for:** `IndexingRegressionLead` and `selectIndexingRegressionLead`.
+**Never:** removal date or drop date (as names for its window bounds).
+**Casing:** `Regression lead` in prose.
 
 ## Internal terms
 
@@ -469,6 +525,8 @@ check are banned; words that did not are recorded in Open questions instead.
 | Cloud, cloud mode, `--mode cloud` | Hosted, `--mode hosted` | gscdump.com ADR-0012 names the mode. The CLI rejects `cloud` |
 | powerful, seamless, robust, blazing | (cut) | Marketing filler |
 | traffic trend (as a name for the whole-record classification) | Trajectory | Trajectory is one classification with named tags. A `trend` field elsewhere keeps its own meaning |
+| fleet, issue rollup (for Sites shown together or their issue counts) | Portfolio, Portfolio issue counts | Rollup names a stored engine table |
+| funnel, pipeline evidence (for Inspected, Crawled, Indexable, Indexed) | Inspection stages | The Coverage ladder owns Google's sequence, and Indexing Evidence names one observation |
 
 ### Site Triage
 
