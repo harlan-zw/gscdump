@@ -55,6 +55,19 @@ const report = await gscdump.queryAnalyticsReport({
 })
 ```
 
+`@gscdump/sdk/indexing` holds the pure indexing dashboard maths: Portfolio
+stacks and issue counts, the Indexing window, the Indexing overview, the Trust
+gate, Index cohorts, the Regression lead, and the Portfolio Markdown export.
+Every function takes data and returns data. A function that needs today takes `now`.
+
+```ts
+import { indexingWindow, portfolioIssueCounts, readSiteIndexing } from '@gscdump/sdk/indexing'
+
+const window = indexingWindow('28d', true, new Date())
+const sites = reads.map(read => ({ id: read.siteId, label: read.name, trend: readSiteIndexing(read.response).trend }))
+const issues = portfolioIssueCounts(sites, window)
+```
+
 ## Browser integration
 
 Keep `user_key` and `partner_key` credentials on your server.

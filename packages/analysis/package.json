@@ -46,6 +46,11 @@
       "import": "./dist/report/index.mjs",
       "default": "./dist/report/index.mjs"
     },
+    "./sitemap-health": {
+      "types": "./dist/sitemap-health.d.mts",
+      "import": "./dist/sitemap-health.mjs",
+      "default": "./dist/sitemap-health.mjs"
+    },
     "./source": {
       "types": "./dist/source/index.d.mts",
       "import": "./dist/source/index.mjs",

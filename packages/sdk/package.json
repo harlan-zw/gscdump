@@ -86,6 +86,11 @@
       "import": "./dist/hosted-query.mjs",
       "default": "./dist/hosted-query.mjs"
     },
+    "./indexing": {
+      "types": "./dist/indexing.d.mts",
+      "import": "./dist/indexing.mjs",
+      "default": "./dist/indexing.mjs"
+    },
     "./indexing-issues": {
       "types": "./dist/indexing-issues.d.mts",
       "import": "./dist/indexing-issues.mjs",
@@ -151,6 +156,7 @@
     "prepack": "pnpm run build"
   },
   "dependencies": {
+    "@gscdump/analysis": "workspace:^",
     "@gscdump/contracts": "workspace:^",
     "gscdump": "workspace:^",
     "ofetch": "catalog:deps",

@@ -18,6 +18,7 @@ export default defineBuildConfig({
         './src/gsc-period-presets.ts',
         './src/gsc-rows.ts',
         './src/hosted-query.ts',
+        './src/indexing.ts',
         './src/indexing-issues.ts',
         './src/lifecycle.ts',
         './src/period.ts',
