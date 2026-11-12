@@ -65,6 +65,13 @@
   resolveTarget: function
   runReport: function
   runReportResult: function
+./sitemap-health:
+  classifySitemapCollapse: function
+  compareCurrentSitemapScope: function
+  diffSitemapHealth: function
+  SITEMAP_SYNC_COLLAPSE_POLICY: object
+  SITEMAP_TRUST_COLLAPSE_POLICY: object
+  sitemapHistoryHasCollapse: function
 ./source:
   createCompositeSource: function
   createInMemoryQuerySource: function
