@@ -8,8 +8,10 @@
 // Google declines pages for structural reasons. Partitioning the inspected set
 // and asking which partition Google treats differently names something a
 // developer can act on. The load-bearing part is the refutation: a cohort is
-// surfaced only when its Wilson score interval clears the rate of its own
-// complement, never on a point estimate. Cohorts are compared against the
+// surfaced only when the interval for the difference between its rate and its
+// complement's rate clears zero, never on a point estimate. Both rates are
+// samples, so the interval combines both Wilson intervals (Newcombe's hybrid
+// score method). Cohorts are compared against the
 // complement, because a cohort that dominates the Site would otherwise be
 // tested against a baseline that contains itself.
 //
@@ -334,7 +336,14 @@ export function buildIndexCohortDiagnosis(input: BuildIndexCohortInput): IndexCo
       continue
 
     // Only worse cohorts. A section Google indexes better is not a diagnosis.
-    if (lower <= complementRate)
+    // The complement rate is a sample too, so the test bounds the difference
+    // with both intervals (Newcombe's hybrid score method) at the corrected z.
+    // Comparing the cohort interval with the complement point estimate would
+    // treat 0 of 12 as proof that the rest of the Site indexes everything.
+    const complement = wilsonInterval(complementNotIndexed, complementTotal, z)
+    const rate = cell.notIndexed / cell.total
+    const differenceLower = (rate - complementRate) - Math.hypot(rate - lower, complement.upper - complementRate)
+    if (differenceLower <= 0)
       continue
 
     survivors.push({
@@ -346,7 +355,7 @@ export function buildIndexCohortDiagnosis(input: BuildIndexCohortInput): IndexCo
         pathPrefix: dimension === 'section' ? key : null,
         total: cell.total,
         notIndexed: cell.notIndexed,
-        rate: cell.notIndexed / cell.total,
+        rate,
         complementRate,
         complementTotal,
         ciLower: lower,
@@ -433,10 +442,15 @@ export type IndexCohortLead
       cell: IndexCohortCell
     }
 
+const LIFECYCLE_SUBJECT: Record<IndexCohortLifecycle, string> = {
+  versioned: 'version-pinned pages',
+  evergreen: 'unversioned pages',
+}
+
 function cohortSubject(cell: IndexCohortCell): string {
   return cell.dimension === 'section'
     ? `pages under ${cell.key}`
-    : 'version-pinned pages'
+    : LIFECYCLE_SUBJECT[cell.key as IndexCohortLifecycle] ?? cell.label.toLowerCase()
 }
 
 function asPercent(value: number): string {
@@ -527,6 +541,24 @@ function parseRow(row: IndexCohortUrlRow, siteUrl: string | null | undefined): P
 }
 
 /**
+ * Parse each row once and keep the first row for each URL. A repeated row is
+ * the same page, so it adds no evidence. Duplicates are matched on the parsed
+ * href, so a relative and an absolute row for one URL collapse.
+ */
+function uniqueRows<Row extends IndexCohortUrlRow>(urls: ReadonlyArray<Row>, siteUrl: string | null | undefined): Array<{ row: Row, parsed: ParsedRow }> {
+  const seen = new Set<string>()
+  return urls.flatMap((row) => {
+    const parsed = parseRow(row, siteUrl)
+    if (parsed._tag === 'page') {
+      if (seen.has(parsed.href))
+        return []
+      seen.add(parsed.href)
+    }
+    return [{ row, parsed }]
+  })
+}
+
+/**
  * Build the Index cohorts response from a complete set of inspected URLs. No
  * Crawl joins it, so `notCrawled` is 0 and `crawlSettingsId` is null. Below
  * `COHORT_MIN_ENUMERATED_SHARE` of the reported not-indexed count, the builder
@@ -534,22 +566,16 @@ function parseRow(row: IndexCohortUrlRow, siteUrl: string | null | undefined): P
  */
 export function buildIndexCohortsFromIndexingUrls(source: IndexCohortSource, asOf: string | null = null): IndexCohortsResponse {
   const pages: IndexCohortPage[] = []
-  const notIndexedUrls = new Set<string>()
   let excludedFragments = 0
 
-  for (const row of source.urls) {
-    const parsed = parseRow(row, source.siteUrl)
-    if (parsed._tag === 'page') {
+  for (const { parsed } of uniqueRows(source.urls, source.siteUrl)) {
+    if (parsed._tag === 'page')
       pages.push(parsed.page)
-      if (!parsed.page.indexed)
-        notIndexedUrls.add(parsed.href)
-    }
-    else if (parsed._tag === 'fragment') {
+    else if (parsed._tag === 'fragment')
       excludedFragments += 1
-    }
   }
 
-  const enumerated = notIndexedUrls.size
+  const enumerated = pages.reduce((sum, page) => sum + (page.indexed ? 0 : 1), 0)
   const reported = source.reportedNotIndexed
   if (reported > 0 && enumerated / reported < COHORT_MIN_ENUMERATED_SHARE)
     return { _tag: 'no-evidence', crawlSettingsId: null, asOf, reason: 'sampled-index-state', sample: { enumerated, reported } }
@@ -566,8 +592,7 @@ export function selectIndexCohortUrls<Row extends IndexCohortUrlRow>(
   filter: IndexCohortFilter,
   siteUrl?: string | null,
 ): Row[] {
-  return urls.filter((row) => {
-    const parsed = parseRow(row, siteUrl)
-    return parsed._tag === 'page' && !parsed.page.indexed && belongsToIndexCohort(parsed.page.path, filter)
-  })
+  return uniqueRows(urls, siteUrl)
+    .filter(({ parsed }) => parsed._tag === 'page' && !parsed.page.indexed && belongsToIndexCohort(parsed.page.path, filter))
+    .map(({ row }) => row)
 }

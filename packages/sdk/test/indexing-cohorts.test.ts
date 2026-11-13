@@ -79,6 +79,38 @@ describe('buildIndexCohortsFromIndexingUrls', () => {
     expect(result).toMatchObject({ baseline: { total: 20, notIndexed: 4, rate: 0.2 } })
   })
 
+  // PR 286 Service Review. The complement is a sample too. 0 of 12 does not prove
+  // the rest of the Site indexes everything, so 6 of 40 is no finding against it.
+  it('finds no cohort against a small complement whose own rate is uncertain', () => {
+    const result = buildIndexCohortsFromIndexingUrls({
+      urls: [...section('/docs', 40, 6), ...section('/blog', 12, 0)],
+      reportedNotIndexed: 6,
+    })
+    expect(result._tag).toBe('uniform')
+  })
+
+  // PR 286 Service Review. A repeated row is the same page, so it adds no evidence.
+  it('counts a URL listed twice once in the cohort statistics', () => {
+    const urls = [...section('/docs', 40, 36), ...section('/blog', 60, 2)]
+    const result = buildIndexCohortsFromIndexingUrls({ urls: [...urls, ...section('/docs', 40, 36)], reportedNotIndexed: 38 })
+    if (result._tag !== 'outliers')
+      throw new Error(`expected outliers, got ${result._tag}`)
+    expect(result.baseline).toEqual({ total: 100, notIndexed: 38, rate: 0.38 })
+    expect(result.coverage.analysed).toBe(100)
+    expect(result.cells[0]).toMatchObject({ key: '/docs', total: 40, notIndexed: 36 })
+  })
+
+  // A judgement call, kept: the first row for a URL wins. The rows carry no
+  // inspection time, so a later row is not known to be newer.
+  it('keeps the first verdict when a URL repeats with another verdict', () => {
+    const result = buildIndexCohortsFromIndexingUrls({
+      urls: [row('/docs/a', true), row('https://example.com/docs/a', false)],
+      siteUrl: 'example.com',
+      reportedNotIndexed: 0,
+    })
+    expect(result).toMatchObject({ baseline: { total: 1, notIndexed: 0 } })
+  })
+
   it('carries the caller snapshot timestamp onto the wire', () => {
     const result = buildIndexCohortsFromIndexingUrls({ urls: section('/docs', 20, 4), reportedNotIndexed: 4 }, '2026-09-15T00:00:00.000Z')
     expect(result.asOf).toBe('2026-09-15T00:00:00.000Z')
@@ -126,6 +158,11 @@ describe('selectIndexCohortUrls', () => {
     expect(selectIndexCohortUrls(urls, { dimension: 'lifecycle', key: 'versioned' }, 'example.com')).toEqual(urls.slice(0, 2))
   })
 
+  it('returns a URL listed twice once, so the list matches the lead count', () => {
+    const urls = [row('/docs/a', false), row('/docs/b', false), row('https://example.com/docs/a', false)]
+    expect(selectIndexCohortUrls(urls, { dimension: 'section', key: '/docs' }, 'example.com')).toEqual(urls.slice(0, 2))
+  })
+
   it('matches section segments rather than substring search', () => {
     const urls = [row('/docs', false), row('/docs/page', false), row('/docs-other/page', false), row('/blog/docs/page', false)]
     expect(selectIndexCohortUrls(urls, { dimension: 'section', key: '/docs' }, 'example.com')).toEqual(urls.slice(0, 2))
@@ -158,6 +195,20 @@ describe('selectIndexCohortLead', () => {
       title: '36 of 40 pages under /docs are missing from Google\'s index.',
       detail: 'That is 90% not indexed, against 3% across the rest of the site.',
       actionLabel: 'Review 36 URLs',
+    })
+  })
+
+  // PR 286 Service Review. Unversioned pages failing must not blame version-pinned ones.
+  it('names unversioned pages when the evergreen cohort leads', () => {
+    const versioned = Array.from({ length: 40 }, (_, index) => ({ path: `/docs/v1/page-${index}`, indexed: true, inSitemap: true }))
+    const evergreen = Array.from({ length: 30 }, (_, index) => ({ path: `/page-${index}`, indexed: index >= 15, inSitemap: true }))
+    const diagnosis = buildIndexCohortDiagnosis({ pages: [...versioned, ...evergreen], excludedFragments: 0, notCrawled: 0 })
+    if (diagnosis._tag !== 'outliers')
+      throw new Error(`expected outliers, got ${diagnosis._tag}`)
+    expect(selectIndexCohortLead(diagnosis)).toMatchObject({
+      _tag: 'lead',
+      title: '15 of 30 unversioned pages are missing from Google\'s index.',
+      cell: { dimension: 'lifecycle', key: 'evergreen' },
     })
   })
 
