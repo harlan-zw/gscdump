@@ -61,6 +61,10 @@ export const HOSTED_COMMANDS = [
   'bing dump',
   'bing inspect',
   'bing verify',
+  'generative-ai upload',
+  'generative-ai list',
+  'generative-ai remove',
+  'generative-ai show',
 ] as const
 
 export async function loginHosted(args: Record<string, unknown>): Promise<void> {

@@ -156,6 +156,16 @@ describe('gscdump mcp runtime', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
+  it('tells an agent that the query tool has no generative AI data and how the user provides it', async () => {
+    await connect()
+
+    const { tools } = await client.listTools()
+    const description = tools.find(tool => tool.name === 'query')?.description ?? ''
+    expect(description).toContain('no API')
+    expect(description).toContain('Search Console > Performance > Generative AI features')
+    expect(description).toContain('gscdump generative-ai upload <zip> --site <site>')
+  })
+
   it('returns a Google permission failure to the agent with a next step', async () => {
     await saveTokens('token')
     await connect(url => url.includes('/sitemaps')
