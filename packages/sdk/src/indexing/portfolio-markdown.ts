@@ -29,7 +29,9 @@ export interface IndexingMarkdownSite {
   indexed: number | null
   totalUrls: number | null
   indexedPercent: number | null
+  /** Indexed share change over 7 days, in percentage points. */
   change7d: number | null
+  /** Indexed share change over 28 days, in percentage points. */
   change28d: number | null
   /** The window's daily series. */
   trend: IndexingMarkdownTrendPoint[] | null
@@ -161,9 +163,9 @@ function siteSummary(site: IndexingMarkdownSite): string {
   }
   const deltas: string[] = []
   if (site.change7d != null)
-    deltas.push(`Δ 7d ${signed(site.change7d, 1, '%')}`)
+    deltas.push(`Δ 7d ${signed(site.change7d, 1, ' points')}`)
   if (site.change28d != null)
-    deltas.push(`Δ 28d ${signed(site.change28d, 1, '%')}`)
+    deltas.push(`Δ 28d ${signed(site.change28d, 1, ' points')}`)
   if (deltas.length)
     lines.push(deltas.join('   '))
   lines.push(`Errors: ${issuesLabel(site.latestIssues)}`)

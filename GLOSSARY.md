@@ -304,7 +304,7 @@ Known URLs are the supplied denominator, not proof of every URL on the Site.
 **Casing:** `Trust gate` in prose, `trustGate` in identifiers.
 
 ### Index cohort
-**Is:** a section path or a lifecycle group of inspected URLs that Google indexes measurably worse than the rest of the Site. A cohort must clear a Bonferroni-corrected Wilson interval against its complement.
+**Is:** a section path or a lifecycle group of inspected URLs that Google indexes measurably worse than the rest of the Site. A cohort must clear a Bonferroni-corrected interval for the difference from its complement, which counts the uncertainty of both rates. Each URL counts once.
 **Use for:** `IndexCohortCell`, `buildIndexCohortDiagnosis`, `buildIndexCohortsFromIndexingUrls`, and `selectIndexCohortLead`.
 **Never:** cluster, segment, bucket.
 **Casing:** `Index cohort` in prose, `indexCohort` in identifiers.
