@@ -66,7 +66,7 @@ Indexed: 100 / 200 (50.0%)
 
 ## a (a.com)
 Indexed: 80 / 100 (80.0%)
-Δ 7d +1.5%   Δ 28d -2.0%
+Δ 7d +1.5 points   Δ 28d -2.0 points
 Errors: 3 (not-found 2, server-error 1)
 
 | Period | Indexed % | Errors |
