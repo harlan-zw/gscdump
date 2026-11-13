@@ -18,6 +18,9 @@
   cwvBucket: function
   siteUrlToHostname: function
   truncateQuery: function
+./generative-ai-report:
+  GENERATIVE_AI_REPORT_PARSER_VERSION: number
+  parseGenerativeAiReportExport: function
 ./gsc-console-url:
   gscConsoleUrl: function
 ./gsc-constants:

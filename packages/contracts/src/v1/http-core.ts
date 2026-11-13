@@ -54,6 +54,8 @@ export const HTTP_V1_ERROR_CODES = [
   'site_not_found',
   'api_key_not_found',
   'api_key_limit_reached',
+  'generative_ai_report_upload_not_found',
+  'no_registered_host_rows',
   'rate_limited',
   'conflict',
   'service_unavailable',
