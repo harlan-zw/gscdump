@@ -555,8 +555,8 @@ export function splitComparisonTotalsRow(row: Record<string, unknown> | undefine
   return { current, previous }
 }
 
-// The row and count queries of a comparison read. `windowCount` adds a
-// `totalCount` window column to every row, so the row query also answers the
+// The row and count queries of a comparison read. `includeCount` adds a
+// `totalCount` column to every row, so the row query also answers the
 // count query.
 function buildComparisonQueries<TK extends string>(
   current: BuilderState,
@@ -564,7 +564,7 @@ function buildComparisonQueries<TK extends string>(
   options: ResolverOptions<TK>,
   comparisonFilter: ComparisonFilter | undefined,
   comparisonOrderBy: ComparisonOrderBy | undefined,
-  windowCount: boolean,
+  includeCount: boolean,
 ): { main: SQL, count: SQL } {
   const { adapter, siteId, searchType } = options
   const comparisonPlan = buildComparisonPlan(current, previous, adapter.capabilities)
@@ -662,7 +662,12 @@ function buildComparisonQueries<TK extends string>(
   if (changeOrder)
     outerCurrentCols.push(changeOrder.column)
 
-  const mainQuery = sql`WITH current AS (${currentCte}), previous AS (${previousCte}) SELECT ${joinComma(outerCurrentCols)}, COALESCE(CAST(p.clicks AS DOUBLE), 0) as "prevClicks", COALESCE(CAST(p.impressions AS DOUBLE), 0) as "prevImpressions", COALESCE(p.ctr, 0) as "prevCtr", COALESCE(p.position, 0) as "prevPosition"${windowCount ? sql.raw(', COUNT(*) OVER() as "totalCount"') : sql.raw('')} FROM current c FULL OUTER JOIN previous p ON ${joinOn} WHERE 1=1 ${filterClause} ${orderSql} ${limitSql}`
+  const comparisonRows = sql`SELECT ${joinComma(outerCurrentCols)}, COALESCE(CAST(p.clicks AS DOUBLE), 0) as "prevClicks", COALESCE(CAST(p.impressions AS DOUBLE), 0) as "prevImpressions", COALESCE(p.ctr, 0) as "prevCtr", COALESCE(p.position, 0) as "prevPosition" FROM current c FULL OUTER JOIN previous p ON ${joinOn} WHERE 1=1 ${filterClause}`
+  // DuckDB 1.5.5 can invalidate the database when a window count consumes
+  // sparse join output. Share the filtered rows with a scalar count instead.
+  const mainQuery = includeCount
+    ? sql`WITH current AS (${currentCte}), previous AS (${previousCte}), comparison AS (${comparisonRows}) SELECT *, (SELECT COUNT(*) FROM comparison) as "totalCount" FROM comparison ${orderSql} ${limitSql}`
+    : sql`WITH current AS (${currentCte}), previous AS (${previousCte}) ${comparisonRows} ${orderSql} ${limitSql}`
 
   const firstGroupBy = groupByDims[0] ? groupByDims[0].replace(/\W/g, '') : 'clicks'
   const countInnerSelect = groupByDims[0] ? sql.raw(`COALESCE(c.${firstGroupBy}, p.${firstGroupBy})`) : sql.raw(`c.${firstGroupBy}`)

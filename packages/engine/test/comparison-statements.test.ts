@@ -152,6 +152,27 @@ afterAll(() => {
 })
 
 describe('comparison list in two statements', () => {
+  it('counts sparse lost rows across multiple input chunks', async () => {
+    await db.query(`INSERT INTO queries SELECT 'shared ' || i, $1, $2, day::DATE, 1, 10, 10 FROM range(10000) r(i) CROSS JOIN (VALUES ('2026-03-01'), ('2026-03-08')) days(day)`, [SITE, SEARCH_TYPE])
+    try {
+      for (let pageSize = 1; pageSize <= 1000; pageSize++) {
+        const result = await readTogether({ ...CURRENT, rowLimit: pageSize }, PREVIOUS, { filter: 'lost' })
+        expect(result.totalCount).toBe(1)
+        expect(result.rows).toEqual([expect.objectContaining({ query: 'old guide', clicks: 0, prevClicks: 4 })])
+      }
+    }
+    finally {
+      await db.query('DELETE FROM queries WHERE query LIKE \'shared %\'')
+    }
+  })
+
+  it.each(['new', 'lost', 'improving', 'declining'] as const)('returns no %s rows when both windows contain the same data', async (filter) => {
+    const result = await readTogether(CURRENT, CURRENT, { filter })
+    expect(result.rows).toEqual([])
+    expect(result.totalCount).toBe(0)
+    expect(result.totals).toEqual(result.previousTotals)
+  })
+
   it('returns the same rows, count, and totals for both windows as the four separate statements', async () => {
     const together = await readTogether(CURRENT, PREVIOUS)
     expectSameRead(together, await readSeparately(CURRENT, PREVIOUS))
