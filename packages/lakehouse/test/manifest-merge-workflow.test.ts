@@ -121,6 +121,88 @@ it('merges only metadata, keeps current files and sequence numbers, and resolves
   expect(f.commits()).toBe(commits)
 })
 
+it('merges a bounded subset and carries untouched manifests into each replacement head', async () => {
+  const f = await fixture(8)
+  const prior = await loadPriorManifests(f.metadata(), f.conn.resolver)
+  const before = await icebergManifests({ metadata: f.metadata(), resolver: f.conn.resolver })
+  const entries = (manifests: typeof before) => manifests.flatMap(m => m.entries).map(e => ({ ...e, status: 0 })).sort((a, b) => a.data_file.file_path.localeCompare(b.data_file.file_path))
+  const snapshots = structuredClone(f.metadata().snapshots)
+  const list = f.metadata().snapshots!.at(-1)!['manifest-list']!
+  const budget = f.objects.get(list)!.offset + prior.slice(0, 4).reduce((sum, m) => sum + Number(m.manifest_length), 0)
+  const reads = f.read.length
+  const writes = f.written.length
+  const result = await mergeIcebergManifests(f.conn, 'queries', { maxInputBytes: budget })
+  expect(result).toMatchObject({ _tag: 'Merged', manifestsBefore: 8, manifestsAfter: 5, files: 4 })
+  const maintenanceReads = f.read.slice(reads)
+  expect(maintenanceReads).toEqual([list, ...prior.slice(0, 4).map(m => m.manifest_path)])
+  expect(maintenanceReads.reduce((sum, path) => sum + f.objects.get(path)!.offset, 0)).toBeLessThanOrEqual(budget)
+  expect(f.written.slice(writes).reduce((sum, path) => sum + f.objects.get(path)!.offset, 0)).toBeLessThanOrEqual(budget)
+  const remaining = await loadPriorManifests(f.metadata(), f.conn.resolver)
+  for (const manifest of prior.slice(4))
+    expect(remaining).toContainEqual(manifest)
+  expect(entries(await icebergManifests({ metadata: f.metadata(), resolver: f.conn.resolver }))).toEqual(entries(before))
+  expect(f.metadata().snapshots!.slice(0, -1)).toEqual(snapshots)
+  for (let pass = 0; pass < 8; pass++) {
+    const next = await mergeIcebergManifests(f.conn, 'queries', { maxInputBytes: budget })
+    if (next._tag === 'Unchanged')
+      break
+    expect(next._tag).toBe('Merged')
+  }
+  expect(await loadPriorManifests(f.metadata(), f.conn.resolver)).toHaveLength(1)
+  expect(entries(await icebergManifests({ metadata: f.metadata(), resolver: f.conn.resolver }))).toEqual(entries(before))
+  expect((await (await createIcebergAppendFileResolver(f.conn, 'queries'))('append-0', []))._tag).toBe('Ok')
+})
+
+it.each(['conflict', 'lost-response'] as const)('preserves a partial merge inventory after a %s', async (mode) => {
+  const f = await fixture(8)
+  const prior = await loadPriorManifests(f.metadata(), f.conn.resolver)
+  const list = f.metadata().snapshots!.at(-1)!['manifest-list']!
+  const maxInputBytes = f.objects.get(list)!.offset + prior.slice(0, 4).reduce((sum, m) => sum + Number(m.manifest_length), 0)
+  const before = await icebergManifests({ metadata: f.metadata(), resolver: f.conn.resolver })
+  const files = (manifests: typeof before) => manifests.flatMap(m => m.entries.map(e => e.data_file)).sort((a, b) => a.file_path.localeCompare(b.file_path))
+  const commits = f.commits()
+  const snapshots = structuredClone(f.metadata().snapshots)
+  if (mode === 'conflict') {
+    f.race(() => f.mutate((metadata) => {
+      metadata['table-uuid'] = 'replacement-table'
+    }))
+    expect(await mergeIcebergManifests(f.conn, 'queries', { maxInputBytes })).toEqual({ _tag: 'Conflict' })
+    expect(f.commits()).toBe(commits)
+    expect(f.metadata().snapshots).toEqual(snapshots)
+  }
+  else {
+    f.loseResponse()
+    await expect(mergeIcebergManifests(f.conn, 'queries', { maxInputBytes })).rejects.toThrow('Lost response')
+    expect(f.commits()).toBe(commits + 1)
+    expect(f.metadata().snapshots!.slice(0, -1)).toEqual(snapshots)
+  }
+  expect(files(await icebergManifests({ metadata: f.metadata(), resolver: f.conn.resolver }))).toEqual(files(before))
+})
+
+it.each(['duplicate-path', 'negative-length', 'understated-length'] as const)('refuses a partial batch with %s metadata', async (mode) => {
+  const f = await fixture(8)
+  const prior = await loadPriorManifests(f.metadata(), f.conn.resolver)
+  const budgetManifests = prior.slice(0, 4).reduce((sum, m) => sum + Number(m.manifest_length), 0)
+  if (mode === 'duplicate-path') {
+    prior[7] = { ...prior[0]! }
+  }
+  else if (mode === 'negative-length') {
+    prior[7]!.manifest_length = -1n
+  }
+  else {
+    for (const manifest of prior) manifest.manifest_length = 1n
+  }
+  const snapshot = f.metadata().snapshots!.at(-1)!
+  const list = snapshot['manifest-list']!
+  await writeManifestList({ writer: f.conn.resolver.writer!(list), snapshotId: BigInt(snapshot['snapshot-id']), sequenceNumber: BigInt(snapshot['sequence-number']!), manifests: prior, formatVersion: 2 })
+  const maxInputBytes = f.objects.get(list)!.offset + (mode === 'understated-length' ? prior.length : budgetManifests)
+  const commits = f.commits()
+  const writes = f.written.length
+  expect(await mergeIcebergManifests(f.conn, 'queries', { maxInputBytes })).toEqual({ _tag: 'Err', reason: mode === 'understated-length' ? 'metadata-limit' : 'invalid-inventory' })
+  expect(f.commits()).toBe(commits)
+  expect(f.written).toHaveLength(writes)
+})
+
 it.each(['uuid', 'snapshot'] as const)('does not overwrite a concurrent %s change', async (change) => {
   const f = await fixture()
   const snapshots = f.metadata().snapshots!.length
