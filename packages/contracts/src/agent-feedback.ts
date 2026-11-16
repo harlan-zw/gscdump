@@ -19,7 +19,15 @@ export const agentFeedbackContextSchema = z.strictObject({
 
 export type AgentFeedbackContext = z.infer<typeof agentFeedbackContextSchema>
 
-export const agentRequestContextSchema = agentFeedbackContextSchema.pick({ parentRequestId: true, workflowId: true, product: true, skillDigest: true }).extend({ cliVersion: safeMetadata(64).optional(), client: safeMetadata(100).optional() })
+const skillName = safeMetadata(80).regex(/^[a-z\d][a-z\d._/-]*$/).refine(value => value.split('/').every(part => part && part !== '.' && part !== '..'), 'Use a skill name without empty or relative path segments.')
+const skillVersion = safeMetadata(40).regex(/^[a-z\d][\w.+-]*$/i)
+
+export const agentRequestContextSchema = agentFeedbackContextSchema.pick({ parentRequestId: true, workflowId: true, product: true, skillDigest: true }).extend({
+  cliVersion: safeMetadata(64).optional(),
+  client: safeMetadata(100).optional(),
+  skillName: skillName.optional(),
+  skillVersion: skillVersion.optional(),
+}).refine(value => (value.skillName === undefined) === (value.skillVersion === undefined), 'Supply the skill name and version together.')
 export type AgentRequestContext = z.infer<typeof agentRequestContextSchema>
 export const AGENT_REQUEST_HEADERS = {
   parentRequestId: 'x-parent-request-id',
@@ -27,6 +35,8 @@ export const AGENT_REQUEST_HEADERS = {
   product: 'x-gscdump-product',
   cliVersion: 'x-gscdump-cli-version',
   skillDigest: 'x-gscdump-skill-digest',
+  skillName: 'x-gscdump-skill-name',
+  skillVersion: 'x-gscdump-skill-version',
   client: 'x-gscdump-client',
 } as const satisfies Record<keyof AgentRequestContext, string>
 
