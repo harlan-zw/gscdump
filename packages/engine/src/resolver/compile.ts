@@ -555,9 +555,8 @@ export function splitComparisonTotalsRow(row: Record<string, unknown> | undefine
   return { current, previous }
 }
 
-// The row and count queries of a comparison read. `includeCount` adds a
-// `totalCount` column to every row, so the row query also answers the
-// count query.
+// The row and count queries of a comparison read. `includeCount` adds the
+// filtered count to every row before pagination.
 function buildComparisonQueries<TK extends string>(
   current: BuilderState,
   previous: BuilderState,
@@ -662,12 +661,12 @@ function buildComparisonQueries<TK extends string>(
   if (changeOrder)
     outerCurrentCols.push(changeOrder.column)
 
-  const comparisonRows = sql`SELECT ${joinComma(outerCurrentCols)}, COALESCE(CAST(p.clicks AS DOUBLE), 0) as "prevClicks", COALESCE(CAST(p.impressions AS DOUBLE), 0) as "prevImpressions", COALESCE(p.ctr, 0) as "prevCtr", COALESCE(p.position, 0) as "prevPosition" FROM current c FULL OUTER JOIN previous p ON ${joinOn} WHERE 1=1 ${filterClause}`
-  // DuckDB 1.5.5 can invalidate the database when a window count consumes
-  // sparse join output. Share the filtered rows with a scalar count instead.
+  const compared = sql`SELECT ${joinComma(outerCurrentCols)}, COALESCE(CAST(p.clicks AS DOUBLE), 0) as "prevClicks", COALESCE(CAST(p.impressions AS DOUBLE), 0) as "prevImpressions", COALESCE(p.ctr, 0) as "prevCtr", COALESCE(p.position, 0) as "prevPosition" FROM current c FULL OUTER JOIN previous p ON ${joinOn} WHERE 1=1 ${filterClause}`
+  // DuckDB's parallel window operator can invalidate the database when one
+  // join input is empty. Count the shared result with a scalar aggregate.
   const mainQuery = includeCount
-    ? sql`WITH current AS (${currentCte}), previous AS (${previousCte}), comparison AS (${comparisonRows}) SELECT *, (SELECT COUNT(*) FROM comparison) as "totalCount" FROM comparison ${orderSql} ${limitSql}`
-    : sql`WITH current AS (${currentCte}), previous AS (${previousCte}) ${comparisonRows} ${orderSql} ${limitSql}`
+    ? sql`WITH current AS (${currentCte}), previous AS (${previousCte}), compared AS (${compared}) SELECT *, (SELECT COUNT(*) FROM compared) as "totalCount" FROM compared ${orderSql} ${limitSql}`
+    : sql`WITH current AS (${currentCte}), previous AS (${previousCte}) ${compared} ${orderSql} ${limitSql}`
 
   const firstGroupBy = groupByDims[0] ? groupByDims[0].replace(/\W/g, '') : 'clicks'
   const countInnerSelect = groupByDims[0] ? sql.raw(`COALESCE(c.${firstGroupBy}, p.${firstGroupBy})`) : sql.raw(`c.${firstGroupBy}`)

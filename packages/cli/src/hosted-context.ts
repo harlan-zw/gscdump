@@ -11,5 +11,7 @@ export function hostedRequestContext(environment: Record<string, string | undefi
     workflowId: environment.GSCDUMP_WORKFLOW_ID,
     parentRequestId: environment.GSCDUMP_PARENT_REQUEST_ID,
     skillDigest: environment.GSCDUMP_SKILL_DIGEST,
+    skillName: environment.GSCDUMP_SKILL_NAME,
+    skillVersion: environment.GSCDUMP_SKILL_VERSION,
   })
 }

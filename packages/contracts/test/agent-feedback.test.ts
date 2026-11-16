@@ -1,7 +1,24 @@
 import { describe, expect, it } from 'vitest'
-import { agentOutcomeBodySchema, cliPapercutBodySchema, redactAgentFeedbackText } from '../src/agent-feedback'
+import { agentOutcomeBodySchema, agentRequestContextSchema, cliPapercutBodySchema, redactAgentFeedbackText } from '../src/agent-feedback'
 
 describe('agent feedback boundary', () => {
+  it('preserves an explicit packaged skill identity on authenticated requests', () => {
+    expect(agentRequestContextSchema.parse({ skillName: 'gscdump', skillVersion: '7.13.2' })).toEqual({ skillName: 'gscdump', skillVersion: '7.13.2' })
+  })
+
+  it.each([
+    { skillName: 'gscdump' },
+    { skillVersion: '7.13.2' },
+    { skillName: '../private', skillVersion: '1' },
+    { skillName: 'gscdump/../../private', skillVersion: '1' },
+    { skillName: 'gscdump//private', skillVersion: '1' },
+    { skillName: 'gscdump/', skillVersion: '1' },
+    { skillName: 'gscdump', skillVersion: 'secret\nheader' },
+    { skillName: 'gscdump', skillVersion: 'https://private.example/token' },
+  ])('rejects incomplete or unsafe skill context %j', (input) => {
+    expect(agentRequestContextSchema.safeParse(input).success).toBe(false)
+  })
+
   const report = { command: 'indexing watch list', comment: 'Agent report by Codex. Expected retained rows. Received a timeout.', agent: 'Codex', cliVersion: '7.12.0', node: '26.8.1', platform: 'linux' }
 
   it('preserves safe request correlation and declared product origin', () => {

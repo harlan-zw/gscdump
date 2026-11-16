@@ -173,6 +173,16 @@ describe('comparison list in two statements', () => {
     expect(result.totals).toEqual(result.previousTotals)
   })
 
+  it('counts lost rows with parallel execution when the current window is empty', async () => {
+    await db.query('SET threads = 2')
+    const current = withFilter(CURRENT, eq(query, 'old guide'))
+    const previous = withFilter(PREVIOUS, eq(query, 'old guide'))
+    for (let attempt = 0; attempt < 1000; attempt++) {
+      const rows = await run(resolveComparisonSQLOptimized(current, previous, options))
+      expect(rows).toEqual([expect.objectContaining({ query: 'old guide', clicks: 0, prevClicks: 4, totalCount: 1n })])
+    }
+  })
+
   it('returns the same rows, count, and totals for both windows as the four separate statements', async () => {
     const together = await readTogether(CURRENT, PREVIOUS)
     expectSameRead(together, await readSeparately(CURRENT, PREVIOUS))
