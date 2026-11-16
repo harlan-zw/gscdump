@@ -1,7 +1,7 @@
 {
   "name": "@gscdump/sdk",
   "type": "module",
-  "version": "7.12.0",
+  "version": "7.14.0",
   "description": "Consumer SDK for hosted gscdump.com integrations.",
   "author": {
     "name": "Harlan Wilton",
@@ -91,6 +91,11 @@
       "import": "./dist/hosted-query.mjs",
       "default": "./dist/hosted-query.mjs"
     },
+    "./indexing": {
+      "types": "./dist/indexing.d.mts",
+      "import": "./dist/indexing.mjs",
+      "default": "./dist/indexing.mjs"
+    },
     "./indexing-issues": {
       "types": "./dist/indexing-issues.d.mts",
       "import": "./dist/indexing-issues.mjs",
@@ -156,6 +161,7 @@
     "prepack": "pnpm run build"
   },
   "dependencies": {
+    "@gscdump/analysis": "workspace:^",
     "@gscdump/contracts": "workspace:^",
     "fflate": "catalog:deps",
     "gscdump": "workspace:^",

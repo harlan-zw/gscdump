@@ -10,6 +10,7 @@ export default defineBuildConfig({
         './src/errors.ts',
         './src/query-dimension.ts',
         './src/report/index.ts',
+        './src/sitemap-health.ts',
         './src/source/index.ts',
       ],
     },

@@ -1,7 +1,7 @@
 {
   "name": "@gscdump/analysis",
   "type": "module",
-  "version": "7.12.0",
+  "version": "7.14.0",
   "description": "GSC analyzers — striking-distance, opportunity, movers, decay, brand, clustering, concentration, seasonality. Pure row-based + DuckDB-native.",
   "author": {
     "name": "Harlan Wilton",
@@ -45,6 +45,11 @@
       "types": "./dist/report/index.d.mts",
       "import": "./dist/report/index.mjs",
       "default": "./dist/report/index.mjs"
+    },
+    "./sitemap-health": {
+      "types": "./dist/sitemap-health.d.mts",
+      "import": "./dist/sitemap-health.mjs",
+      "default": "./dist/sitemap-health.mjs"
     },
     "./source": {
       "types": "./dist/source/index.d.mts",

@@ -762,6 +762,9 @@ importers:
 
   packages/sdk:
     dependencies:
+      '@gscdump/analysis':
+        specifier: workspace:^
+        version: link:../analysis
       '@gscdump/contracts':
         specifier: workspace:^
         version: link:../contracts

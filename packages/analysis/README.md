@@ -23,6 +23,7 @@ Node.js 22 or newer is required for Node consumers.
 | `@gscdump/analysis/registry` | All 30 registered Analyzers, including SQL implementations |
 | `@gscdump/analysis/report` | Report registry, `runReport`, and formatting |
 | `@gscdump/analysis/source` | Composite and in-memory Source factories |
+| `@gscdump/analysis/sitemap-health` | Sitemap health deltas and sitemap collapse checks, with no imports |
 | `@gscdump/analysis/errors` | Typed analysis errors and rendering helpers |
 
 `@gscdump/engine` owns the Analyzer, Source, and period contracts.

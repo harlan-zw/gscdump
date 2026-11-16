@@ -433,6 +433,11 @@ the failure and continue. Never retry an uncertain submission.
 
 Hosted requests send the CLI version and client identity. Optional environment variables add declared context:
 `GSCDUMP_PRODUCT`, `GSCDUMP_WORKFLOW_ID`, `GSCDUMP_PARENT_REQUEST_ID`, and `GSCDUMP_SKILL_DIGEST`.
+For Hosted commands that you run through this skill, supply `GSCDUMP_SKILL_NAME=gscdump` and `GSCDUMP_SKILL_VERSION` together.
+After `skill status` confirms a matching artifact, use the version printed by `gscdump --version` as the packaged skill version.
+Set these variables for that command only. Do not add them to a shell profile or ordinary CLI calls.
+If the installed artifact does not match or its version is unknown, omit both variables.
+The name and version are caller-reported context. They do not prove that an agent read the skill.
 Use opaque IDs, never prompts, private URLs, or customer rows. No local command history uploads automatically.
 
 ## Record task quality

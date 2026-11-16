@@ -36,7 +36,7 @@ const PRESERVED_DATA_FIELDS = new Set([
 export interface MergeIcebergManifestsOptions {
   /** Lower the four-MiB encoded manifest limit. */
   maxManifestBytes?: number
-  /** Lower the eight-MiB aggregate metadata input/output limit. */
+  /** Lower the eight-MiB input/output limit for one batch. Untouched manifests stay in the head. */
   maxInputBytes?: number
   /** Lower the ten-thousand live-entry limit. */
   maxEntries?: number
@@ -53,7 +53,7 @@ export type MergeIcebergManifestsResult
     | { _tag: 'Err', reason: 'unsupported-format' | 'unsupported-deletes' | 'invalid-inventory' | 'metadata-limit' | 'authority-changed' }
 
 /**
- * Merge current append-only v2 manifests without reading or rewriting DATA files.
+ * Merge a bounded batch of current append-only v2 manifests without rewriting DATA files.
  * Historical snapshots and their immutable manifests remain available to append retries.
  * Conflicts leave staged metadata unreferenced. Never delete it after an ambiguous commit response.
  */
@@ -101,10 +101,25 @@ export async function mergeIcebergManifests(conn: IcebergConnection, table: stri
     return { _tag: 'Err', reason: 'unsupported-deletes' }
   if (prior.length < 2)
     return { _tag: 'Unchanged' }
+  const selected = new Set<string>()
+  const seen = new Set<string>()
+  let reservedBytes = inputBytes
+  for (const manifest of prior) {
+    const bytes = Number(manifest.manifest_length)
+    if (!Number.isSafeInteger(bytes) || bytes <= 0 || seen.has(manifest.manifest_path))
+      return { _tag: 'Err', reason: 'invalid-inventory' }
+    seen.add(manifest.manifest_path)
+    if (bytes > MAX_MANIFEST_BYTES || reservedBytes + bytes > maxInputBytes)
+      continue
+    selected.add(manifest.manifest_path)
+    reservedBytes += bytes
+  }
+  if (selected.size < 2)
+    return { _tag: 'Err', reason: 'metadata-limit' }
   const snapshot = metadata.snapshots?.find(s => BigInt(s['snapshot-id']) === BigInt(metadata['current-snapshot-id']!))
   if (snapshot?.['manifest-list'])
     lists.set(snapshot['manifest-list'], Promise.resolve(prior))
-  const inventory = await icebergManifests({ metadata, resolver, manifestCache: { lists, entries: new Map() } }).catch((error: unknown) => {
+  const inventory = await icebergManifests({ metadata, resolver, manifestCache: { lists, entries: new Map() }, partitionFilter: (_partitions, _specId, manifest) => selected.has(manifest.manifest_path) }).catch((error: unknown) => {
     if (error === overflow)
       return null
     throw error
@@ -170,7 +185,7 @@ export async function mergeIcebergManifests(conn: IcebergConnection, table: stri
     if (!await encode(entries, specId))
       return { _tag: 'Err', reason: 'metadata-limit' }
   }
-  if (planned.length >= prior.length || planned.length === 0)
+  if (planned.length >= selected.size || planned.length === 0)
     return { _tag: 'Unchanged' }
   const snapshotId = newSnapshotId(metadata)
   const sequenceNumber = BigInt(metadata['last-sequence-number']) + 1n
@@ -185,7 +200,7 @@ export async function mergeIcebergManifests(conn: IcebergConnection, table: stri
     manifests.push({ manifest_path: path, manifest_length: BigInt(plan.bytes.byteLength), partition_spec_id: plan.specId, content: 0, sequence_number: sequenceNumber, min_sequence_number: plan.entries.reduce((min, entry) => entry.sequence_number! < min ? entry.sequence_number! : min, sequenceNumber), added_snapshot_id: snapshotId, added_files_count: 0, existing_files_count: plan.entries.length, deleted_files_count: 0, added_rows_count: 0n, existing_rows_count: plan.entries.reduce((sum, entry) => sum + entry.data_file.record_count, 0n), deleted_rows_count: 0n, partitions: buildPartitionSummaries(plan.entries.map(entry => entry.data_file.partition), schema, spec) })
   }
   const listWriter = boundedWriter()
-  const staged = await buildSnapshotUpdate({ tableUrl: metadata.location, metadata, resolver: { ...resolver, writer: () => listWriter }, snapshotId, sequenceNumber, manifestUuid, timestampMs: Date.now(), formatVersion: 2, priorManifests: prior, skipPriorManifestPaths: new Set(prior.map(manifest => manifest.manifest_path)), newManifests: manifests, summary: { operation: 'replace' }, writtenFiles: manifests.map(manifest => manifest.manifest_path) }).catch((error: unknown) => {
+  const staged = await buildSnapshotUpdate({ tableUrl: metadata.location, metadata, resolver: { ...resolver, writer: () => listWriter }, snapshotId, sequenceNumber, manifestUuid, timestampMs: Date.now(), formatVersion: 2, priorManifests: prior, skipPriorManifestPaths: selected, newManifests: manifests, summary: { operation: 'replace' }, writtenFiles: manifests.map(manifest => manifest.manifest_path) }).catch((error: unknown) => {
     if (error === overflow)
       return null
     throw error
@@ -206,5 +221,5 @@ export async function mergeIcebergManifests(conn: IcebergConnection, table: stri
     return { _tag: 'Conflict' }
   if (options.cache)
     await invalidateSnapshotRef(options.cache, conn.namespace, table, conn.cacheScope)
-  return { _tag: 'Merged', snapshotId: String(snapshotId), manifestsBefore: prior.length, manifestsAfter: manifests.length, files: paths.size }
+  return { _tag: 'Merged', snapshotId: String(snapshotId), manifestsBefore: prior.length, manifestsAfter: prior.length - selected.size + manifests.length, files: paths.size }
 }
