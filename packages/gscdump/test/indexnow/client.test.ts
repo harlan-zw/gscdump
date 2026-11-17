@@ -16,6 +16,12 @@ describe('indexNow client', () => {
     await indexNow({ fetch }).submit(input)
     expect(fetch).toHaveBeenCalledWith('https://api.indexnow.org/indexnow', expect.objectContaining({ method: 'POST', body: JSON.stringify({ host: input.host, key, keyLocation: input.keyLocation, urlList: input.urls }) }))
   })
+  it('sends the protocol request to a configured endpoint', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>(async () => new Response(null, { status: 200 }))
+    const result = await indexNow({ fetch, endpoint: 'https://yandex.com/indexnow' }).submit(input)
+    expect(result).toMatchObject({ ok: true, value: { _tag: 'accepted' } })
+    expect(fetch.mock.calls).toEqual([['https://yandex.com/indexnow', expect.objectContaining({ method: 'POST', body: JSON.stringify({ host: input.host, key, keyLocation: input.keyLocation, urlList: input.urls }) })]])
+  })
   it.each(['https://evil.com/page', 'https://www.example.com/page', 'https://example.com:8080/page', 'ftp://example.com/page', 'https://user:pass@example.com/page'])('rejects outside-host URL %s before fetch', async (url) => {
     const fetch = vi.fn()
     expect(await indexNow({ fetch }).submit({ ...input, urls: [url] })).toMatchObject({ ok: false, error: { _tag: 'InvalidRequest' } })

@@ -401,10 +401,27 @@ index fe0b876cf69e9e2227bedcad6535ba311310b7c9..35ba514c4f802ba74c5e4f97c9691a82
 +  return reader => readTypeValue(reader, type)
  }
 diff --git a/src/catalog/rest.js b/src/catalog/rest.js
-index 723451f34f95dab280ac699abdfd34c9703bba50..4bd3e8bf25f7da11a732b8493b89ae9e5606b6de 100644
+index 723451f34f95dab280ac699abdfd34c9703bba50..e1958420046b4ee6043318f0a41e3a270a9d7e62 100644
 --- a/src/catalog/rest.js
 +++ b/src/catalog/rest.js
-@@ -173,7 +173,7 @@ export async function restCatalogCreateTable(ctx, {
+@@ -101,12 +101,14 @@ export function restCatalogListTables(ctx, { namespace }) {
+  * @param {object} options
+  * @param {string | string[]} options.namespace
+  * @param {string} options.table
++ * @param {'all' | 'refs'} [options.snapshots] - Defaults to all snapshots. Refs loads only branch and tag snapshots.
+  * @returns {Promise<LoadTableResponse>}
+  */
+-export async function restCatalogLoadTable(ctx, { namespace, table }) {
++export async function restCatalogLoadTable(ctx, { namespace, table, snapshots }) {
+   const ns = encodeNamespace(namespace)
+   const tbl = encodeURIComponent(table)
+-  const res = await restFetch(ctx, `namespaces/${ns}/tables/${tbl}`)
++  const query = snapshots === undefined ? '' : `?snapshots=${encodeURIComponent(snapshots)}`
++  const res = await restFetch(ctx, `namespaces/${ns}/tables/${tbl}${query}`)
+   const body = parseIcebergJson(await res.text())
+   return {
+     metadataLocation: body['metadata-location'],
+@@ -173,7 +175,7 @@ export async function restCatalogCreateTable(ctx, {
    const res = await restFetch(ctx, `namespaces/${ns}/tables`, {
      method: 'POST',
      headers: { 'content-type': 'application/json' },
@@ -413,7 +430,7 @@ index 723451f34f95dab280ac699abdfd34c9703bba50..4bd3e8bf25f7da11a732b8493b89ae9e
    })
    const responseBody = parseIcebergJson(await res.text())
    return {
-@@ -205,7 +205,7 @@ export async function restCatalogRegisterTable(ctx, { namespace, table, metadata
+@@ -205,7 +207,7 @@ export async function restCatalogRegisterTable(ctx, { namespace, table, metadata
    const res = await restFetch(ctx, `namespaces/${ns}/register`, {
      method: 'POST',
      headers: { 'content-type': 'application/json' },
@@ -422,7 +439,7 @@ index 723451f34f95dab280ac699abdfd34c9703bba50..4bd3e8bf25f7da11a732b8493b89ae9e
    })
    const responseBody = parseIcebergJson(await res.text())
    return {
-@@ -280,7 +280,7 @@ export async function restCatalogCreateNamespace(ctx, { namespace, properties })
+@@ -280,7 +282,7 @@ export async function restCatalogCreateNamespace(ctx, { namespace, properties })
    const res = await restFetch(ctx, 'namespaces', {
      method: 'POST',
      headers: { 'content-type': 'application/json' },
@@ -431,7 +448,7 @@ index 723451f34f95dab280ac699abdfd34c9703bba50..4bd3e8bf25f7da11a732b8493b89ae9e
    })
    const body = parseIcebergJson(await res.text())
    return {
-@@ -316,7 +316,7 @@ export async function restCatalogRenameTable(ctx, { source, destination }) {
+@@ -316,7 +318,7 @@ export async function restCatalogRenameTable(ctx, { source, destination }) {
    await restFetch(ctx, 'tables/rename', {
      method: 'POST',
      headers: { 'content-type': 'application/json' },
@@ -1130,6 +1147,25 @@ index 02ab344831083a390fda9a5038c33d0997ec72ef..d3989404f21c20a231917f7c0eb1a666
      const staged = await stage(workingCtx)
      try {
        return await commitStaged(catalog, target, workingCtx, staged)
+diff --git a/types/catalog/rest.d.ts b/types/catalog/rest.d.ts
+index 6a3c3a7fe336b99e26e1aa8cf31636bb0ad7a4df..aa1b759581202366b2a05ba57362fcc3d396ff38 100644
+--- a/types/catalog/rest.d.ts
++++ b/types/catalog/rest.d.ts
+@@ -62,11 +62,13 @@ export declare function restCatalogListTables(ctx: RestCatalogContext, { namespa
+  * @param {object} options
+  * @param {string | string[]} options.namespace
+  * @param {string} options.table
++ * @param {'all' | 'refs'} [options.snapshots] - Defaults to all snapshots. Refs loads only branch and tag snapshots.
+  * @returns {Promise<LoadTableResponse>}
+  */
+-export declare function restCatalogLoadTable(ctx: RestCatalogContext, { namespace, table }: {
++export declare function restCatalogLoadTable(ctx: RestCatalogContext, { namespace, table, snapshots }: {
+     namespace: string | string[];
+     table: string;
++    snapshots?: 'all' | 'refs';
+ }): Promise<LoadTableResponse>;
+ /**
+  * Load vended storage credentials for a table. The catalog returns
 diff --git a/types/index.d.ts b/types/index.d.ts
 index 7cfd5378c18f0cef88a1cee7f397095dd75cce76..b1cb9f5da0ed074c5dd9c9b7124fd9448155a371 100644
 --- a/types/index.d.ts

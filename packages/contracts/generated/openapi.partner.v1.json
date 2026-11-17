@@ -2214,6 +2214,91 @@
           }
         ]
       },
+      "partner.sites.indexing.indexnow.automatic_sending.update.error": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "enum": [
+                  "invalid_request",
+                  "unauthorized",
+                  "forbidden",
+                  "site_not_found",
+                  "rate_limited",
+                  "internal_error",
+                  "contract_violation"
+                ],
+                "type": "string"
+              },
+              "details": {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/partner.sites.indexing.indexnow.automatic_sending.update.error.__schema0"
+                },
+                "propertyNames": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              "message": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "requestId": {
+                "pattern": "^req_[\\w-]+$",
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "requestId",
+              "retryable",
+              "details"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "partner.sites.indexing.indexnow.automatic_sending.update.error.__schema0": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          },
+          {
+            "items": {
+              "$ref": "#/components/schemas/partner.sites.indexing.indexnow.automatic_sending.update.error.__schema0"
+            },
+            "type": "array"
+          },
+          {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/partner.sites.indexing.indexnow.automatic_sending.update.error.__schema0"
+            },
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": "object"
+          }
+        ]
+      },
       "partner.sites.indexing.indexnow.connection.configure.error": {
         "additionalProperties": false,
         "properties": {
@@ -19873,9 +19958,526 @@
         "x-gscdump-visibility": "public"
       }
     },
+    "/api/partner/v1/sites/{siteId}/indexing/indexnow/automatic-sending": {
+      "patch": {
+        "description": "With automatic sending on and a verified key, gscdump sends new and changed sitemap URLs after each sitemap update. Only changes after the switch turns on or the key verifies count. Removed URLs are never sent. Automatic Submissions use at most 500 of the Site's 1,000 daily URLs. The Site needs a configured key first. Acceptance does not prove indexing.",
+        "operationId": "partner.sites.indexing.indexnow.automatic_sending.update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "siteId",
+            "required": true,
+            "schema": {
+              "pattern": "^s_[\\w-]+$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "pattern": "^req_[\\w-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "automaticSending": {
+                    "enum": [
+                      "on",
+                      "off"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "automaticSending"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "oneOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "_tag": {
+                              "const": "disconnected",
+                              "type": "string"
+                            },
+                            "host": {
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "_tag",
+                            "host"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "_tag": {
+                              "const": "verification-required",
+                              "type": "string"
+                            },
+                            "automaticSending": {
+                              "oneOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "_tag": {
+                                      "const": "off",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "_tag"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "_tag": {
+                                      "const": "on",
+                                      "type": "string"
+                                    },
+                                    "lastCheck": {
+                                      "anyOf": [
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "changedUrls": {
+                                              "maximum": 9007199254740991,
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            },
+                                            "checkedAt": {
+                                              "format": "date-time",
+                                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                              "type": "string"
+                                            },
+                                            "completeness": {
+                                              "oneOf": [
+                                                {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "_tag": {
+                                                      "const": "complete",
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "_tag"
+                                                  ],
+                                                  "type": "object"
+                                                },
+                                                {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "_tag": {
+                                                      "const": "truncated",
+                                                      "type": "string"
+                                                    },
+                                                    "reasons": {
+                                                      "items": {
+                                                        "enum": [
+                                                          "daily-limit",
+                                                          "scan-limit"
+                                                        ],
+                                                        "type": "string"
+                                                      },
+                                                      "minItems": 1,
+                                                      "type": "array"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "_tag",
+                                                    "reasons"
+                                                  ],
+                                                  "type": "object"
+                                                }
+                                              ]
+                                            },
+                                            "sentUrls": {
+                                              "maximum": 9007199254740991,
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "required": [
+                                            "checkedAt",
+                                            "changedUrls",
+                                            "sentUrls",
+                                            "completeness"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "since": {
+                                      "format": "date-time",
+                                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "_tag",
+                                    "since",
+                                    "lastCheck"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
+                            },
+                            "host": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "keyLocation": {
+                              "format": "uri",
+                              "type": "string"
+                            },
+                            "reason": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "_tag",
+                            "host",
+                            "keyLocation",
+                            "reason",
+                            "automaticSending"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "_tag": {
+                              "const": "connected",
+                              "type": "string"
+                            },
+                            "automaticSending": {
+                              "oneOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "_tag": {
+                                      "const": "off",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "_tag"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "_tag": {
+                                      "const": "on",
+                                      "type": "string"
+                                    },
+                                    "lastCheck": {
+                                      "anyOf": [
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "changedUrls": {
+                                              "maximum": 9007199254740991,
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            },
+                                            "checkedAt": {
+                                              "format": "date-time",
+                                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                              "type": "string"
+                                            },
+                                            "completeness": {
+                                              "oneOf": [
+                                                {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "_tag": {
+                                                      "const": "complete",
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "_tag"
+                                                  ],
+                                                  "type": "object"
+                                                },
+                                                {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "_tag": {
+                                                      "const": "truncated",
+                                                      "type": "string"
+                                                    },
+                                                    "reasons": {
+                                                      "items": {
+                                                        "enum": [
+                                                          "daily-limit",
+                                                          "scan-limit"
+                                                        ],
+                                                        "type": "string"
+                                                      },
+                                                      "minItems": 1,
+                                                      "type": "array"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "_tag",
+                                                    "reasons"
+                                                  ],
+                                                  "type": "object"
+                                                }
+                                              ]
+                                            },
+                                            "sentUrls": {
+                                              "maximum": 9007199254740991,
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "required": [
+                                            "checkedAt",
+                                            "changedUrls",
+                                            "sentUrls",
+                                            "completeness"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "since": {
+                                      "format": "date-time",
+                                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "_tag",
+                                    "since",
+                                    "lastCheck"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
+                            },
+                            "host": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "keyLocation": {
+                              "format": "uri",
+                              "type": "string"
+                            },
+                            "verifiedAt": {
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "_tag",
+                            "host",
+                            "keyLocation",
+                            "verifiedAt",
+                            "automaticSending"
+                          ],
+                          "type": "object"
+                        }
+                      ]
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "requestId": {
+                          "pattern": "^req_[\\w-]+$",
+                          "type": "string"
+                        },
+                        "surface": {
+                          "const": "partner",
+                          "type": "string"
+                        },
+                        "version": {
+                          "const": "1.0",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "requestId",
+                        "surface",
+                        "version"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.sites.indexing.indexnow.automatic_sending.update.error"
+                }
+              }
+            },
+            "description": "Declared client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.sites.indexing.indexnow.automatic_sending.update.error"
+                }
+              }
+            },
+            "description": "Safe internal or contract error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.sites.indexing.indexnow.automatic_sending.update.error"
+                }
+              }
+            },
+            "description": "Stable error envelope"
+          }
+        },
+        "security": [
+          {
+            "user_key": []
+          },
+          {
+            "partner_key": []
+          }
+        ],
+        "summary": "Turn IndexNow automatic sending on or off",
+        "tags": [
+          "Indexing"
+        ],
+        "x-gscdump-errors": [
+          "invalid_request",
+          "unauthorized",
+          "forbidden",
+          "site_not_found",
+          "rate_limited",
+          "internal_error",
+          "contract_violation"
+        ],
+        "x-gscdump-examples": {
+          "request": {
+            "body": {
+              "automaticSending": "on"
+            },
+            "params": {
+              "siteId": "s_01"
+            }
+          },
+          "response": {
+            "data": {
+              "_tag": "connected",
+              "automaticSending": {
+                "_tag": "on",
+                "lastCheck": null,
+                "since": "2026-11-18T00:00:00.000Z"
+              },
+              "host": "example.com",
+              "keyLocation": "https://example.com/abc12345.txt",
+              "verifiedAt": "2026-09-30T00:00:00.000Z"
+            },
+            "meta": {
+              "requestId": "req_01",
+              "surface": "partner",
+              "version": "1.0"
+            }
+          }
+        },
+        "x-gscdump-lifecycle": {
+          "introduced": "7.16.0"
+        },
+        "x-gscdump-ownership": [
+          {
+            "credential": "user_key",
+            "rule": "authorized_site"
+          },
+          {
+            "credential": "partner_key",
+            "rule": "authorized_site"
+          }
+        ],
+        "x-gscdump-resources": {
+          "changes": [
+            {
+              "idFrom": "params.siteId",
+              "type": "site.indexing"
+            }
+          ],
+          "reads": [
+            {
+              "idFrom": "params.siteId",
+              "type": "site.indexing"
+            }
+          ]
+        },
+        "x-gscdump-scopes": [
+          "indexing:write"
+        ],
+        "x-gscdump-semantics": {
+          "idempotent": true,
+          "kind": "mutation",
+          "readConsistency": null,
+          "retry": "idempotent",
+          "sideEffects": "state"
+        },
+        "x-gscdump-visibility": "public"
+      }
+    },
     "/api/partner/v1/sites/{siteId}/indexing/indexnow/connection": {
       "get": {
-        "description": "Returns the exact Site host and IndexNow key verification state.",
+        "description": "Returns the exact Site host, IndexNow key verification state, and automatic sending state.",
         "operationId": "partner.sites.indexing.indexnow.connection.get",
         "parameters": [
           {
@@ -19931,6 +20533,119 @@
                               "const": "verification-required",
                               "type": "string"
                             },
+                            "automaticSending": {
+                              "oneOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "_tag": {
+                                      "const": "off",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "_tag"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "_tag": {
+                                      "const": "on",
+                                      "type": "string"
+                                    },
+                                    "lastCheck": {
+                                      "anyOf": [
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "changedUrls": {
+                                              "maximum": 9007199254740991,
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            },
+                                            "checkedAt": {
+                                              "format": "date-time",
+                                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                              "type": "string"
+                                            },
+                                            "completeness": {
+                                              "oneOf": [
+                                                {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "_tag": {
+                                                      "const": "complete",
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "_tag"
+                                                  ],
+                                                  "type": "object"
+                                                },
+                                                {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "_tag": {
+                                                      "const": "truncated",
+                                                      "type": "string"
+                                                    },
+                                                    "reasons": {
+                                                      "items": {
+                                                        "enum": [
+                                                          "daily-limit",
+                                                          "scan-limit"
+                                                        ],
+                                                        "type": "string"
+                                                      },
+                                                      "minItems": 1,
+                                                      "type": "array"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "_tag",
+                                                    "reasons"
+                                                  ],
+                                                  "type": "object"
+                                                }
+                                              ]
+                                            },
+                                            "sentUrls": {
+                                              "maximum": 9007199254740991,
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "required": [
+                                            "checkedAt",
+                                            "changedUrls",
+                                            "sentUrls",
+                                            "completeness"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "since": {
+                                      "format": "date-time",
+                                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "_tag",
+                                    "since",
+                                    "lastCheck"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
+                            },
                             "host": {
                               "minLength": 1,
                               "type": "string"
@@ -19950,7 +20665,8 @@
                             "_tag",
                             "host",
                             "keyLocation",
-                            "reason"
+                            "reason",
+                            "automaticSending"
                           ],
                           "type": "object"
                         },
@@ -19960,6 +20676,119 @@
                             "_tag": {
                               "const": "connected",
                               "type": "string"
+                            },
+                            "automaticSending": {
+                              "oneOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "_tag": {
+                                      "const": "off",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "_tag"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "_tag": {
+                                      "const": "on",
+                                      "type": "string"
+                                    },
+                                    "lastCheck": {
+                                      "anyOf": [
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "changedUrls": {
+                                              "maximum": 9007199254740991,
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            },
+                                            "checkedAt": {
+                                              "format": "date-time",
+                                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                              "type": "string"
+                                            },
+                                            "completeness": {
+                                              "oneOf": [
+                                                {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "_tag": {
+                                                      "const": "complete",
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "_tag"
+                                                  ],
+                                                  "type": "object"
+                                                },
+                                                {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "_tag": {
+                                                      "const": "truncated",
+                                                      "type": "string"
+                                                    },
+                                                    "reasons": {
+                                                      "items": {
+                                                        "enum": [
+                                                          "daily-limit",
+                                                          "scan-limit"
+                                                        ],
+                                                        "type": "string"
+                                                      },
+                                                      "minItems": 1,
+                                                      "type": "array"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "_tag",
+                                                    "reasons"
+                                                  ],
+                                                  "type": "object"
+                                                }
+                                              ]
+                                            },
+                                            "sentUrls": {
+                                              "maximum": 9007199254740991,
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "required": [
+                                            "checkedAt",
+                                            "changedUrls",
+                                            "sentUrls",
+                                            "completeness"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "since": {
+                                      "format": "date-time",
+                                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "_tag",
+                                    "since",
+                                    "lastCheck"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
                             },
                             "host": {
                               "minLength": 1,
@@ -19979,7 +20808,8 @@
                             "_tag",
                             "host",
                             "keyLocation",
-                            "verifiedAt"
+                            "verifiedAt",
+                            "automaticSending"
                           ],
                           "type": "object"
                         }
@@ -20206,6 +21036,119 @@
                               "const": "verification-required",
                               "type": "string"
                             },
+                            "automaticSending": {
+                              "oneOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "_tag": {
+                                      "const": "off",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "_tag"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "_tag": {
+                                      "const": "on",
+                                      "type": "string"
+                                    },
+                                    "lastCheck": {
+                                      "anyOf": [
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "changedUrls": {
+                                              "maximum": 9007199254740991,
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            },
+                                            "checkedAt": {
+                                              "format": "date-time",
+                                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                              "type": "string"
+                                            },
+                                            "completeness": {
+                                              "oneOf": [
+                                                {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "_tag": {
+                                                      "const": "complete",
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "_tag"
+                                                  ],
+                                                  "type": "object"
+                                                },
+                                                {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "_tag": {
+                                                      "const": "truncated",
+                                                      "type": "string"
+                                                    },
+                                                    "reasons": {
+                                                      "items": {
+                                                        "enum": [
+                                                          "daily-limit",
+                                                          "scan-limit"
+                                                        ],
+                                                        "type": "string"
+                                                      },
+                                                      "minItems": 1,
+                                                      "type": "array"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "_tag",
+                                                    "reasons"
+                                                  ],
+                                                  "type": "object"
+                                                }
+                                              ]
+                                            },
+                                            "sentUrls": {
+                                              "maximum": 9007199254740991,
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "required": [
+                                            "checkedAt",
+                                            "changedUrls",
+                                            "sentUrls",
+                                            "completeness"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "since": {
+                                      "format": "date-time",
+                                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "_tag",
+                                    "since",
+                                    "lastCheck"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
+                            },
                             "host": {
                               "minLength": 1,
                               "type": "string"
@@ -20225,7 +21168,8 @@
                             "_tag",
                             "host",
                             "keyLocation",
-                            "reason"
+                            "reason",
+                            "automaticSending"
                           ],
                           "type": "object"
                         },
@@ -20235,6 +21179,119 @@
                             "_tag": {
                               "const": "connected",
                               "type": "string"
+                            },
+                            "automaticSending": {
+                              "oneOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "_tag": {
+                                      "const": "off",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "_tag"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "_tag": {
+                                      "const": "on",
+                                      "type": "string"
+                                    },
+                                    "lastCheck": {
+                                      "anyOf": [
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "changedUrls": {
+                                              "maximum": 9007199254740991,
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            },
+                                            "checkedAt": {
+                                              "format": "date-time",
+                                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                              "type": "string"
+                                            },
+                                            "completeness": {
+                                              "oneOf": [
+                                                {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "_tag": {
+                                                      "const": "complete",
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "_tag"
+                                                  ],
+                                                  "type": "object"
+                                                },
+                                                {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "_tag": {
+                                                      "const": "truncated",
+                                                      "type": "string"
+                                                    },
+                                                    "reasons": {
+                                                      "items": {
+                                                        "enum": [
+                                                          "daily-limit",
+                                                          "scan-limit"
+                                                        ],
+                                                        "type": "string"
+                                                      },
+                                                      "minItems": 1,
+                                                      "type": "array"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "_tag",
+                                                    "reasons"
+                                                  ],
+                                                  "type": "object"
+                                                }
+                                              ]
+                                            },
+                                            "sentUrls": {
+                                              "maximum": 9007199254740991,
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "required": [
+                                            "checkedAt",
+                                            "changedUrls",
+                                            "sentUrls",
+                                            "completeness"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "since": {
+                                      "format": "date-time",
+                                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "_tag",
+                                    "since",
+                                    "lastCheck"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
                             },
                             "host": {
                               "minLength": 1,
@@ -20254,7 +21311,8 @@
                             "_tag",
                             "host",
                             "keyLocation",
-                            "verifiedAt"
+                            "verifiedAt",
+                            "automaticSending"
                           ],
                           "type": "object"
                         }
@@ -20358,6 +21416,9 @@
           "response": {
             "data": {
               "_tag": "verification-required",
+              "automaticSending": {
+                "_tag": "off"
+              },
               "host": "example.com",
               "keyLocation": "https://example.com/abc12345.txt",
               "reason": null
@@ -20467,6 +21528,119 @@
                               "const": "verification-required",
                               "type": "string"
                             },
+                            "automaticSending": {
+                              "oneOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "_tag": {
+                                      "const": "off",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "_tag"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "_tag": {
+                                      "const": "on",
+                                      "type": "string"
+                                    },
+                                    "lastCheck": {
+                                      "anyOf": [
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "changedUrls": {
+                                              "maximum": 9007199254740991,
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            },
+                                            "checkedAt": {
+                                              "format": "date-time",
+                                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                              "type": "string"
+                                            },
+                                            "completeness": {
+                                              "oneOf": [
+                                                {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "_tag": {
+                                                      "const": "complete",
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "_tag"
+                                                  ],
+                                                  "type": "object"
+                                                },
+                                                {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "_tag": {
+                                                      "const": "truncated",
+                                                      "type": "string"
+                                                    },
+                                                    "reasons": {
+                                                      "items": {
+                                                        "enum": [
+                                                          "daily-limit",
+                                                          "scan-limit"
+                                                        ],
+                                                        "type": "string"
+                                                      },
+                                                      "minItems": 1,
+                                                      "type": "array"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "_tag",
+                                                    "reasons"
+                                                  ],
+                                                  "type": "object"
+                                                }
+                                              ]
+                                            },
+                                            "sentUrls": {
+                                              "maximum": 9007199254740991,
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "required": [
+                                            "checkedAt",
+                                            "changedUrls",
+                                            "sentUrls",
+                                            "completeness"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "since": {
+                                      "format": "date-time",
+                                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "_tag",
+                                    "since",
+                                    "lastCheck"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
+                            },
                             "host": {
                               "minLength": 1,
                               "type": "string"
@@ -20486,7 +21660,8 @@
                             "_tag",
                             "host",
                             "keyLocation",
-                            "reason"
+                            "reason",
+                            "automaticSending"
                           ],
                           "type": "object"
                         },
@@ -20496,6 +21671,119 @@
                             "_tag": {
                               "const": "connected",
                               "type": "string"
+                            },
+                            "automaticSending": {
+                              "oneOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "_tag": {
+                                      "const": "off",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "_tag"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "_tag": {
+                                      "const": "on",
+                                      "type": "string"
+                                    },
+                                    "lastCheck": {
+                                      "anyOf": [
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "changedUrls": {
+                                              "maximum": 9007199254740991,
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            },
+                                            "checkedAt": {
+                                              "format": "date-time",
+                                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                              "type": "string"
+                                            },
+                                            "completeness": {
+                                              "oneOf": [
+                                                {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "_tag": {
+                                                      "const": "complete",
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "_tag"
+                                                  ],
+                                                  "type": "object"
+                                                },
+                                                {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "_tag": {
+                                                      "const": "truncated",
+                                                      "type": "string"
+                                                    },
+                                                    "reasons": {
+                                                      "items": {
+                                                        "enum": [
+                                                          "daily-limit",
+                                                          "scan-limit"
+                                                        ],
+                                                        "type": "string"
+                                                      },
+                                                      "minItems": 1,
+                                                      "type": "array"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "_tag",
+                                                    "reasons"
+                                                  ],
+                                                  "type": "object"
+                                                }
+                                              ]
+                                            },
+                                            "sentUrls": {
+                                              "maximum": 9007199254740991,
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "required": [
+                                            "checkedAt",
+                                            "changedUrls",
+                                            "sentUrls",
+                                            "completeness"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "since": {
+                                      "format": "date-time",
+                                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "_tag",
+                                    "since",
+                                    "lastCheck"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
                             },
                             "host": {
                               "minLength": 1,
@@ -20515,7 +21803,8 @@
                             "_tag",
                             "host",
                             "keyLocation",
-                            "verifiedAt"
+                            "verifiedAt",
+                            "automaticSending"
                           ],
                           "type": "object"
                         }
@@ -20616,6 +21905,9 @@
           "response": {
             "data": {
               "_tag": "connected",
+              "automaticSending": {
+                "_tag": "off"
+              },
               "host": "example.com",
               "keyLocation": "https://example.com/abc12345.txt",
               "verifiedAt": "2026-09-30T00:00:00.000Z"
@@ -20669,7 +21961,7 @@
     },
     "/api/partner/v1/sites/{siteId}/indexing/indexnow/submissions": {
       "get": {
-        "description": "Returns Submission Receipts for this Site.",
+        "description": "Returns Submission Receipts for this Site. `trigger` is `manual` when the caller chose the URLs and `automatic` when automatic sending chose them from sitemap changes. Acceptance does not prove indexing.",
         "operationId": "partner.sites.indexing.indexnow.submissions.list",
         "parameters": [
           {
@@ -20786,6 +22078,13 @@
                                   "retryAt": {
                                     "type": "null"
                                   },
+                                  "trigger": {
+                                    "enum": [
+                                      "manual",
+                                      "automatic"
+                                    ],
+                                    "type": "string"
+                                  },
                                   "updatedAt": {
                                     "format": "date-time",
                                     "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
@@ -20804,6 +22103,7 @@
                                 "required": [
                                   "_tag",
                                   "id",
+                                  "trigger",
                                   "urls",
                                   "createdAt",
                                   "updatedAt",
@@ -20845,6 +22145,13 @@
                                   "retryAt": {
                                     "type": "null"
                                   },
+                                  "trigger": {
+                                    "enum": [
+                                      "manual",
+                                      "automatic"
+                                    ],
+                                    "type": "string"
+                                  },
                                   "updatedAt": {
                                     "format": "date-time",
                                     "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
@@ -20863,6 +22170,7 @@
                                 "required": [
                                   "_tag",
                                   "id",
+                                  "trigger",
                                   "urls",
                                   "createdAt",
                                   "updatedAt",
@@ -20905,6 +22213,13 @@
                                   "retryAt": {
                                     "type": "null"
                                   },
+                                  "trigger": {
+                                    "enum": [
+                                      "manual",
+                                      "automatic"
+                                    ],
+                                    "type": "string"
+                                  },
                                   "updatedAt": {
                                     "format": "date-time",
                                     "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
@@ -20923,6 +22238,7 @@
                                 "required": [
                                   "_tag",
                                   "id",
+                                  "trigger",
                                   "urls",
                                   "createdAt",
                                   "updatedAt",
@@ -20977,6 +22293,13 @@
                                   "retryAt": {
                                     "type": "null"
                                   },
+                                  "trigger": {
+                                    "enum": [
+                                      "manual",
+                                      "automatic"
+                                    ],
+                                    "type": "string"
+                                  },
                                   "updatedAt": {
                                     "format": "date-time",
                                     "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
@@ -20995,6 +22318,7 @@
                                 "required": [
                                   "_tag",
                                   "id",
+                                  "trigger",
                                   "urls",
                                   "createdAt",
                                   "updatedAt",
@@ -21047,6 +22371,13 @@
                                     "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
                                     "type": "string"
                                   },
+                                  "trigger": {
+                                    "enum": [
+                                      "manual",
+                                      "automatic"
+                                    ],
+                                    "type": "string"
+                                  },
                                   "updatedAt": {
                                     "format": "date-time",
                                     "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
@@ -21065,6 +22396,7 @@
                                 "required": [
                                   "_tag",
                                   "id",
+                                  "trigger",
                                   "urls",
                                   "createdAt",
                                   "updatedAt",
@@ -21115,6 +22447,13 @@
                                   "retryAt": {
                                     "type": "null"
                                   },
+                                  "trigger": {
+                                    "enum": [
+                                      "manual",
+                                      "automatic"
+                                    ],
+                                    "type": "string"
+                                  },
                                   "updatedAt": {
                                     "format": "date-time",
                                     "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
@@ -21133,6 +22472,7 @@
                                 "required": [
                                   "_tag",
                                   "id",
+                                  "trigger",
                                   "urls",
                                   "createdAt",
                                   "updatedAt",
@@ -21397,6 +22737,13 @@
                                 "retryAt": {
                                   "type": "null"
                                 },
+                                "trigger": {
+                                  "enum": [
+                                    "manual",
+                                    "automatic"
+                                  ],
+                                  "type": "string"
+                                },
                                 "updatedAt": {
                                   "format": "date-time",
                                   "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
@@ -21415,6 +22762,7 @@
                               "required": [
                                 "_tag",
                                 "id",
+                                "trigger",
                                 "urls",
                                 "createdAt",
                                 "updatedAt",
@@ -21456,6 +22804,13 @@
                                 "retryAt": {
                                   "type": "null"
                                 },
+                                "trigger": {
+                                  "enum": [
+                                    "manual",
+                                    "automatic"
+                                  ],
+                                  "type": "string"
+                                },
                                 "updatedAt": {
                                   "format": "date-time",
                                   "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
@@ -21474,6 +22829,7 @@
                               "required": [
                                 "_tag",
                                 "id",
+                                "trigger",
                                 "urls",
                                 "createdAt",
                                 "updatedAt",
@@ -21516,6 +22872,13 @@
                                 "retryAt": {
                                   "type": "null"
                                 },
+                                "trigger": {
+                                  "enum": [
+                                    "manual",
+                                    "automatic"
+                                  ],
+                                  "type": "string"
+                                },
                                 "updatedAt": {
                                   "format": "date-time",
                                   "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
@@ -21534,6 +22897,7 @@
                               "required": [
                                 "_tag",
                                 "id",
+                                "trigger",
                                 "urls",
                                 "createdAt",
                                 "updatedAt",
@@ -21588,6 +22952,13 @@
                                 "retryAt": {
                                   "type": "null"
                                 },
+                                "trigger": {
+                                  "enum": [
+                                    "manual",
+                                    "automatic"
+                                  ],
+                                  "type": "string"
+                                },
                                 "updatedAt": {
                                   "format": "date-time",
                                   "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
@@ -21606,6 +22977,7 @@
                               "required": [
                                 "_tag",
                                 "id",
+                                "trigger",
                                 "urls",
                                 "createdAt",
                                 "updatedAt",
@@ -21658,6 +23030,13 @@
                                   "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
                                   "type": "string"
                                 },
+                                "trigger": {
+                                  "enum": [
+                                    "manual",
+                                    "automatic"
+                                  ],
+                                  "type": "string"
+                                },
                                 "updatedAt": {
                                   "format": "date-time",
                                   "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
@@ -21676,6 +23055,7 @@
                               "required": [
                                 "_tag",
                                 "id",
+                                "trigger",
                                 "urls",
                                 "createdAt",
                                 "updatedAt",
@@ -21726,6 +23106,13 @@
                                 "retryAt": {
                                   "type": "null"
                                 },
+                                "trigger": {
+                                  "enum": [
+                                    "manual",
+                                    "automatic"
+                                  ],
+                                  "type": "string"
+                                },
                                 "updatedAt": {
                                   "format": "date-time",
                                   "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
@@ -21744,6 +23131,7 @@
                               "required": [
                                 "_tag",
                                 "id",
+                                "trigger",
                                 "urls",
                                 "createdAt",
                                 "updatedAt",
@@ -21870,6 +23258,7 @@
                 "id": "in_01",
                 "reason": null,
                 "retryAt": null,
+                "trigger": "manual",
                 "updatedAt": "2026-09-30T00:00:00.000Z",
                 "urls": [
                   "https://example.com/page"
