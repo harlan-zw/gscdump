@@ -92,8 +92,8 @@ const cases: readonly TreeShakeCase[] = [
   {
     entry: 'packages/contracts/dist/v1/http.mjs',
     exportName: 'createGscdumpV1Protocol',
-    // Include the optional agent journey and skill response schemas, and IndexNow automatic sending.
-    maxBytes: 215_000,
+    // Include the optional agent journey and skill response schemas, IndexNow automatic sending, and Submission summaries and outcomes.
+    maxBytes: 221_000,
     allowedImports: ['zod'],
   },
   {
@@ -104,7 +104,7 @@ const cases: readonly TreeShakeCase[] = [
   {
     entry: 'packages/sdk/dist/v1/http.mjs',
     exportName: 'createGscdumpV1Client',
-    maxBytes: 14_500,
+    maxBytes: 15_000,
     allowedDynamicImports: ['@gscdump/contracts/v1/http'],
   },
   {

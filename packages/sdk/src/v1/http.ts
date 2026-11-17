@@ -795,6 +795,8 @@ export function createGscdumpV1Client(options: CreateGscdumpV1ClientOptions): Gs
     submitSiteIndexNow: (input, executeOptions) => execute('partner.sites.indexing.indexnow.submissions.create' satisfies MethodId<'submitSiteIndexNow'>, input, executeOptions),
     listSiteIndexNowSubmissionReceipts: (input, executeOptions) => execute('partner.sites.indexing.indexnow.submissions.list' satisfies MethodId<'listSiteIndexNowSubmissionReceipts'>, input, executeOptions),
     updateSiteIndexNowAutomaticSending: (input, executeOptions) => execute('partner.sites.indexing.indexnow.automatic_sending.update' satisfies MethodId<'updateSiteIndexNowAutomaticSending'>, input, executeOptions),
+    getSiteSubmissionSummary: (input, executeOptions) => execute('partner.sites.indexing.submissions.summary.get' satisfies MethodId<'getSiteSubmissionSummary'>, input, executeOptions),
+    listSiteSubmissionOutcomes: (input, executeOptions) => execute('partner.sites.indexing.submissions.outcomes.list' satisfies MethodId<'listSiteSubmissionOutcomes'>, input, executeOptions),
     getSiteIndexingApiGrant: (input, executeOptions) => execute('partner.sites.indexing.google.grant.get' satisfies MethodId<'getSiteIndexingApiGrant'>, input, executeOptions),
     getUserIndexingApiGrant: (input, executeOptions) => execute('partner.users.indexing.google.grant.get' satisfies MethodId<'getUserIndexingApiGrant'>, input, executeOptions),
     updateUserIndexingApiGrant: (input, executeOptions) => execute('partner.users.indexing.google.grant.update' satisfies MethodId<'updateUserIndexingApiGrant'>, input, executeOptions),
