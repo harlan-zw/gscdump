@@ -28,8 +28,22 @@ export interface IndexNowClient {
   submit: (input: IndexNowInput & { urls: string[] }) => Promise<Result<IndexNowDelivery, IndexNowInvalidRequest>>
 }
 
-export function indexNow(options: { fetch?: typeof globalThis.fetch, clock?: () => Date, timeoutMs?: number } = {}): IndexNowClient {
+export interface IndexNowOptions {
+  fetch?: typeof globalThis.fetch
+  clock?: () => Date
+  timeoutMs?: number
+  /**
+   * The participating engine endpoint that receives submissions. Every participating engine shares
+   * a submission with the others. Bing's endpoints answer Cloudflare Workers egress with HTTP 429,
+   * so a Worker should pick an endpoint that accepts it, such as `https://yandex.com/indexnow`.
+   * @default 'https://api.indexnow.org/indexnow'
+   */
+  endpoint?: string
+}
+
+export function indexNow(options: IndexNowOptions = {}): IndexNowClient {
   const fetch = options.fetch ?? globalThis.fetch
+  const endpoint = options.endpoint ?? 'https://api.indexnow.org/indexnow'
   const timeoutMs = options.timeoutMs ?? 10_000
   const clock = options.clock ?? (() => new Date())
   return {
@@ -77,7 +91,7 @@ export function indexNow(options: { fetch?: typeof globalThis.fetch, clock?: () 
         if (!url || !['https:', 'http:'].includes(url.protocol) || url.host !== input.host || url.username || url.password || url.port || url.hash || !url.pathname.startsWith(directory))
           return err({ _tag: 'InvalidRequest', reason: 'url-outside-key-scope' })
       }
-      const response = await fetch('https://api.indexnow.org/indexnow', {
+      const response = await fetch(endpoint, {
         method: 'POST',
         redirect: 'manual',
         signal: AbortSignal.timeout(timeoutMs),
