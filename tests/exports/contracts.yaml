@@ -340,12 +340,19 @@
   indexingApiGrantUpdateV1Schema: object
   indexingApiGrantV1Schema: object
   indexingApiGrantV1Schemas: object
+  INDEXNOW_AUTOMATIC_SENDING_STATES: object
+  INDEXNOW_AUTOMATIC_TRUNCATION_REASONS: object
+  INDEXNOW_SUBMISSION_TRIGGERS: object
+  indexNowAutomaticSendingUpdateV1Schema: object
+  indexNowAutomaticSendingV1Schema: object
+  indexNowAutomaticSendingV1Schemas: object
   indexNowConfigureV1Schema: object
   indexNowConnectionV1Schema: object
   indexNowConnectionV1Schemas: object
   indexNowKeyV1Schema: object
   indexNowSubmissionReceiptV1Schema: object
   indexNowSubmissionReceiptV1Schemas: object
+  indexNowSubmissionTriggerV1Schema: object
   indexNowSubmitV1Schema: object
   isUnknownHttpV1OperationError: function
   listHttpOperations: function
@@ -418,12 +425,19 @@
   indexingApiGrantUpdateV1Schema: object
   indexingApiGrantV1Schema: object
   indexingApiGrantV1Schemas: object
+  INDEXNOW_AUTOMATIC_SENDING_STATES: object
+  INDEXNOW_AUTOMATIC_TRUNCATION_REASONS: object
+  INDEXNOW_SUBMISSION_TRIGGERS: object
+  indexNowAutomaticSendingUpdateV1Schema: object
+  indexNowAutomaticSendingV1Schema: object
+  indexNowAutomaticSendingV1Schemas: object
   indexNowConfigureV1Schema: object
   indexNowConnectionV1Schema: object
   indexNowConnectionV1Schemas: object
   indexNowKeyV1Schema: object
   indexNowSubmissionReceiptV1Schema: object
   indexNowSubmissionReceiptV1Schemas: object
+  indexNowSubmissionTriggerV1Schema: object
   indexNowSubmitV1Schema: object
   isUnknownHttpV1OperationError: function
   listHttpOperations: function

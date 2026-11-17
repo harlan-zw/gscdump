@@ -134,6 +134,13 @@ The two ADR-0012 decisions are
 **Casing:** `Submission Receipt` in prose, `submissionReceipt` in identifiers.
 **Ratified by:** gscdump.com ADR-0008.
 
+### Automatic sending
+**Is:** the per-Site IndexNow switch. While it is on and the key is verified, the host sends new and changed sitemap URLs to IndexNow after each sitemap update.
+**Use for:** `indexNowAutomaticSendingV1Schemas`, `updateSiteIndexNowAutomaticSending`, and `trigger: 'automatic'` on an IndexNow Submission Receipt.
+**Never:** auto-submit, automatic indexing, auto IndexNow. Never a claim that an engine indexed or crawled a URL.
+**Casing:** `Automatic sending` in prose, `automaticSending` in identifiers.
+**Proposed by:** gscdump.com ADR-0030.
+
 ### Analyzer
 **Is:** the pure `{ id, requires, build, reduce }` contract in `@gscdump/analysis`;
 one unit of analysis over rows or SQL. The internal Analyzer contract has the same meaning.
