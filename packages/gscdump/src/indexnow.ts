@@ -34,8 +34,8 @@ export interface IndexNowOptions {
   timeoutMs?: number
   /**
    * The participating engine endpoint that receives submissions. Every participating engine shares
-   * a submission with the others. Bing's endpoints answer Cloudflare Workers egress with HTTP 429,
-   * so a Worker should pick an endpoint that accepts it, such as `https://yandex.com/indexnow`.
+   * a submission with the others. In November 2026, Bing's endpoints answered Cloudflare Workers
+   * egress with HTTP 429, and `https://yandex.com/indexnow` accepted it.
    * @default 'https://api.indexnow.org/indexnow'
    */
   endpoint?: string

@@ -121,7 +121,7 @@ Verification allows HTTPS, disables redirects, and reads at most 1,024 bytes wit
 Inject `fetch`, `clock`, or `timeoutMs` when you need different transport or timing.
 Submissions go to `https://api.indexnow.org/indexnow` unless you pass `endpoint`.
 Every participating engine shares a submission with the others.
-Bing's endpoints answer Cloudflare Workers egress with HTTP 429, so a Worker can pass `endpoint: 'https://yandex.com/indexnow'`.
+In November 2026, Bing's endpoints answered Cloudflare Workers egress with HTTP 429, and `https://yandex.com/indexnow` accepted it.
 Expected input failures return `Result`; infrastructure failures propagate.
 
 Submission Receipts describe delivery. HTTP 200 means accepted; HTTP 202 means key validation remains pending.
