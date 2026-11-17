@@ -119,6 +119,9 @@ if (verification.ok && verification.value._tag === 'verified') {
 The client rejects URLs outside the exact host or key directory before sending.
 Verification allows HTTPS, disables redirects, and reads at most 1,024 bytes within ten seconds.
 Inject `fetch`, `clock`, or `timeoutMs` when you need different transport or timing.
+Submissions go to `https://api.indexnow.org/indexnow` unless you pass `endpoint`.
+Every participating engine shares a submission with the others.
+In November 2026, Bing's endpoints answered Cloudflare Workers egress with HTTP 429, and `https://yandex.com/indexnow` accepted it.
 Expected input failures return `Result`; infrastructure failures propagate.
 
 Submission Receipts describe delivery. HTTP 200 means accepted; HTTP 202 means key validation remains pending.
