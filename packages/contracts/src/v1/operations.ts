@@ -98,7 +98,7 @@ import {
   defineSuccessResponse,
   HTTP_V1_ERROR_CODES,
 } from './http-core'
-import { indexNowConfigureV1Schema, indexNowConnectionV1Schemas, indexNowSubmissionReceiptV1Schemas, indexNowSubmitV1Schema } from './indexnow'
+import { indexNowAutomaticSendingUpdateV1Schema, indexNowConfigureV1Schema, indexNowConnectionV1Schemas, indexNowSubmissionReceiptV1Schemas, indexNowSubmitV1Schema } from './indexnow'
 import {
   createRealtimeV1Schemas,
   GSCDUMP_REALTIME_ACK_POLICY,
@@ -1472,7 +1472,7 @@ export function createGscdumpV1Protocol() {
         errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
         resources: { reads: [{ type: 'site.indexing', idFrom: 'params.siteId' }], changes: [] },
         lifecycle: { introduced: '1.7.0' },
-        docs: { summary: 'Get IndexNow connection', description: 'Returns the exact Site host and IndexNow key verification state.', tags: ['Indexing'], examples: { request: { params: { siteId: 's_01' } }, response: { data: { _tag: 'disconnected', host: 'example.com' }, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } } } },
+        docs: { summary: 'Get IndexNow connection', description: 'Returns the exact Site host, IndexNow key verification state, and automatic sending state.', tags: ['Indexing'], examples: { request: { params: { siteId: 's_01' } }, response: { data: { _tag: 'disconnected', host: 'example.com' }, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } } } },
       }),
       configureSiteIndexNowConnection: defineHttpOperation({
         ...gscdumpV1OperationRoute('partner.sites.indexing.indexnow.connection.configure'),
@@ -1485,7 +1485,7 @@ export function createGscdumpV1Protocol() {
         errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
         resources: { reads: [{ type: 'site.indexing', idFrom: 'params.siteId' }], changes: [{ type: 'site.indexing', idFrom: 'params.siteId' }] },
         lifecycle: { introduced: '1.7.0' },
-        docs: { summary: 'Configure IndexNow connection', description: 'Stores an IndexNow key and key file location for the Site.', tags: ['Indexing'], examples: { request: { params: { siteId: 's_01' }, body: { key: 'abc12345' } }, response: { data: { _tag: 'verification-required', host: 'example.com', keyLocation: 'https://example.com/abc12345.txt', reason: null }, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } } } },
+        docs: { summary: 'Configure IndexNow connection', description: 'Stores an IndexNow key and key file location for the Site.', tags: ['Indexing'], examples: { request: { params: { siteId: 's_01' }, body: { key: 'abc12345' } }, response: { data: { _tag: 'verification-required', host: 'example.com', keyLocation: 'https://example.com/abc12345.txt', reason: null, automaticSending: { _tag: 'off' } }, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } } } },
       }),
       verifySiteIndexNowConnection: defineHttpOperation({
         ...gscdumpV1OperationRoute('partner.sites.indexing.indexnow.connection.verify'),
@@ -1498,7 +1498,7 @@ export function createGscdumpV1Protocol() {
         errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
         resources: { reads: [{ type: 'site.indexing', idFrom: 'params.siteId' }], changes: [{ type: 'site.indexing', idFrom: 'params.siteId' }] },
         lifecycle: { introduced: '1.7.0' },
-        docs: { summary: 'Verify IndexNow key file', description: 'Checks the key file on the exact Site host.', tags: ['Indexing'], examples: { request: { params: { siteId: 's_01' } }, response: { data: { _tag: 'connected', host: 'example.com', keyLocation: 'https://example.com/abc12345.txt', verifiedAt: '2026-09-30T00:00:00.000Z' }, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } } } },
+        docs: { summary: 'Verify IndexNow key file', description: 'Checks the key file on the exact Site host.', tags: ['Indexing'], examples: { request: { params: { siteId: 's_01' } }, response: { data: { _tag: 'connected', host: 'example.com', keyLocation: 'https://example.com/abc12345.txt', verifiedAt: '2026-09-30T00:00:00.000Z', automaticSending: { _tag: 'off' } }, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } } } },
       }),
       submitSiteIndexNow: defineHttpOperation({
         ...gscdumpV1OperationRoute('partner.sites.indexing.indexnow.submissions.create'),
@@ -1511,7 +1511,7 @@ export function createGscdumpV1Protocol() {
         errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
         resources: { reads: [{ type: 'site.indexing', idFrom: 'params.siteId' }], changes: [{ type: 'site.indexing', idFrom: 'params.siteId' }] },
         lifecycle: { introduced: '1.7.0' },
-        docs: { summary: 'Submit IndexNow change notifications', description: 'Queues change notifications and returns a Submission Receipt. Acceptance does not prove indexing.', tags: ['Indexing'], examples: { request: { params: { siteId: 's_01' }, body: { urls: ['https://example.com/page'], idempotencyKey: 'req_01' } }, response: { data: { submissionReceipt: { _tag: 'queued', id: 'in_01', urls: ['https://example.com/page'], createdAt: '2026-09-30T00:00:00.000Z', updatedAt: '2026-09-30T00:00:00.000Z', attempts: 0, httpStatus: null, reason: null, retryAt: null } }, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } } } },
+        docs: { summary: 'Submit IndexNow change notifications', description: 'Queues change notifications and returns a Submission Receipt. Acceptance does not prove indexing.', tags: ['Indexing'], examples: { request: { params: { siteId: 's_01' }, body: { urls: ['https://example.com/page'], idempotencyKey: 'req_01' } }, response: { data: { submissionReceipt: { _tag: 'queued', id: 'in_01', trigger: 'manual', urls: ['https://example.com/page'], createdAt: '2026-09-30T00:00:00.000Z', updatedAt: '2026-09-30T00:00:00.000Z', attempts: 0, httpStatus: null, reason: null, retryAt: null } }, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } } } },
       }),
       listSiteIndexNowSubmissionReceipts: defineHttpOperation({
         ...gscdumpV1OperationRoute('partner.sites.indexing.indexnow.submissions.list'),
@@ -1524,7 +1524,20 @@ export function createGscdumpV1Protocol() {
         errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
         resources: { reads: [{ type: 'site.indexing', idFrom: 'params.siteId' }], changes: [] },
         lifecycle: { introduced: '1.7.0' },
-        docs: { summary: 'List IndexNow Submission Receipts', description: 'Returns Submission Receipts for this Site.', tags: ['Indexing'], examples: { request: { params: { siteId: 's_01' }, query: { limit: 25, offset: 0 } }, response: { data: { submissionReceipts: [], pagination: { total: 0, limit: 25, offset: 0, hasMore: false } }, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } } } },
+        docs: { summary: 'List IndexNow Submission Receipts', description: 'Returns Submission Receipts for this Site. `trigger` is `manual` when the caller chose the URLs and `automatic` when automatic sending chose them from sitemap changes. Acceptance does not prove indexing.', tags: ['Indexing'], examples: { request: { params: { siteId: 's_01' }, query: { limit: 25, offset: 0 } }, response: { data: { submissionReceipts: [], pagination: { total: 0, limit: 25, offset: 0, hasMore: false } }, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } } } },
+      }),
+      updateSiteIndexNowAutomaticSending: defineHttpOperation({
+        ...gscdumpV1OperationRoute('partner.sites.indexing.indexnow.automatic_sending.update'),
+        visibility: 'public',
+        semantics: { kind: 'mutation', sideEffects: 'state', idempotent: true, retry: 'idempotent', readConsistency: null },
+        auth: { credentials: ['user_key', 'partner_key'], scopes: ['indexing:write'], ownership: [{ credential: 'user_key', rule: 'authorized_site' }, { credential: 'partner_key', rule: 'authorized_site' }] },
+        request: { params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }), query: null, headers: requestHeaders, body: indexNowAutomaticSendingUpdateV1Schema },
+        responses: { 200: indexNowConnectionResponse },
+        errors: partnerSiteErrors,
+        errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [{ type: 'site.indexing', idFrom: 'params.siteId' }], changes: [{ type: 'site.indexing', idFrom: 'params.siteId' }] },
+        lifecycle: { introduced: '7.16.0' },
+        docs: { summary: 'Turn IndexNow automatic sending on or off', description: 'With automatic sending on and a verified key, gscdump sends new and changed sitemap URLs after each sitemap update. Only changes after the switch turns on or the key verifies count. Removed URLs are never sent. Automatic Submissions use at most 500 of the Site\'s 1,000 daily URLs. The Site needs a configured key first. Acceptance does not prove indexing.', tags: ['Indexing'], examples: { request: { params: { siteId: 's_01' }, body: { automaticSending: 'on' } }, response: { data: { _tag: 'connected', host: 'example.com', keyLocation: 'https://example.com/abc12345.txt', verifiedAt: '2026-09-30T00:00:00.000Z', automaticSending: { _tag: 'on', since: '2026-11-18T00:00:00.000Z', lastCheck: null } }, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } } } },
       }),
       getUserIndexingApiGrant: defineHttpOperation({
         ...gscdumpV1OperationRoute('partner.users.indexing.google.grant.get'),
