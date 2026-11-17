@@ -139,7 +139,7 @@ The two ADR-0012 decisions are
 **Use for:** `indexNowAutomaticSendingV1Schemas`, `updateSiteIndexNowAutomaticSending`, and `trigger: 'automatic'` on an IndexNow Submission Receipt.
 **Never:** auto-submit, automatic indexing, auto IndexNow. Never a claim that an engine indexed or crawled a URL.
 **Casing:** `Automatic sending` in prose, `automaticSending` in identifiers.
-**Proposed by:** gscdump.com ADR-0030.
+**Ratified by:** gscdump.com ADR-0031, accepted on 2026-11-18.
 
 ### Analyzer
 **Is:** the pure `{ id, requires, build, reduce }` contract in `@gscdump/analysis`;
