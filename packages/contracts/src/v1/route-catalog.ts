@@ -40,6 +40,8 @@ export const GSCDUMP_V1_ROUTE_CATALOG = {
     'partner.sites.indexing.indexnow.submissions.create': { surface: 'partner', method: 'POST', template: '/sites/{siteId}/indexing/indexnow/submissions' },
     'partner.sites.indexing.indexnow.submissions.list': { surface: 'partner', method: 'GET', template: '/sites/{siteId}/indexing/indexnow/submissions' },
     'partner.sites.indexing.indexnow.automatic_sending.update': { surface: 'partner', method: 'PATCH', template: '/sites/{siteId}/indexing/indexnow/automatic-sending' },
+    'partner.sites.indexing.submissions.summary.get': { surface: 'partner', method: 'GET', template: '/sites/{siteId}/indexing/submissions/summary' },
+    'partner.sites.indexing.submissions.outcomes.list': { surface: 'partner', method: 'GET', template: '/sites/{siteId}/indexing/submissions/outcomes' },
     'partner.sites.indexing.google.submissions.create': { surface: 'partner', method: 'POST', template: '/sites/{siteId}/indexing/google/submissions' },
     'partner.sites.indexing.google.submissions.list': { surface: 'partner', method: 'GET', template: '/sites/{siteId}/indexing/google/submissions' },
     'partner.sites.indexing.google.grant.get': { surface: 'partner', method: 'GET', template: '/sites/{siteId}/indexing/google/grant' },

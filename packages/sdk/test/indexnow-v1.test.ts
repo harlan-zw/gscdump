@@ -33,3 +33,22 @@ describe('indexNow hosted client', () => {
     expect(result.data.submissionReceipts[0]?.trigger).toBe('manual')
   })
 })
+
+describe('submission reads', () => {
+  it('requests the summary window and returns the counts', async () => {
+    const summary = { window: { days: 7, from: '2026-11-11T00:00:00.000Z', to: '2026-11-18T00:00:00.000Z' }, indexNow: { submissions: 0, urls: 0, urlsByState: { queued: 0, accepted: 0, pending: 0, rejected: 0, retrying: 0, failed: 0 }, urlsByTrigger: { manual: 0, automatic: 0 } }, google: { submissions: 0, byState: { accepted: 0, rejected: 0, failed: 0 } } }
+    const fetch = vi.fn<typeof globalThis.fetch>(async () => new Response(JSON.stringify({ data: summary, meta }), { status: 200 }))
+    const client = createGscdumpV1Client({ apiRoot: '/api/_gscdump', credential: 'secret', fetch })
+    const result = await client.getSiteSubmissionSummary({ params: { siteId: 's_1' }, query: { days: 7 } })
+    expect(result.data).toEqual(summary)
+    expect(String(fetch.mock.calls[0]?.[0])).toBe('/api/_gscdump/partner/v1/sites/s_1/indexing/submissions/summary?days=7')
+  })
+
+  it('sends receipt filters as query parameters', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>(async () => new Response(JSON.stringify({ data: { submissionReceipts: [], pagination: { total: 0, limit: 25, offset: 0, hasMore: false } }, meta }), { status: 200 }))
+    const client = createGscdumpV1Client({ apiRoot: '/api/_gscdump', credential: 'secret', fetch })
+    await client.listSiteIndexNowSubmissionReceipts({ params: { siteId: 's_1' }, query: { limit: 25, offset: 0, trigger: 'automatic', state: 'accepted' } })
+    const url = new URL(String(fetch.mock.calls[0]?.[0]), 'https://host.test')
+    expect(Object.fromEntries(url.searchParams)).toMatchObject({ trigger: 'automatic', state: 'accepted' })
+  })
+})
