@@ -79,6 +79,8 @@ export const submissionSummaryV1Schemas = {
 }
 
 export const SUBMISSION_OUTCOME_PAGE_MAX = 50
+/** Receipt states an outcome can carry. A 202 (`pending`) still means IndexNow received the URL. */
+export const SUBMISSION_OUTCOME_STATES = ['accepted', 'pending'] as const
 export const submissionOutcomesQueryV1Schema = z.strictObject({
   days: windowDays,
   channel: submissionChannelV1Schema.optional(),
@@ -112,16 +114,16 @@ const clientInspection = { coverageState: coverageStateTagSchema.catch('unrecogn
 const submissionRefShape = {
   channel: submissionChannelV1Schema,
   receiptId: z.string().min(1),
-  // Only accepted receipts qualify for an outcome.
-  state: z.literal('accepted'),
+  // Only received receipts qualify for an outcome: IndexNow `accepted` or `pending` (HTTP 202), or Google `accepted`.
+  state: z.enum(SUBMISSION_OUTCOME_STATES),
   trigger: indexNowSubmissionTriggerV1Schema,
-  // Time recorded when the delivery attempt that received HTTP 200 started.
+  // When the engine received it: the start of the delivery attempt that got HTTP 200 or 202.
   submittedAt: z.iso.datetime(),
 }
 
 const outcomeRowProducer = z.strictObject({
   url: z.url(),
-  // The newest accepted Submission of this URL in the window.
+  // The newest received Submission of this URL in the window.
   submission: z.strictObject(submissionRefShape),
   google: z.discriminatedUnion('_tag', [z.strictObject(inspectedAfter), z.strictObject(notInspectedSince), z.strictObject(neverInspected), z.strictObject(unavailable)]),
 })
