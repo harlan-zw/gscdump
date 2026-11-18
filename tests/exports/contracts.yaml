@@ -378,6 +378,7 @@
   sitemapSubmitResultV1Schemas: object
   SUBMISSION_CHANNELS: object
   SUBMISSION_OUTCOME_PAGE_MAX: number
+  SUBMISSION_OUTCOME_STATES: object
   SUBMISSION_WINDOW_MAX_DAYS: number
   submissionChannelV1Schema: object
   submissionOutcomesQueryV1Schema: object
@@ -473,6 +474,7 @@
   sitemapSubmitResultV1Schemas: object
   SUBMISSION_CHANNELS: object
   SUBMISSION_OUTCOME_PAGE_MAX: number
+  SUBMISSION_OUTCOME_STATES: object
   SUBMISSION_WINDOW_MAX_DAYS: number
   submissionChannelV1Schema: object
   submissionOutcomesQueryV1Schema: object
