@@ -21370,7 +21370,7 @@
     },
     "/api/partner/v1/sites/{siteId}/indexing/submissions/outcomes": {
       "get": {
-        "description": "Returns each URL an engine accepted in the last `days` days, newest first, with its newest accepted Submission and Google's latest stored URL Inspection compared with the acceptance time. Receipts in any other state do not appear. It reads stored inspections only and spends no URL Inspections. It shows order in time, never cause, and a receipt proves receipt only.",
+        "description": "Returns each URL an engine received in the last `days` days, newest first: IndexNow `accepted` or `pending` (HTTP 202), or Google `accepted`. Each URL carries its newest received Submission and Google's latest stored URL Inspection compared with the time the engine received it. Queued, retrying, failed, and rejected Submissions do not appear. It reads stored inspections only and spends no URL Inspections. It shows order in time, never cause, and a receipt proves receipt only.",
         "operationId": "partner.sites.indexing.submissions.outcomes.list",
         "parameters": [
           {

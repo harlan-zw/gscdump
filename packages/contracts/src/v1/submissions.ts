@@ -120,7 +120,8 @@ const submissionRefShape = {
 
 const outcomeRowProducer = z.strictObject({
   url: z.url(),
-  // The newest accepted Submission of this URL in the window. `submittedAt` is when the engine accepted it.
+  // The newest received Submission of this URL in the window: IndexNow `accepted` or `pending` (HTTP 202), or Google `accepted`.
+  // `submittedAt` is when the engine received it.
   submission: z.strictObject(submissionRefShape),
   google: z.discriminatedUnion('_tag', [z.strictObject(inspectedAfter), z.strictObject(notInspectedSince), z.strictObject(neverInspected), z.strictObject(unavailable)]),
 })
