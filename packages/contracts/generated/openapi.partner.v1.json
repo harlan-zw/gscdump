@@ -21370,7 +21370,7 @@
     },
     "/api/partner/v1/sites/{siteId}/indexing/submissions/outcomes": {
       "get": {
-        "description": "Returns each URL an engine accepted in the last `days` days, newest first, with its newest accepted Submission and Google's latest stored URL Inspection compared with the acceptance time. Receipts in any other state do not appear. It reads stored inspections only and spends no URL Inspections. It shows order in time, never cause, and a receipt proves receipt only.",
+        "description": "Returns each URL with an accepted Submission in the last `days` days, newest first, with its newest accepted Submission and Google's latest stored URL Inspection compared with the recorded time of the accepted delivery attempt. It reads stored inspections only and spends no URL Inspections. It shows order in time, never cause, and a receipt proves receipt only.",
         "operationId": "partner.sites.indexing.submissions.outcomes.list",
         "parameters": [
           {
@@ -21626,7 +21626,7 @@
                                     "type": "string"
                                   },
                                   "state": {
-                                    "minLength": 1,
+                                    "const": "accepted",
                                     "type": "string"
                                   },
                                   "submittedAt": {

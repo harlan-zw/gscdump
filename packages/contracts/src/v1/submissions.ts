@@ -112,15 +112,16 @@ const clientInspection = { coverageState: coverageStateTagSchema.catch('unrecogn
 const submissionRefShape = {
   channel: submissionChannelV1Schema,
   receiptId: z.string().min(1),
-  // The receipt `_tag` of that channel's Submission Receipt.
-  state: z.string().min(1),
+  // Only accepted receipts qualify for an outcome.
+  state: z.literal('accepted'),
   trigger: indexNowSubmissionTriggerV1Schema,
+  // Time recorded when the delivery attempt that received HTTP 200 started.
   submittedAt: z.iso.datetime(),
 }
 
 const outcomeRowProducer = z.strictObject({
   url: z.url(),
-  // The newest accepted Submission of this URL in the window. `submittedAt` is when the engine accepted it.
+  // The newest accepted Submission of this URL in the window.
   submission: z.strictObject(submissionRefShape),
   google: z.discriminatedUnion('_tag', [z.strictObject(inspectedAfter), z.strictObject(notInspectedSince), z.strictObject(neverInspected), z.strictObject(unavailable)]),
 })
