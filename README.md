@@ -7,7 +7,10 @@
 [![license](https://img.shields.io/badge/license-MIT-555b66?labelColor=1b2130&style=flat)](https://github.com/harlan-zw/gscdump/blob/main/LICENSE)
 [![Skill on skilld.dev](https://img.shields.io/badge/Skill-skilld.dev-c23e00?labelColor=1b2130&style=flat)](https://skilld.dev/gh/harlan-zw/gscdump)
 
-> Dump your entire Google Search Console dataset and put your agents to work finding insights and improving your SEO.
+> **Google Search Console data for agents.** Dump your entire Google Search Console dataset and put your agents to work finding insights and improving your SEO.
+
+- 🔓 **Open source:** every package in this repository is MIT licensed, including the Google and Bing clients, the Parquet and DuckDB engine, the CLI, and its local MCP server.
+- ☁️ **Hosted:** [gscdump.com](https://gscdump.com) runs the sync and keeps your search history. Add it from the [Claude directory](https://claude.ai/directory/gscdump) or the [ChatGPT directory](https://chatgpt.com/plugins/plugin_asdk_app_6ac71bf470188191a736feaa2f0c8c6c).
 
 <p align="center">
 <table>
@@ -39,6 +42,23 @@ With gscdump, you can keep the data you collect and compare old periods with new
 See the changes in charts, then ask your agents about the same record.
 Keep your own copy for deeper analysis.
 Google's [row limits](https://gscdump.com/learn-google-search-console/limits/export-row-limits) still decide what data is available.
+
+## Use with Claude or ChatGPT
+
+Add the hosted gscdump connector from a directory.
+It queries your gscdump.com record, which keeps your collected data after Google's 16-month window moves on.
+
+- **Claude:** [gscdump in the Claude directory](https://claude.ai/directory/gscdump)
+- **ChatGPT:** [gscdump in the ChatGPT directory](https://chatgpt.com/plugins/plugin_asdk_app_6ac71bf470188191a736feaa2f0c8c6c)
+- **Other MCP clients:** connect to `https://gscdump.com/mcp`.
+
+For developers, the CLI runs its own MCP server.
+`gscdump mcp` starts a stdio server in Local mode with your own Google keys.
+It reads live Google data. It does not read your local Store.
+See [AI integration and MCP](./docs/gscdump-cli/guides/1.start/3.connect-an-agent.md) for setup.
+
+Many Search Console MCP servers read Google live on each call and store nothing.
+gscdump keeps history: `gscdump sync` writes your rows to a local Parquet Store that you query with DuckDB, and gscdump.com preserves your collected data.
 
 ## Get Started
 
