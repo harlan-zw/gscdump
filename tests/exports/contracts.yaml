@@ -312,11 +312,13 @@
   generativeAiReportUploadRemovedV1Schemas: object
   generativeAiReportUploadV1Schema: object
   GOOGLE_INDEXING_API_PROJECT_DAILY_DEFAULT: number
+  GOOGLE_RECEIPT_STATES: object
   GOOGLE_SUBMISSION_MAX_ATTEMPTS: number
   GOOGLE_SUBMISSION_REFUSAL_REASONS: object
   GOOGLE_SUBMISSION_REJECTION_REASONS: object
   GOOGLE_SUBMISSION_SITE_DAILY_LIMIT: number
   GOOGLE_SUBMISSION_URL_COOLDOWN_DAYS: number
+  googleReceiptListQueryV1Schema: object
   googleSubmissionReceiptV1Schema: object
   googleSubmissionReceiptV1Schemas: object
   googleSubmissionRefusalSchema: object
@@ -350,6 +352,7 @@
   indexingApiGrantV1Schemas: object
   INDEXNOW_AUTOMATIC_SENDING_STATES: object
   INDEXNOW_AUTOMATIC_TRUNCATION_REASONS: object
+  INDEXNOW_RECEIPT_STATES: object
   INDEXNOW_SUBMISSION_TRIGGERS: object
   indexNowAutomaticSendingUpdateV1Schema: object
   indexNowAutomaticSendingV1Schema: object
@@ -358,6 +361,7 @@
   indexNowConnectionV1Schema: object
   indexNowConnectionV1Schemas: object
   indexNowKeyV1Schema: object
+  indexNowReceiptListQueryV1Schema: object
   indexNowSubmissionReceiptV1Schema: object
   indexNowSubmissionReceiptV1Schemas: object
   indexNowSubmissionTriggerV1Schema: object
@@ -380,6 +384,16 @@
   sitemapSubmissionStateV1Schemas: object
   sitemapSubmissionV1Schemas: object
   sitemapSubmitResultV1Schemas: object
+  SUBMISSION_CHANNELS: object
+  SUBMISSION_OUTCOME_PAGE_MAX: number
+  SUBMISSION_WINDOW_MAX_DAYS: number
+  submissionChannelV1Schema: object
+  submissionOutcomesQueryV1Schema: object
+  submissionOutcomesV1Schema: object
+  submissionOutcomesV1Schemas: object
+  submissionSummaryQueryV1Schema: object
+  submissionSummaryV1Schema: object
+  submissionSummaryV1Schemas: object
   userIntegrationActivityV1Schemas: object
 ./v1/browser:
   createGscdumpV1BrowserSchemas: function
@@ -420,11 +434,13 @@
   generativeAiReportUploadRemovedV1Schemas: object
   generativeAiReportUploadV1Schema: object
   GOOGLE_INDEXING_API_PROJECT_DAILY_DEFAULT: number
+  GOOGLE_RECEIPT_STATES: object
   GOOGLE_SUBMISSION_MAX_ATTEMPTS: number
   GOOGLE_SUBMISSION_REFUSAL_REASONS: object
   GOOGLE_SUBMISSION_REJECTION_REASONS: object
   GOOGLE_SUBMISSION_SITE_DAILY_LIMIT: number
   GOOGLE_SUBMISSION_URL_COOLDOWN_DAYS: number
+  googleReceiptListQueryV1Schema: object
   googleSubmissionReceiptV1Schema: object
   googleSubmissionReceiptV1Schemas: object
   googleSubmissionRefusalSchema: object
@@ -443,6 +459,7 @@
   indexingApiGrantV1Schemas: object
   INDEXNOW_AUTOMATIC_SENDING_STATES: object
   INDEXNOW_AUTOMATIC_TRUNCATION_REASONS: object
+  INDEXNOW_RECEIPT_STATES: object
   INDEXNOW_SUBMISSION_TRIGGERS: object
   indexNowAutomaticSendingUpdateV1Schema: object
   indexNowAutomaticSendingV1Schema: object
@@ -451,6 +468,7 @@
   indexNowConnectionV1Schema: object
   indexNowConnectionV1Schemas: object
   indexNowKeyV1Schema: object
+  indexNowReceiptListQueryV1Schema: object
   indexNowSubmissionReceiptV1Schema: object
   indexNowSubmissionReceiptV1Schemas: object
   indexNowSubmissionTriggerV1Schema: object
@@ -469,6 +487,16 @@
   sitemapSubmissionStateV1Schemas: object
   sitemapSubmissionV1Schemas: object
   sitemapSubmitResultV1Schemas: object
+  SUBMISSION_CHANNELS: object
+  SUBMISSION_OUTCOME_PAGE_MAX: number
+  SUBMISSION_WINDOW_MAX_DAYS: number
+  submissionChannelV1Schema: object
+  submissionOutcomesQueryV1Schema: object
+  submissionOutcomesV1Schema: object
+  submissionOutcomesV1Schemas: object
+  submissionSummaryQueryV1Schema: object
+  submissionSummaryV1Schema: object
+  submissionSummaryV1Schemas: object
   userIntegrationActivityV1Schemas: object
 ./v1/paths:
   createGscdumpV1Paths: function

@@ -131,6 +131,7 @@ import { runReportV1DataSchemas, runReportV1RequestSchema } from './report'
 import { gscdumpV1OperationRoute, gscdumpV1Surface } from './route-catalog'
 import { sitemapEvidenceV1Schemas, sitemapInspectQueryV1Schema } from './sitemap-evidence'
 import { sitemapSubmissionV1Schemas, sitemapSubmitResultV1Schemas } from './sitemap-submission'
+import { googleReceiptListQueryV1Schema, indexNowReceiptListQueryV1Schema, submissionOutcomesQueryV1Schema, submissionOutcomesV1Schemas, submissionSummaryQueryV1Schema, submissionSummaryV1Schemas } from './submissions'
 import { GSCDUMP_HTTP_V1_VERSION } from './version'
 
 // The inferred enum tuple keeps each operation's error DTO closed to its own codes.
@@ -431,6 +432,8 @@ export function createGscdumpV1Protocol() {
   const indexNowSubmissionResponse = defineSuccessResponse(defineResponseObject({ submissionReceipt: indexNowSubmissionReceiptV1Schemas.producer }, { submissionReceipt: indexNowSubmissionReceiptV1Schemas.client }), partnerResponseMeta)
   const indexNowSubmissionReceiptsResponse = defineSuccessResponse(defineResponseObject({ submissionReceipts: z.array(indexNowSubmissionReceiptV1Schemas.producer), pagination: bingIndexingEvidencePagination.producer }, { submissionReceipts: z.array(indexNowSubmissionReceiptV1Schemas.client), pagination: bingIndexingEvidencePagination.client }), partnerResponseMeta)
   const indexingApiGrantResponse = defineSuccessResponse(indexingApiGrantV1Schemas, partnerResponseMeta)
+  const submissionSummaryResponse = defineSuccessResponse(submissionSummaryV1Schemas, partnerResponseMeta)
+  const submissionOutcomesResponse = defineSuccessResponse(submissionOutcomesV1Schemas, partnerResponseMeta)
   const siteIndexingApiGrantResponse = defineSuccessResponse(siteIndexingApiGrantV1Schemas, partnerResponseMeta)
   const googleSubmissionResponse = defineSuccessResponse(defineResponseObject({ submissionReceipt: googleSubmissionReceiptV1Schemas.producer }, { submissionReceipt: googleSubmissionReceiptV1Schemas.client }), partnerResponseMeta)
   const googleSubmissionReceiptsResponse = defineSuccessResponse(defineResponseObject({ submissionReceipts: z.array(googleSubmissionReceiptV1Schemas.producer), pagination: bingIndexingEvidencePagination.producer }, { submissionReceipts: z.array(googleSubmissionReceiptV1Schemas.client), pagination: bingIndexingEvidencePagination.client }), partnerResponseMeta)
@@ -1613,13 +1616,39 @@ export function createGscdumpV1Protocol() {
         visibility: 'public',
         semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
         auth: { credentials: ['user_key', 'partner_key'], scopes: ['indexing:read'], ownership: [{ credential: 'user_key', rule: 'authorized_site' }, { credential: 'partner_key', rule: 'authorized_site' }] },
-        request: { params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }), query: z.strictObject({ limit: z.coerce.number().int().min(1).max(100).default(25), offset: z.coerce.number().int().min(0).default(0) }), headers: requestHeaders, body: null },
+        request: { params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }), query: indexNowReceiptListQueryV1Schema, headers: requestHeaders, body: null },
         responses: { 200: indexNowSubmissionReceiptsResponse },
         errors: partnerSiteErrors,
         errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
         resources: { reads: [{ type: 'site.indexing', idFrom: 'params.siteId' }], changes: [] },
         lifecycle: { introduced: '1.7.0' },
-        docs: { summary: 'List IndexNow Submission Receipts', description: 'Returns Submission Receipts for this Site. `trigger` is `manual` when the caller chose the URLs and `automatic` when automatic sending chose them from sitemap changes. Acceptance does not prove indexing.', tags: ['Indexing'], examples: { request: { params: { siteId: 's_01' }, query: { limit: 25, offset: 0 } }, response: { data: { submissionReceipts: [], pagination: { total: 0, limit: 25, offset: 0, hasMore: false } }, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } } } },
+        docs: { summary: 'List IndexNow Submission Receipts', description: 'Returns Submission Receipts for this Site, newest first. `trigger` is `manual` when the caller chose the URLs and `automatic` when automatic sending chose them from sitemap changes. Filter by `state`, `trigger`, `since`, and an exact `url`. Acceptance does not prove indexing.', tags: ['Indexing'], examples: { request: { params: { siteId: 's_01' }, query: { limit: 25, offset: 0 } }, response: { data: { submissionReceipts: [], pagination: { total: 0, limit: 25, offset: 0, hasMore: false } }, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } } } },
+      }),
+      getSiteSubmissionSummary: defineHttpOperation({
+        ...gscdumpV1OperationRoute('partner.sites.indexing.submissions.summary.get'),
+        visibility: 'public',
+        semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
+        auth: { credentials: ['user_key', 'partner_key'], scopes: ['indexing:read'], ownership: [{ credential: 'user_key', rule: 'authorized_site' }, { credential: 'partner_key', rule: 'authorized_site' }] },
+        request: { params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }), query: submissionSummaryQueryV1Schema, headers: requestHeaders, body: null },
+        responses: { 200: submissionSummaryResponse },
+        errors: partnerSiteErrors,
+        errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [{ type: 'site.indexing', idFrom: 'params.siteId' }], changes: [] },
+        lifecycle: { introduced: '7.17.0' },
+        docs: { summary: 'Summarize Submissions', description: 'Counts the Site\'s IndexNow and Google Indexing API Submissions created in the last `days` days, by state and, for IndexNow, by trigger. IndexNow counts URL sends; a URL in two Submissions counts twice. A Submission Receipt proves receipt only, never indexing.', tags: ['Indexing'], examples: { request: { params: { siteId: 's_01' }, query: { days: 30 } }, response: { data: { window: { days: 30, from: '2026-10-19T00:00:00.000Z', to: '2026-11-18T00:00:00.000Z' }, indexNow: { submissions: 2, urls: 12, urlsByState: { queued: 0, accepted: 11, pending: 0, rejected: 0, retrying: 0, failed: 1 }, urlsByTrigger: { manual: 1, automatic: 11 } }, google: { submissions: 1, byState: { accepted: 1, rejected: 0, failed: 0 } } }, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } } } },
+      }),
+      listSiteSubmissionOutcomes: defineHttpOperation({
+        ...gscdumpV1OperationRoute('partner.sites.indexing.submissions.outcomes.list'),
+        visibility: 'public',
+        semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
+        auth: { credentials: ['user_key', 'partner_key'], scopes: ['indexing:read'], ownership: [{ credential: 'user_key', rule: 'authorized_site' }, { credential: 'partner_key', rule: 'authorized_site' }] },
+        request: { params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }), query: submissionOutcomesQueryV1Schema, headers: requestHeaders, body: null },
+        responses: { 200: submissionOutcomesResponse },
+        errors: partnerSiteErrors,
+        errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [{ type: 'site.indexing', idFrom: 'params.siteId' }], changes: [] },
+        lifecycle: { introduced: '7.17.0' },
+        docs: { summary: 'List Submission outcomes', description: 'Returns each URL with an accepted Submission in the last `days` days, newest first, with its newest accepted Submission and Google\'s latest stored URL Inspection compared with the recorded time of the accepted delivery attempt. It reads stored inspections only and spends no URL Inspections. It shows order in time, never cause, and a receipt proves receipt only.', tags: ['Indexing'], examples: { request: { params: { siteId: 's_01' }, query: { days: 30, limit: 25, offset: 0 } }, response: { data: { window: { days: 30, from: '2026-10-19T00:00:00.000Z', to: '2026-11-18T00:00:00.000Z' }, outcomes: [{ url: 'https://example.com/new', submission: { channel: 'indexnow', receiptId: 'in_01', state: 'accepted', trigger: 'automatic', submittedAt: '2026-11-10T00:00:00.000Z' }, google: { _tag: 'inspected-after', inspectedAt: '2026-11-12T00:00:00.000Z', verdict: 'PASS', coverageState: 'indexed', lastCrawledAt: '2026-11-11T00:00:00.000Z' } }], pagination: { total: 1, limit: 25, offset: 0, hasMore: false } }, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } } } },
       }),
       updateSiteIndexNowAutomaticSending: defineHttpOperation({
         ...gscdumpV1OperationRoute('partner.sites.indexing.indexnow.automatic_sending.update'),
@@ -1704,7 +1733,7 @@ export function createGscdumpV1Protocol() {
         visibility: 'public',
         semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
         auth: { credentials: ['user_key', 'partner_key'], scopes: ['indexing:read'], ownership: [{ credential: 'user_key', rule: 'authorized_site' }, { credential: 'partner_key', rule: 'authorized_site' }] },
-        request: { params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }), query: z.strictObject({ limit: z.coerce.number().int().min(1).max(100).default(25), offset: z.coerce.number().int().min(0).default(0) }), headers: requestHeaders, body: null },
+        request: { params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }), query: googleReceiptListQueryV1Schema, headers: requestHeaders, body: null },
         responses: { 200: googleSubmissionReceiptsResponse },
         errors: partnerSiteErrors,
         errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
