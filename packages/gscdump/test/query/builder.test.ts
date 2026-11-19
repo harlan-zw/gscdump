@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { gsc } from '../../src/query/builder'
-import { country, date, device, page } from '../../src/query/columns'
+import { brandedClassification, country, date, device, page, query as queryColumn } from '../../src/query/columns'
 import { Countries, Devices } from '../../src/query/constants'
 import { and, between, contains, eq, gt, gte, inArray, lt, lte, or, regex } from '../../src/query/operators'
 
@@ -89,22 +89,23 @@ describe('gSCQueryBuilder', () => {
       expect(body.dimensionFilterGroups![0].filters).toHaveLength(2)
     })
 
-    it('builds body with inArray as OR group', () => {
+    it('sends country and device selections as exact match lists', () => {
       const body = gsc
         .select('country')
         .where(and(
           inArray(country, [Countries.USA, Countries.GBR, Countries.AUS]),
+          inArray(device, [Devices.MOBILE, Devices.TABLET]),
           between(date, '2024-01-01', '2024-01-31'),
         ))
         .toBody()
 
-      // inArray creates an OR group that's preserved
-      expect(body.dimensionFilterGroups).toHaveLength(1)
-      expect(body.dimensionFilterGroups![0].groupType).toBe('or')
-      expect(body.dimensionFilterGroups![0].filters).toHaveLength(3)
+      expect(body.dimensionFilterGroups).toEqual([
+        { filters: [], filterLists: [{ dimension: 'country', expressions: ['usa', 'gbr', 'aus'] }] },
+        { filters: [], filterLists: [{ dimension: 'device', expressions: ['MOBILE', 'TABLET'] }] },
+      ])
     })
 
-    it('builds body with nested or() preserved as OR group', () => {
+    it('keeps a device filter alongside a country list', () => {
       const body = gsc
         .select('country', 'device')
         .where(and(
@@ -117,23 +118,19 @@ describe('gSCQueryBuilder', () => {
         ))
         .toBody()
 
-      // Creates 2 groups: one AND for device, one OR for countries
-      expect(body.dimensionFilterGroups).toHaveLength(2)
-      // First group is AND with device filter
-      expect(body.dimensionFilterGroups![0].groupType).toBeUndefined() // AND is default
-      expect(body.dimensionFilterGroups![0].filters).toHaveLength(1)
-      // Second group is OR with country filters
-      expect(body.dimensionFilterGroups![1].groupType).toBe('or')
-      expect(body.dimensionFilterGroups![1].filters).toHaveLength(2)
+      expect(body.dimensionFilterGroups).toEqual([
+        { filters: [{ dimension: 'device', operator: 'equals', expression: 'MOBILE' }] },
+        { filters: [], filterLists: [{ dimension: 'country', expressions: ['usa', 'gbr'] }] },
+      ])
     })
 
-    it('builds body with standalone or() as OR group', () => {
+    it('preserves OR groups spanning different dimensions', () => {
       const body = gsc
         .select('country')
         .where(and(
           or(
             eq(country, Countries.USA),
-            eq(country, Countries.GBR),
+            eq(device, Devices.MOBILE),
           ),
           between(date, '2024-01-01', '2024-01-31'),
         ))
@@ -141,6 +138,46 @@ describe('gSCQueryBuilder', () => {
 
       expect(body.dimensionFilterGroups).toHaveLength(1)
       expect(body.dimensionFilterGroups![0].groupType).toBe('or')
+    })
+
+    it('rejects a country list combined with a single country filter', () => {
+      const query = gsc.select('date').where(and(
+        between(date, '2026-03-01', '2026-03-31'),
+        inArray(country, [Countries.USA, Countries.GBR]),
+        eq(country, Countries.USA),
+      ))
+
+      expect(() => query.toBody()).toThrow('cannot appear in both filters and filterLists')
+    })
+
+    it('groups and filters by Google brand classification', () => {
+      const range = between(date, '2026-03-01', '2026-03-31')
+      const body = gsc.select('brandedClassification')
+        .where(and(range, eq(brandedClassification, 'BRANDED')))
+        .toBody()
+
+      expect(body.dimensions).toEqual(['brandedClassification'])
+      expect(body.dimensionFilterGroups).toEqual([
+        { filters: [{ dimension: 'brandedClassification', operator: 'equals', expression: 'BRANDED' }] },
+      ])
+    })
+
+    it('rejects Google brand grouping with a query filter', () => {
+      const query = gsc.select('brandedClassification').where(and(
+        between(date, '2026-03-01', '2026-03-31'),
+        eq(queryColumn, 'example'),
+      ))
+
+      expect(() => query.toBody()).toThrow('cannot be combined with a query filter')
+    })
+
+    it('sends web multimodal as its own search type', () => {
+      const body = gsc.select('date')
+        .where(between(date, '2026-03-01', '2026-03-31'))
+        .type('webMultimodal')
+        .toBody()
+
+      expect(body.type).toBe('webMultimodal')
     })
 
     it('builds body with contains filter', () => {

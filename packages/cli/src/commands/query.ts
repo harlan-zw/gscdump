@@ -1,5 +1,6 @@
 import type { QuerySpan } from '@gscdump/engine/profile'
 import type { googleSearchConsole } from 'gscdump/client'
+import type { GscSearchAnalyticsRequest } from 'gscdump/contracts'
 import type { BuilderState, Column, Dimension, Filter, SearchType } from 'gscdump/query'
 import type { TableName } from '../local-store'
 import type { RouteNeed, RouteRequest } from '../route'
@@ -11,7 +12,7 @@ import { cancel, isCancel, multiselect, text } from '@clack/prompts'
 import { collectSpans } from '@gscdump/engine/profile'
 import { defineCommand } from 'citty'
 import { getLatestGscDate, toIsoDate } from 'gscdump/dates'
-import { and, between, country, date as dateCol, device, gsc, hour, page, query as queryCol, searchAppearance } from 'gscdump/query'
+import { and, between, brandedClassification, country, date as dateCol, device, gsc, hour, page, query as queryCol, resolveToBody, searchAppearance } from 'gscdump/query'
 import { inferDataset, isDatasetResolvable } from 'gscdump/query/plan'
 import { resolveAuthentication } from '../auth-state'
 import { queryCommandMeta } from '../command-meta'
@@ -32,7 +33,7 @@ import { commandLineError } from '../stop'
 import { ALL_SEARCH_TYPES, logger, parseSearchType, setJsonOutput, toCSV } from '../utils'
 import { checkWindowFlags, DEFAULT_WINDOW, newestDoneDate, parseWindowFlags } from '../window'
 
-const DIMENSIONS = ['page', 'query', 'date', 'hour', 'country', 'device', 'searchAppearance'] as const
+const DIMENSIONS = ['page', 'query', 'date', 'hour', 'country', 'device', 'searchAppearance', 'brandedClassification'] as const
 type DimensionName = typeof DIMENSIONS[number]
 
 const DIM_COLUMNS: Record<DimensionName, Column<Dimension>> = {
@@ -43,6 +44,7 @@ const DIM_COLUMNS: Record<DimensionName, Column<Dimension>> = {
   country,
   device,
   searchAppearance,
+  brandedClassification,
 }
 
 const DATA_STATES = ['all', 'final', 'hourly_all'] as const
@@ -52,45 +54,19 @@ const POSITIVE_INTEGER_RE = /^\d+$/
 async function runLiveQuery(
   client: ReturnType<typeof googleSearchConsole>,
   siteUrl: string,
-  opts: {
-    startDate: string
-    endDate: string
-    dimensions: string[]
-    rowLimit: number
-    searchType?: SearchType
-    dataState?: string
-    aggregationType?: string
-    dimensionFilter?: Filter<any>
-  },
+  body: GscSearchAnalyticsRequest,
+  totalLimit: number,
 ): Promise<{ rows: Record<string, unknown>[] }> {
   const allRows: Record<string, unknown>[] = []
-  const totalLimit = Math.max(0, opts.rowLimit)
   const pageSize = Math.min(totalLimit, 25000)
   let startRow = 0
-  // Use the builder to derive a body so we get filterGroups for free.
-  const baseBody: Record<string, unknown> = {
-    startDate: opts.startDate,
-    endDate: opts.endDate,
-    dimensions: opts.dimensions,
-  }
-  if (opts.searchType)
-    baseBody.type = opts.searchType
-  if (opts.dataState)
-    baseBody.dataState = opts.dataState
-  if (opts.aggregationType)
-    baseBody.aggregationType = opts.aggregationType
-  if (opts.dimensionFilter) {
-    const groups = filterToGroups(opts.dimensionFilter)
-    if (groups.length > 0)
-      baseBody.dimensionFilterGroups = groups
-  }
 
   while (allRows.length < totalLimit) {
     const remaining = totalLimit - allRows.length
     const rowLimit = Math.min(pageSize, remaining)
     if (rowLimit <= 0)
       break
-    const response = await client.searchAnalytics.query(siteUrl, { ...baseBody, rowLimit, startRow } as any)
+    const response = await client.searchAnalytics.query(siteUrl, { ...body, rowLimit, startRow })
     const rows = (response.rows || []).map((row) => {
       const result: Record<string, unknown> = {
         clicks: row.clicks ?? 0,
@@ -98,7 +74,7 @@ async function runLiveQuery(
         ctr: row.ctr ?? 0,
         position: row.position ?? 0,
       }
-      opts.dimensions.forEach((dim, i) => {
+      body.dimensions?.forEach((dim, i) => {
         result[dim] = row.keys?.[i]
       })
       return result
@@ -110,21 +86,6 @@ async function runLiveQuery(
   }
 
   return { rows: allRows }
-}
-
-// Flatten a single AND filter (one or more leaf filters) into one
-// dimensionFilterGroups entry. Mixed and/or aren't expressed via these CLI
-// args, so we emit a single AND group.
-function filterToGroups(f: Filter<any>): Array<{ groupType?: string, filters: Array<{ dimension: string, operator: string, expression: string }> }> {
-  if (f._filters.length === 0)
-    return []
-  return [{
-    filters: f._filters.map(leaf => ({
-      dimension: leaf.dimension,
-      operator: leaf.operator,
-      expression: leaf.expression,
-    })),
-  }]
 }
 
 export const queryCommand = defineCommand({
@@ -199,15 +160,19 @@ export const queryCommand = defineCommand({
     },
     'country': {
       type: 'string',
-      description: 'Filter by country (ISO-3 lowercase, e.g. usa). Same prefix syntax as --query',
+      description: 'Filter by ISO-3 country codes, for example usa,gbr. Single codes accept the --query prefix syntax.',
     },
     'device': {
       type: 'string',
-      description: 'Filter by device (DESKTOP/MOBILE/TABLET). Same prefix syntax',
+      description: 'Filter by device names, for example MOBILE,TABLET. Single names accept the --query prefix syntax.',
     },
     'search-appearance': {
       type: 'string',
       description: 'Filter by search appearance feature. Same prefix syntax',
+    },
+    'branded-classification': {
+      type: 'string',
+      description: 'Filter live Google results by BRANDED or NON_BRANDED.',
     },
     'type': {
       type: 'string',
@@ -268,7 +233,7 @@ export const queryCommand = defineCommand({
     const dataState = args['data-state']
       ? String(args['data-state'])
       : ctxConfig.defaultDataState
-    const aggregationType = args['aggregation-type'] ? String(args['aggregation-type']) : undefined
+    const aggregationType = args['aggregation-type']
     const filterDims = filterDimensions(filters)
     if (dataState && !DATA_STATES.includes(dataState as any))
       throw commandLineError(`Invalid --data-state: ${dataState}. Allowed: ${DATA_STATES.join(', ')}`)
@@ -276,7 +241,8 @@ export const queryCommand = defineCommand({
       throw commandLineError(`Invalid --aggregation-type: ${aggregationType}. Allowed: ${AGGREGATION_TYPES.join(', ')}`)
 
     const forceLive = Boolean(args.live)
-    // Hosted mode reads the hosted record. It never reads the Store or calls Google.
+    const usesBrand = dimNames.includes('brandedClassification') || filterDims.includes('brandedClassification')
+    // Google brand classification is live, even when the Site is hosted.
     if (!forceLive && (await resolveAuthentication())._tag === 'Hosted') {
       if (dataState || aggregationType)
         logger.warn('--data-state / --aggregation-type are ignored without --live')
@@ -285,14 +251,18 @@ export const queryCommand = defineCommand({
         localAlternative: 'run `gscdump sync --site <site>` first, or pass --live',
       })
       const { start: startDate, end: endDate } = windowOrExit(windowFlags, getLatestGscDate())
-      const state = { ...buildLocalState(dimNames, startDate, endDate, rowLimit, toLocalFilter(filters)), searchType: localSearchType }
+      const state = {
+        ...buildLocalState(dimNames, startDate, endDate, rowLimit, toLocalFilter(filters)),
+        searchType: localSearchType,
+      }
+      const source = usesBrand ? 'live' : 'hosted'
       if (args.explain) {
-        console.log(JSON.stringify({ siteUrl: site.siteUrl, siteId: site.siteId, source: 'hosted', state }, null, 2))
+        console.log(JSON.stringify({ siteUrl: site.siteUrl, siteId: site.siteId, source, state }, null, 2))
         return
       }
       if (!args.quiet)
-        logger.debug(`Querying ${site.siteUrl} from the hosted record...`)
-      const rows = await queryHostedRows(client, site.siteId, state)
+        logger.debug(`Querying ${site.siteUrl} through gscdump...`)
+      const rows = await queryHostedRows(client, site.siteId, state, usesBrand ? 'live' : undefined)
       await writeOutput({
         output: {
           siteUrl: site.siteUrl,
@@ -300,7 +270,7 @@ export const queryCommand = defineCommand({
           dateRange: { start: startDate, end: endDate },
           total: rows.length,
           data: rows,
-          meta: { source: 'hosted' },
+          meta: { source },
         },
         format,
         path: args.output ? String(args.output) : undefined,
@@ -331,21 +301,14 @@ export const queryCommand = defineCommand({
       const live = await connect()
       const siteUrl = site ?? await live.resolveSite(undefined)
       const dimensionFilter = toLiveFilter(filters, siteUrl)
+      const state = buildLocalState(dimNames, startDate, endDate, rowLimit, dimensionFilter)
+      const body = resolveToBody({
+        ...state,
+        searchType,
+        dataState: dataState as BuilderState['dataState'],
+        aggregationType: aggregationType as BuilderState['aggregationType'],
+      })
       if (args.explain) {
-        const body: Record<string, unknown> = {
-          startDate,
-          endDate,
-          dimensions: dimNames,
-          rowLimit,
-        }
-        if (searchType)
-          body.type = searchType
-        if (dataState)
-          body.dataState = dataState
-        if (aggregationType)
-          body.aggregationType = aggregationType
-        if (dimensionFilter)
-          body.dimensionFilterGroups = filterToGroups(dimensionFilter)
         console.log(JSON.stringify({ siteUrl, source: 'live', body }, null, 2))
         return
       }
@@ -353,16 +316,7 @@ export const queryCommand = defineCommand({
         logger.warn(liveNote(siteUrl))
       if (!args.quiet)
         logger.debug(`Querying ${siteUrl} via live GSC API...`)
-      const result = await runLiveQuery(live.client!, siteUrl, {
-        startDate,
-        endDate,
-        dimensions: dimNames,
-        rowLimit,
-        searchType,
-        dataState,
-        aggregationType,
-        dimensionFilter,
-      })
+      const result = await runLiveQuery(live.client!, siteUrl, body, rowLimit)
       await writeOutput({
         output: {
           siteUrl,
@@ -497,10 +451,14 @@ async function promptFilters(args: Record<string, unknown>): Promise<void> {
   if (!args.interactive)
     return
   for (const dim of FILTER_DIMS) {
-    if (args[dim])
+    const brand = dim === 'brandedClassification'
+    const flag = brand ? 'branded-classification' : dim
+    if (args[flag])
       continue
     const v = await text({
-      message: `Filter by ${dim} (blank to skip; prefix ~ for contains, ! for not-equals, re: for regex)`,
+      message: brand
+        ? 'Filter by BRANDED or NON_BRANDED (blank to skip)'
+        : `Filter by ${dim} (blank to skip; prefix ~ for contains, ! for not-equals, re: for regex)`,
       placeholder: '',
     })
     if (isCancel(v)) {
@@ -508,7 +466,7 @@ async function promptFilters(args: Record<string, unknown>): Promise<void> {
       process.exit(0)
     }
     if (v && String(v).length > 0)
-      args[dim] = String(v)
+      args[flag] = String(v)
   }
   if (!args.type) {
     const t = await text({

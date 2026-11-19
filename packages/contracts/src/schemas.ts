@@ -42,6 +42,7 @@ export const searchTypeSchema = z.enum(GSC_SEARCH_TYPES)
  */
 export const SEARCH_TYPE_CAPABILITIES: Record<GscSearchType, { queries: boolean, dimensions: boolean }> = {
   web: { queries: true, dimensions: true },
+  webMultimodal: { queries: true, dimensions: true },
   image: { queries: true, dimensions: true },
   video: { queries: true, dimensions: true },
   news: { queries: true, dimensions: true },

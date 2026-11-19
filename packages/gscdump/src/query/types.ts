@@ -1,9 +1,10 @@
-import type { GscAggregationType, GscDataState } from '../contracts'
+import type { GscAggregationType, GscBrandedClassification, GscDataState } from '../contracts'
 import type { Country, Device, SearchType } from './constants'
 
 // Dimension value mapping (groupable dimensions)
 export interface DimensionValueMap {
   query: string
+  brandedClassification: GscBrandedClassification
   queryCanonical: string
   page: string
   country: Country

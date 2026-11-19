@@ -66,10 +66,12 @@ flowchart LR
   Hosted --> Me["/api/cli/me"]
   Hosted --> V1[Public v1 API]
   V1 --> Record[Hosted record: rows, sitemaps, inspections, Bing]
+  V1 -->|Live brand classification| Google
 ```
 
 Local mode calls Google with the user's own service account or OAuth client. It never uses gscdump.com for Google login or token refresh.
-Hosted reads use the hosted record. `indexing inspect --yes` requests new Google URL Inspections through the platform.
+Hosted reads default to the hosted record. Requests for Google brand classification read Google through the platform.
+`indexing inspect --yes` requests new Google URL Inspections through the platform.
 The platform reserves the shared daily quota before calling Google. The CLI sends one request and never retries it automatically.
 `context.ts` builds the Google client in Local mode only. In Hosted mode, `needsAuth` throws `LOCAL_MODE_REQUIRED`.
 `hosted-query.ts` reads hosted rows through the public v1 `analytics.rows.query` operation.
@@ -78,7 +80,7 @@ The platform reserves the shared daily quota before calling Google. The CLI send
 
 Store queries and exports read local files in either mode.
 Bing dumps export provider rows or saved hosted datasets directly. They do not populate the Google Store.
-Every command that calls Google needs Local mode: sync, URL Inspection, live queries, Indexing API, Site Verification, and the CLI MCP server.
+Commands that call Google directly use Local credentials. These include sync, live queries, Indexing API, Site Verification, and the CLI MCP server.
 
 ## Data Flow
 

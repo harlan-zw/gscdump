@@ -109,8 +109,10 @@ Hosted sitemap reads and the hosted `indexing` commands need Hosted mode. Their 
 
 ## Data boundaries
 
-- `sync`, `query --live`, `analyze --live`, `report --live`, `inspect`, and Google sitemap and Site changes call Google. They need Local mode.
-- In Hosted mode, `sites` and `query` read the hosted record. They never call Google.
+- `sync`, `query --live`, `analyze --live`, `report --live`, `inspect`, and Google sitemap and Site changes call Google directly. They need Local mode.
+- Use `query -d brandedClassification` for Google's branded and non-branded rows. In Local mode, add `--live`. In Hosted mode, gscdump calls Google for the registered host. Data starts on 21 February 2026 for eligible top-level Sites. Omit `--query` when grouping or filtering by brand. For one group, pass `--branded-classification BRANDED` or `NON_BRANDED`.
+- Use `--type webMultimodal` for Google Lens, Circle to Search, and image uploads. Use comma-separated choices with `--country usa,gbr` or `--device MOBILE,TABLET`.
+- In Hosted mode, `sites` and ordinary `query` reads use the hosted record.
 - Google Indexing API requests need Local mode. `indexing quota` only prints documented limits and needs no authentication.
 - `dump` and `store` read the local Store only.
 - `query`, `analyze`, and `report` pick a source for each run. See [Routing](#routing).

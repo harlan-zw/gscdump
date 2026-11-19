@@ -60,7 +60,7 @@ export function inArray<D extends Dimension, V extends DimensionValueMap[D]>(
 ): Filter<Record<D, V>> {
   if (values.length === 0)
     throw new Error(`inArray(${column.dimension}, []) requires at least one value`)
-  // GSC doesn't have IN operator - use OR group
+  // Preserve exact membership in the filter tree for both stored and live reads.
   return {
     _constraints: {} as Record<D, V>,
     _filters: values.map(v => ({

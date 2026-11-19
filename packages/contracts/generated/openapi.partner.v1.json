@@ -7826,7 +7826,8 @@
                 "video",
                 "news",
                 "discover",
-                "googleNews"
+                "googleNews",
+                "webMultimodal"
               ],
               "type": "string"
             }
@@ -8300,7 +8301,8 @@
                 "video",
                 "news",
                 "discover",
-                "googleNews"
+                "googleNews",
+                "webMultimodal"
               ],
               "type": "string"
             }
@@ -8636,7 +8638,8 @@
                 "video",
                 "news",
                 "discover",
-                "googleNews"
+                "googleNews",
+                "webMultimodal"
               ],
               "type": "string"
             }
@@ -8733,7 +8736,8 @@
                             "video",
                             "news",
                             "discover",
-                            "googleNews"
+                            "googleNews",
+                            "webMultimodal"
                           ],
                           "type": "string"
                         }
@@ -24536,7 +24540,8 @@
                       "video",
                       "news",
                       "discover",
-                      "googleNews"
+                      "googleNews",
+                      "webMultimodal"
                     ],
                     "type": "string"
                   },
@@ -24787,7 +24792,8 @@
                 "video",
                 "news",
                 "discover",
-                "googleNews"
+                "googleNews",
+                "webMultimodal"
               ],
               "type": "string"
             }
@@ -25545,7 +25551,8 @@
                 "video",
                 "news",
                 "discover",
-                "googleNews"
+                "googleNews",
+                "webMultimodal"
               ],
               "type": "string"
             }
@@ -26249,7 +26256,8 @@
                                       "video",
                                       "news",
                                       "discover",
-                                      "googleNews"
+                                      "googleNews",
+                                      "webMultimodal"
                                     ],
                                     "type": "string"
                                   },
@@ -26340,7 +26348,8 @@
                                       "video",
                                       "news",
                                       "discover",
-                                      "googleNews"
+                                      "googleNews",
+                                      "webMultimodal"
                                     ],
                                     "type": "string"
                                   },
@@ -26431,7 +26440,8 @@
                                       "video",
                                       "news",
                                       "discover",
-                                      "googleNews"
+                                      "googleNews",
+                                      "webMultimodal"
                                     ],
                                     "type": "string"
                                   },
@@ -26522,7 +26532,8 @@
                                       "video",
                                       "news",
                                       "discover",
-                                      "googleNews"
+                                      "googleNews",
+                                      "webMultimodal"
                                     ],
                                     "type": "string"
                                   },
@@ -26628,7 +26639,8 @@
                                       "video",
                                       "news",
                                       "discover",
-                                      "googleNews"
+                                      "googleNews",
+                                      "webMultimodal"
                                     ],
                                     "type": "string"
                                   },
@@ -27005,7 +27017,8 @@
                                 "video",
                                 "news",
                                 "discover",
-                                "googleNews"
+                                "googleNews",
+                                "webMultimodal"
                               ],
                               "type": "string"
                             },
@@ -27107,7 +27120,8 @@
                                       "video",
                                       "news",
                                       "discover",
-                                      "googleNews"
+                                      "googleNews",
+                                      "webMultimodal"
                                     ],
                                     "type": "string"
                                   },
@@ -27198,7 +27212,8 @@
                                       "video",
                                       "news",
                                       "discover",
-                                      "googleNews"
+                                      "googleNews",
+                                      "webMultimodal"
                                     ],
                                     "type": "string"
                                   },
@@ -27289,7 +27304,8 @@
                                       "video",
                                       "news",
                                       "discover",
-                                      "googleNews"
+                                      "googleNews",
+                                      "webMultimodal"
                                     ],
                                     "type": "string"
                                   },
@@ -27380,7 +27396,8 @@
                                       "video",
                                       "news",
                                       "discover",
-                                      "googleNews"
+                                      "googleNews",
+                                      "webMultimodal"
                                     ],
                                     "type": "string"
                                   },
@@ -27486,7 +27503,8 @@
                                       "video",
                                       "news",
                                       "discover",
-                                      "googleNews"
+                                      "googleNews",
+                                      "webMultimodal"
                                     ],
                                     "type": "string"
                                   },
@@ -27928,7 +27946,8 @@
                                       "video",
                                       "news",
                                       "discover",
-                                      "googleNews"
+                                      "googleNews",
+                                      "webMultimodal"
                                     ],
                                     "type": "string"
                                   },
@@ -28341,7 +28360,8 @@
                                       "video",
                                       "news",
                                       "discover",
-                                      "googleNews"
+                                      "googleNews",
+                                      "webMultimodal"
                                     ],
                                     "type": "string"
                                   },
@@ -28432,7 +28452,8 @@
                                       "video",
                                       "news",
                                       "discover",
-                                      "googleNews"
+                                      "googleNews",
+                                      "webMultimodal"
                                     ],
                                     "type": "string"
                                   },
@@ -28523,7 +28544,8 @@
                                       "video",
                                       "news",
                                       "discover",
-                                      "googleNews"
+                                      "googleNews",
+                                      "webMultimodal"
                                     ],
                                     "type": "string"
                                   },
@@ -28614,7 +28636,8 @@
                                       "video",
                                       "news",
                                       "discover",
-                                      "googleNews"
+                                      "googleNews",
+                                      "webMultimodal"
                                     ],
                                     "type": "string"
                                   },
@@ -28720,7 +28743,8 @@
                                       "video",
                                       "news",
                                       "discover",
-                                      "googleNews"
+                                      "googleNews",
+                                      "webMultimodal"
                                     ],
                                     "type": "string"
                                   },
@@ -29117,7 +29141,8 @@
                                       "video",
                                       "news",
                                       "discover",
-                                      "googleNews"
+                                      "googleNews",
+                                      "webMultimodal"
                                     ],
                                     "type": "string"
                                   },
@@ -29208,7 +29233,8 @@
                                       "video",
                                       "news",
                                       "discover",
-                                      "googleNews"
+                                      "googleNews",
+                                      "webMultimodal"
                                     ],
                                     "type": "string"
                                   },
@@ -29299,7 +29325,8 @@
                                       "video",
                                       "news",
                                       "discover",
-                                      "googleNews"
+                                      "googleNews",
+                                      "webMultimodal"
                                     ],
                                     "type": "string"
                                   },
@@ -29390,7 +29417,8 @@
                                       "video",
                                       "news",
                                       "discover",
-                                      "googleNews"
+                                      "googleNews",
+                                      "webMultimodal"
                                     ],
                                     "type": "string"
                                   },
@@ -29496,7 +29524,8 @@
                                       "video",
                                       "news",
                                       "discover",
-                                      "googleNews"
+                                      "googleNews",
+                                      "webMultimodal"
                                     ],
                                     "type": "string"
                                   },
@@ -29893,7 +29922,8 @@
                                       "video",
                                       "news",
                                       "discover",
-                                      "googleNews"
+                                      "googleNews",
+                                      "webMultimodal"
                                     ],
                                     "type": "string"
                                   },
@@ -29984,7 +30014,8 @@
                                       "video",
                                       "news",
                                       "discover",
-                                      "googleNews"
+                                      "googleNews",
+                                      "webMultimodal"
                                     ],
                                     "type": "string"
                                   },
@@ -30075,7 +30106,8 @@
                                       "video",
                                       "news",
                                       "discover",
-                                      "googleNews"
+                                      "googleNews",
+                                      "webMultimodal"
                                     ],
                                     "type": "string"
                                   },
@@ -30166,7 +30198,8 @@
                                       "video",
                                       "news",
                                       "discover",
-                                      "googleNews"
+                                      "googleNews",
+                                      "webMultimodal"
                                     ],
                                     "type": "string"
                                   },
@@ -30272,7 +30305,8 @@
                                       "video",
                                       "news",
                                       "discover",
-                                      "googleNews"
+                                      "googleNews",
+                                      "webMultimodal"
                                     ],
                                     "type": "string"
                                   },
@@ -41421,7 +41455,8 @@
                         "video",
                         "news",
                         "discover",
-                        "googleNews"
+                        "googleNews",
+                        "webMultimodal"
                       ],
                       "type": "string"
                     },

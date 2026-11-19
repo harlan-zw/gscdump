@@ -82,6 +82,15 @@ export const queryErrors = {
   malformedFilterLeaf(): QueryError {
     return { kind: 'invalid-filter', message: 'Invalid filter. Check group structure, dimension and operator names, and string expression values.' }
   },
+  invalidBrandFilter(): QueryError {
+    return { kind: 'invalid-filter', message: 'The brandedClassification filter requires equals with BRANDED or NON_BRANDED.' }
+  },
+  brandWithQueryFilter(): QueryError {
+    return { kind: 'invalid-filter', message: 'The brandedClassification dimension cannot be combined with a query filter.' }
+  },
+  conflictingFilterList(): QueryError {
+    return { kind: 'invalid-filter', message: 'The same dimension cannot appear in both filters and filterLists.' }
+  },
   unsupportedCapability(capability: string, context: string): QueryError {
     return { kind: 'unsupported-capability', capability, context, message: `${context} requires ${capability} capability` }
   },

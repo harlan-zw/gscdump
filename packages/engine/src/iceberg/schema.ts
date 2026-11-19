@@ -113,6 +113,7 @@ export const SEARCH_TYPE_INT: Record<SearchType, number> = {
   news: 4,
   discover: 5,
   googleNews: 6,
+  webMultimodal: 7,
 }
 
 /** Reverse of {@link SEARCH_TYPE_INT} — int → `search_type`, for read-result mapping. */

@@ -6,7 +6,6 @@ import type { PlannerCapabilities } from 'gscdump/query/plan'
 
 import { assertDimensionsSupported, getFilterDimensions, getInternalFilters } from '@gscdump/engine/resolver'
 import { extractMetricFilters, extractSpecialOperatorFilters, normalizeFilter, UnsupportedLogicalCapabilityError } from 'gscdump/query'
-import { buildLogicalPlan } from 'gscdump/query/plan'
 import { applyBuilderStatePostProcessing } from './post-process'
 import { collectRows } from './rollup-synth'
 
@@ -57,10 +56,8 @@ export function createGscApiQuerySource(
     async queryRows(state): Promise<QueryRow[]> {
       if (getInternalFilters(normalizeFilter(state.prefilter)).length > 0)
         throw new UnsupportedLogicalCapabilityError('prefilter', 'gsc-api query source')
-      // Plan-time gating: throws UnsupportedLogicalCapabilityError on filters
-      // the API can't honor (e.g. comparison joins). Runs before the network
-      // call so consumers fail fast instead of paying for a doomed fetch.
-      buildLogicalPlan(state, GSC_API_CAPABILITIES)
+      // Google can answer dimensions that have no equivalent stored dataset.
+      // The client compiles and validates the live request before sending it.
       const filterDims = getFilterDimensions(state.filter, isMetricDimension)
       assertDimensionsSupported([...state.dimensions, ...filterDims], 'api', 'gsc-api query source')
       // The live source performs explicit ordering and metric/special filters
