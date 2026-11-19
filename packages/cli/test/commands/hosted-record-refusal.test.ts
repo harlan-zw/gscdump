@@ -18,6 +18,7 @@ describe('hosted query', () => {
   let stderr: string
   let refusal: Record<string, unknown>
   let rowsRequest: AnalyticsRowsV1Request | undefined
+  let siteUrl: string
 
   beforeEach(async () => {
     const configDir = await fs.mkdtemp(path.join(os.tmpdir(), 'gscdump-hosted-refusal-'))
@@ -25,6 +26,7 @@ describe('hosted query', () => {
     stderr = ''
     stdout = []
     rowsRequest = undefined
+    siteUrl = 'sc-domain:harlanzw.com'
     runtime = createCliRuntime({
       configDir,
       environment: { GSCDUMP_API_KEY: 'gsd_user_private', GSCDUMP_CONFIG_DIR: configDir },
@@ -49,7 +51,7 @@ describe('hosted query', () => {
       if (url.pathname === '/api/cli/me') {
         return Response.json({
           user: { publicId: 'u_me', email: 'user@example.com' },
-          sites: [{ siteId: 's_site', siteUrl: 'sc-domain:harlanzw.com', syncStatus: 'synced' }],
+          sites: [{ siteId: 's_site', siteUrl, syncStatus: 'synced' }],
         })
       }
       if (url.pathname === '/api/analytics/v1/sites/s_site/rows') {
@@ -76,9 +78,16 @@ describe('hosted query', () => {
 
   const query = () => runCli({ rawArgs: ['query', '--site', 'harlanzw.com', '--dimensions', 'date', '--limit', '7'], runtime, loadEnv: false })
 
-  it('keeps a full page URL when Google classifies queries in Hosted mode', async () => {
+  it.each([
+    ['harlanzw.com', 'https://harlanzw.com/landing', 'equals', 'https://harlanzw.com/landing'],
+    ['harlanzw.com', '/landing?tab=1', 'includingRegex', '^https?://harlanzw\\.com/landing\\?tab=1$'],
+    ['www.harlanzw.com', '!/landing', 'excludingRegex', '^https?://www\\.harlanzw\\.com/landing$'],
+    ['sc-domain:harlanzw.com', '/landing', 'includingRegex', '^https?://[^/]+/landing$'],
+    ['https://harlanzw.com/docs/', '/landing', 'equals', 'https://harlanzw.com/docs/landing'],
+  ])('resolves a Google page filter for %s using %s', async (site, page, operator, expression) => {
+    siteUrl = site
     await expect(runCli({
-      rawArgs: ['query', '--site', 'harlanzw.com', '-d', 'page', '--branded-classification', 'BRANDED', '--page', 'https://harlanzw.com/landing'],
+      rawArgs: ['query', '--site', site, '-d', 'page', '--branded-classification', 'BRANDED', '--page', page],
       runtime,
       loadEnv: false,
     })).resolves.toBe(0)
@@ -86,7 +95,7 @@ describe('hosted query', () => {
     expect(rowsRequest).toMatchObject({
       source: 'live',
       filter: { _filters: expect.arrayContaining([
-        { dimension: 'page', operator: 'equals', expression: 'https://harlanzw.com/landing' },
+        { dimension: 'page', operator, expression },
         { dimension: 'brandedClassification', operator: 'equals', expression: 'BRANDED' },
       ]) },
     })

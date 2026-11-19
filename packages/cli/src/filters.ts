@@ -130,9 +130,12 @@ function livePageLeaf(operator: MatchOperator, page: PageRef, siteUrl: string): 
   if (operator === 'contains' || operator === 'notContains')
     return leaf('page', operator, page.path)
   const path = page.path.startsWith('/') ? page.path : `/${page.path}`
-  // A domain property spans every host, so match the path on any of them.
-  if (siteUrl.startsWith('sc-domain:'))
-    return leaf('page', operator === 'equals' ? 'includingRegex' : 'excludingRegex', `^https?://[^/]+${escapeRegex(path)}$`)
+  // Hosted Sites can be bare hostnames. Only Domain properties span hosts.
+  const domainProperty = siteUrl.startsWith('sc-domain:')
+  if (domainProperty || !/^https?:\/\//i.test(siteUrl)) {
+    const host = domainProperty ? '[^/]+' : escapeRegex(siteUrl)
+    return leaf('page', operator === 'equals' ? 'includingRegex' : 'excludingRegex', `^https?://${host}${escapeRegex(path)}$`)
+  }
   // A URL-prefix property owns its path, so a relative path expands against
   // the full prefix. A path that already carries the property's own path is
   // a stored full path: expanding again would double it and match nothing.
