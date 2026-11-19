@@ -9,7 +9,7 @@ import { hostedRequestContext } from './hosted-context'
 import { stopError } from './stop'
 
 export const HOSTED_ARGS = {
-  'site': { type: 'string' as const, alias: 's', description: 'Site URL (e.g., example.com, sc-domain:example.com, or https://example.com/)' },
+  'site': { type: 'string' as const, alias: 's', description: 'Site URL or Site ID (e.g., example.com, sc-domain:example.com, https://example.com/, or s_...)' },
   'api-root': { type: 'string' as const, description: 'Hosted API root; defaults to the saved Hosted mode or https://gscdump.com/api' },
   'api-key': { type: 'string' as const, description: 'Hosted API key; defaults to GSCDUMP_API_KEY' },
 }
@@ -35,18 +35,25 @@ function siteKey(value: string): string | undefined {
   return `${url.hostname.toLowerCase()}${url.pathname.replace(/\/+$/, '')}`
 }
 
-/** Match a `--site` value against the hosted account's Sites. */
+/**
+ * Match a `--site` value against the hosted account's Sites. A Site ID names
+ * one Site. A Site URL can name several: one user can hold a Hosted Site and a
+ * partner Site for the same host. Several matches are ambiguous, never a pick.
+ */
 export function matchHostedSite(sites: readonly HostedSite[], target: string | undefined): HostedSiteMatch {
   if (!target) {
     return sites.length === 1
       ? { kind: 'found', site: sites[0]! }
       : { kind: 'missing', target, sites: [...sites] }
   }
-  const exact = sites.find(site => site.siteId === target || site.siteUrl === target)
-  if (exact)
-    return { kind: 'found', site: exact }
+  const byId = sites.find(site => site.siteId === target)
+  if (byId)
+    return { kind: 'found', site: byId }
+  const exact = sites.filter(site => site.siteUrl === target)
   const key = siteKey(target)
-  const matches = key === undefined ? [] : sites.filter(site => siteKey(site.siteUrl) === key)
+  const matches = exact.length > 0
+    ? exact
+    : key === undefined ? [] : sites.filter(site => siteKey(site.siteUrl) === key)
   if (matches.length === 1)
     return { kind: 'found', site: matches[0]! }
   if (matches.length > 1)
@@ -63,7 +70,7 @@ export function noSitesStop(manager: SiteManager): StopDetails {
 export function siteMatchStop(match: Exclude<HostedSiteMatch, { kind: 'found' }>, manager: SiteManager): StopDetails {
   const nextCommand = 'gscdump sites --json'
   if (match.kind === 'ambiguous')
-    return { code: 'SITE_AMBIGUOUS', message: `Multiple hosted Sites match "${match.target}": ${match.matches.map(site => site.siteUrl).join(', ')}. Pass the exact Site URL with --site.`, nextCommand }
+    return { code: 'SITE_AMBIGUOUS', message: `Multiple hosted Sites match "${match.target}": ${match.matches.map(site => `${site.siteId} (${site.siteUrl})`).join(', ')}. Pass one Site ID with --site.`, nextCommand }
   if (match.sites.length === 0)
     return noSitesStop(manager)
   const available = `Hosted Sites: ${match.sites.map(site => site.siteUrl).join(', ')}.`
