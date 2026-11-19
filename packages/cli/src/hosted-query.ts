@@ -23,17 +23,18 @@ function toWireFilter(filter: Filter<any>): WireFilter {
 
 /**
  * Read rows from the hosted record through the public v1 `analytics.rows.query`
- * operation. It pages with `startRow` up to `state.rowLimit`. It never calls Google.
+ * operation. An explicit live request reads Google. Pages with `startRow` up to `state.rowLimit`.
  * When the record cannot serve the read, the host refuses it with a typed 409
  * that `describeCliError` renders, so a refusal never prints as an empty result.
  */
-export async function queryHostedRows(client: GscdumpV1Client, siteId: string, state: BuilderState): Promise<Record<string, unknown>[]> {
+export async function queryHostedRows(client: GscdumpV1Client, siteId: string, state: BuilderState, source?: 'live'): Promise<Record<string, unknown>[]> {
   const limit = state.rowLimit ?? PAGE_SIZE
   const rows: Record<string, unknown>[] = []
   while (rows.length < limit) {
     const rowLimit = Math.min(PAGE_SIZE, limit - rows.length)
     const body = {
       ...state,
+      ...(source ? { source } : {}),
       ...(state.filter ? { filter: toWireFilter(state.filter) } : {}),
       ...(state.prefilter ? { prefilter: toWireFilter(state.prefilter) } : {}),
       rowLimit,

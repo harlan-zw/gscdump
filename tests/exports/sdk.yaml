@@ -30,6 +30,7 @@
   DEFAULT_SEARCH_TYPE: string
   indexingDiagnosticsQuery: function
   indexingUrlsQuery: function
+  liveSearchPerformanceRequest: function
   sourceInfoQuery: function
   tablesQuery: function
   withDefaultSearchType: function

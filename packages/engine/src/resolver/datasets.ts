@@ -16,6 +16,7 @@ export interface LogicalDatasetDefinition {
 export const DIMENSION_SURFACES: Record<Dimension, readonly DimensionSurface[]> = {
   page: ['api', 'stored'],
   query: ['api', 'stored'],
+  brandedClassification: ['api'],
   queryCanonical: ['derived'],
   country: ['api', 'stored'],
   device: ['api', 'stored'],

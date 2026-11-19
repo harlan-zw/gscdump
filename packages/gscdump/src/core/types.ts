@@ -35,7 +35,14 @@ export interface DimensionFilter {
 /** A group of Search Analytics dimension filters. */
 export interface DimensionFilterGroup {
   filters?: DimensionFilter[]
+  filterLists?: GscSearchAnalyticsFilterList[]
   groupType?: string | null
+}
+
+/** An exact match against any of the given country or device values. */
+export interface GscSearchAnalyticsFilterList {
+  dimension: 'country' | 'device'
+  expressions: string[]
 }
 
 /** Raw Search Analytics request accepted by Google's REST endpoint. */

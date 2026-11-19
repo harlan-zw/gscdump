@@ -43,7 +43,12 @@ import { extractDateRange, normalizeBuilderStateResult } from 'gscdump/query'
 // The dimensions the compiler knows how to reason about. `searchType` is a
 // query param (handled separately via `opts.searchType`/`state.searchType`),
 // never a groupable dimension, so it is deliberately excluded here.
-const KNOWN_DIMENSIONS = new Set<Dimension>(['query', 'queryCanonical', 'page', 'country', 'device', 'searchAppearance', 'date', 'hour'])
+type ArchetypeDimension = Exclude<Dimension, 'brandedClassification'>
+const KNOWN_DIMENSIONS: ReadonlySet<string> = new Set<ArchetypeDimension>(['query', 'queryCanonical', 'page', 'country', 'device', 'searchAppearance', 'date', 'hour'])
+
+function isArchetypeDimension(dimension: string): dimension is ArchetypeDimension {
+  return KNOWN_DIMENSIONS.has(dimension)
+}
 
 // Comparison operators legitimate ONLY on the `date` dimension (range
 // bounds) — `extractWireDateRange` already consumes these; seeing them here
@@ -69,7 +74,7 @@ const ENTITY_DIMENSIONS = ['page', 'query', 'queryCanonical'] as const satisfies
  * the whole point: a caller must never get a query silently missing part of
  * its filter.
  */
-function collectEqualityMatches(filter: Filter<any> | undefined, out: Map<Dimension, string>): boolean {
+function collectEqualityMatches(filter: Filter<any> | undefined, out: Map<ArchetypeDimension, string>): boolean {
   if (!filter)
     return true
   if (filter._groupType === 'or')
@@ -80,9 +85,9 @@ function collectEqualityMatches(filter: Filter<any> | undefined, out: Map<Dimens
         return false
       continue
     }
-    if (!EQUALITY_OPERATORS.has(f.operator) || !KNOWN_DIMENSIONS.has(f.dimension as Dimension))
+    if (!EQUALITY_OPERATORS.has(f.operator) || !isArchetypeDimension(f.dimension))
       return false
-    const dim = f.dimension as Dimension
+    const dim = f.dimension
     const existing = out.get(dim)
     if (existing !== undefined && existing !== f.expression)
       return false
@@ -153,12 +158,12 @@ export function builderStateToArchetype(
     return null
   const range = { start: startDate, end: endDate }
 
-  const matches = new Map<Dimension, string>()
+  const matches = new Map<ArchetypeDimension, string>()
   if (!collectEqualityMatches(state.filter, matches))
     return null
 
-  const dims = (state.dimensions ?? []) as Dimension[]
-  if (dims.some(d => !KNOWN_DIMENSIONS.has(d)))
+  const dims = state.dimensions
+  if (!dims.every(isArchetypeDimension))
     return null
   if (dims.includes('hour') || dims.includes('searchAppearance'))
     return null // no archetype SQL builder groups by these today

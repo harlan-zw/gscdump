@@ -1,6 +1,7 @@
-import { between, date, gsc, page, query } from 'gscdump/query'
+import { googleSearchConsole } from 'gscdump'
+import { and, between, brandedClassification, date, eq, gsc, ne, page, query } from 'gscdump/query'
 import { describe, expect, it, vi } from 'vitest'
-import { createLiveGscSource } from '../src/live'
+import { createLiveGscSource } from '../src/index'
 
 function emptyRows() {
   return (async function* () {
@@ -9,6 +10,38 @@ function emptyRows() {
 }
 
 describe('createLiveGscSource', () => {
+  it.each([
+    { operator: eq, expression: 'https://example.com/products', keepsRow: true },
+    { operator: ne, expression: 'https://example.com/products', keepsRow: false },
+    { operator: eq, expression: 'https://other.example/products', keepsRow: false },
+    { operator: eq, expression: 'https://example.com/products/', keepsRow: false },
+  ])('compares branded page rows against the exact full URL: $expression, keepsRow=$keepsRow, $operator', async ({ operator, expression, keepsRow }) => {
+    const url = 'https://example.com/products'
+    const metrics = { clicks: 12, impressions: 80, ctr: 0.15, position: 3 }
+    const fetch = vi.fn()
+      .mockResolvedValueOnce({ rows: [{ keys: [url, 'BRANDED'], ...metrics }] })
+      .mockResolvedValue({ rows: [] })
+    const source = createLiveGscSource({
+      siteUrl: 'sc-domain:example.com',
+      getAccessToken: async () => 'test-token',
+      createClient: accessToken => googleSearchConsole(accessToken, { fetch: fetch as any }),
+    })
+    const state = gsc.select(page, brandedClassification).where(and(
+      between(date, '2026-06-01', '2026-06-30'),
+      operator(page, expression),
+    )).getState()
+
+    const rows = await source.queryRows(state)
+
+    expect(fetch).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({
+      body: expect.objectContaining({
+        dimensions: ['page', 'brandedClassification'],
+        dimensionFilterGroups: [{ filters: [{ dimension: 'page', operator: operator === eq ? 'equals' : 'notEquals', expression }] }],
+      }),
+    }))
+    expect(rows).toEqual(keepsRow ? [{ page: url, brandedClassification: 'BRANDED', ...metrics }] : [])
+  })
+
   it('scopes searchType on BuilderState and reuses the host-created client', async () => {
     const states: Array<Record<string, unknown>> = []
     const client = {

@@ -1,4 +1,4 @@
-import type { SiteCandidate } from 'gscdump'
+import type { DimensionFilterGroup, SiteCandidate } from 'gscdump'
 import type { Auth } from 'gscdump/client'
 import type { VerificationMethod } from 'gscdump/sites'
 import type { HandlerContext } from '../types'
@@ -66,10 +66,7 @@ interface QueryToolArgs {
   type?: string
   dataState?: string
   aggregationType?: string
-  dimensionFilterGroups?: Array<{
-    groupType?: string
-    filters: Array<{ dimension: string, operator: string, expression: string }>
-  }>
+  dimensionFilterGroups?: DimensionFilterGroup[]
 }
 
 type SearchAnalyticsClient = Pick<ReturnType<typeof googleSearchConsole>, 'searchAnalytics'>
@@ -102,7 +99,8 @@ export async function runMcpSearchAnalyticsQuery(
         ? {
             dimensionFilterGroups: args.dimensionFilterGroups.map(g => ({
               groupType: g.groupType ?? 'and',
-              filters: g.filters,
+              ...(g.filters ? { filters: g.filters } : {}),
+              ...(g.filterLists ? { filterLists: g.filterLists } : {}),
             })),
           }
         : {}),
@@ -297,27 +295,31 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
   ])
 
   const dimensionFilterSchema = z.object({
-    dimension: z.enum(['date', 'query', 'page', 'country', 'device', 'searchAppearance']),
+    dimension: z.enum(['date', 'query', 'page', 'country', 'device', 'searchAppearance', 'brandedClassification']),
     operator: filterOperatorSchema,
     expression: z.string(),
   })
 
   const filterGroupSchema = z.object({
     groupType: z.enum(['and']).optional().describe('Only "and" is supported; multiple groups do not implement OR'),
-    filters: z.array(dimensionFilterSchema),
+    filters: z.array(dimensionFilterSchema).optional(),
+    filterLists: z.array(z.object({
+      dimension: z.enum(['country', 'device']),
+      expressions: z.array(z.string()).min(1),
+    })).optional(),
   })
 
   registerTool(
     'query',
     {
-      description: 'Run a custom search analytics query with dimension filters (regex/contains/equals). Multiple filter groups do not implement OR.',
+      description: 'Read live Search Console metrics. Use filterLists to match any selected country or device within one dimension.',
       inputSchema: z.object({
         siteUrl: siteUrlSchema,
         startDate: z.string().describe('Start date (YYYY-MM-DD)'),
         endDate: z.string().describe('End date (YYYY-MM-DD)'),
-        dimensions: z.array(z.enum(['date', 'query', 'page', 'country', 'device', 'searchAppearance'])).describe('Dimensions to group by'),
+        dimensions: z.array(z.enum(['date', 'query', 'page', 'country', 'device', 'searchAppearance', 'brandedClassification'])).describe('Google brand classification requires an eligible top-level property and dates from 2026-02-21. Omit query filters when using it.'),
         rowLimit: z.number().optional().describe('Max rows (default 25000)'),
-        type: z.enum(SearchTypes).optional().describe('Search type'),
+        type: z.enum(SearchTypes).optional().describe('Use page, date, country, or device for Web Multimodal. Use Web, Image, Video, or News for brand classification.'),
         dataState: z.enum(['final', 'all']).optional().describe('Data state: final (settled) or all (includes fresh)'),
         aggregationType: z.enum(['byPage', 'byProperty']).optional().describe('Aggregation type'),
         dimensionFilterGroups: z.array(filterGroupSchema).optional().describe('Filter groups use "and" internally. Multiple groups do not implement OR.'),

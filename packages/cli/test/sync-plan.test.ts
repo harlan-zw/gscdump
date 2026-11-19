@@ -1,9 +1,16 @@
 import { describe, expect, it } from 'vitest'
-import { planJobDates, resolveWindow } from '../src/sync-plan'
+import { minimumCallsPerDate, planJobDates, planSyncJobs, resolveWindow } from '../src/sync-plan'
 
 const LATEST = '2026-09-19'
 const FLOOR = '2025-05-23'
 const catchUp = resolveWindow({ full: false, latest: LATEST, floor: FLOOR })
+
+it('plans Web Multimodal dates and estimates only the supported reads', () => {
+  const plan = planSyncJobs(['dates', 'queries'], ['webMultimodal'])
+  expect(plan.jobs.map(job => job.table)).toEqual(['dates'])
+  expect(plan.unsupported.map(job => job.table)).toEqual(['queries'])
+  expect(minimumCallsPerDate('dates', 'webMultimodal')).toBe(2)
+})
 
 describe('planJobDates', () => {
   it('starts a table with no history 28 days back, newest first', () => {

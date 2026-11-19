@@ -15,6 +15,7 @@ function createQueryParam<P extends QueryParamName>(param: P): QueryParam<P> {
 // Groupable dimensions
 export const page = createColumn('page')
 export const query = createColumn('query')
+export const brandedClassification = createColumn('brandedClassification')
 export const queryCanonical = createColumn('queryCanonical')
 export const device = createColumn('device')
 export const country = createColumn('country')

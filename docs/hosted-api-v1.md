@@ -231,7 +231,7 @@ reads it on the D1 primary during the lifecycle read.
 
 ## Record read refusals
 
-If the Site's record cannot serve an `analytics.rows.query` read, the host
+By default, if the Site's record cannot serve an `analytics.rows.query` read, the host
 refuses it with `409 invalid_request`, and `details.reason` names the state.
 The host never answers that read from live Google, and never answers it with
 an empty `200`. An immediate retry gets the same answer. Parse `details` with
@@ -245,6 +245,21 @@ an empty `200`. An immediate retry gets the same answer. Parse `details` with
 Both can carry the Site's `syncStatus`, `lastSyncAt` (Unix seconds),
 `oldestDateSynced`, and `newestDateSynced`. A corrupted catalog fails as
 retryable `503 internal_error` instead.
+
+## Live Search Console reads
+
+Set `source: "live"` with a date filter to read Google Search Console for the
+registered host. Use `brandedClassification` as a grouping dimension or an
+`equals` filter with `BRANDED` or `NON_BRANDED`. Google classifies queries
+from 21 February 2026 for eligible top-level properties. Omit query filters
+when using Google's brand classification.
+
+Use `searchType: "webMultimodal"` for Google Lens, Circle to Search and image
+uploads. Use page, date, country, or device for Web Multimodal.
+Use Web, Image, Video, or News for Google brand classification.
+
+For multiple countries or devices, send one OR group of exact
+matches per dimension. The host sends them to Google as `filterLists`.
 
 ## Bing and Sitemap submission states
 

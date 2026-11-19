@@ -37,6 +37,7 @@ export interface NormalizedFilterV1 {
 export const GSCDUMP_V1_ANALYTICS_DIMENSIONS = [
   'page',
   'query',
+  'brandedClassification',
   'queryCanonical',
   'country',
   'device',
@@ -244,6 +245,7 @@ export function createGscdumpV1BrowserSchemas(
     }),
   ]))
   const analyticsRowsRequest = z.strictObject({
+    source: z.literal('live').optional(),
     dimensions: z.array(z.enum(dimensions)).min(1),
     metrics: z.array(z.enum(metrics)).optional(),
     filter: normalizedFilter.optional(),

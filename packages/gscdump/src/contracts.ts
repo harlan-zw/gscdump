@@ -1,13 +1,16 @@
 import type { GscSearchType } from '@gscdump/contracts/search-types'
+import type { GscSearchAnalyticsFilterList } from './core/types'
 
 // Schema/storage vocabulary is owned by the dependency-free `@gscdump/contracts`
 // leaf package; re-exported here so `gscdump/contracts` stays the single import
 // surface for GSC consumers. The GSC Search Analytics wire types below remain
 // owned by this package (the live-API client is their only consumer).
+export type { GscSearchAnalyticsFilterList } from './core/types'
 export type { ColumnDef, ColumnType, Row, TableName, TableSchema, TenantCtx } from '@gscdump/contracts'
 export type { GscSearchType } from '@gscdump/contracts/search-types'
 
-export type GscSearchAnalyticsDimension = 'page' | 'query' | 'country' | 'device' | 'date' | 'hour' | 'searchAppearance'
+export type GscSearchAnalyticsDimension = 'page' | 'query' | 'country' | 'device' | 'date' | 'hour' | 'searchAppearance' | 'brandedClassification'
+export type GscBrandedClassification = 'BRANDED' | 'NON_BRANDED'
 
 export type GscDataState = 'final' | 'all' | 'hourly_all'
 
@@ -35,6 +38,7 @@ export interface GscSearchAnalyticsFilter {
 export interface GscSearchAnalyticsFilterGroup {
   groupType?: 'and' | 'or'
   filters: GscSearchAnalyticsFilter[]
+  filterLists?: GscSearchAnalyticsFilterList[]
 }
 
 export type GscAggregationType = 'auto' | 'byPage' | 'byProperty' | 'byNewsShowcasePanel'

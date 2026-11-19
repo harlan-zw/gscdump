@@ -13,6 +13,7 @@ import type { SyncJob, SyncMode, SyncWindow } from '../sync-plan'
 import type { SyncRun } from '../sync-run'
 import { randomUUID } from 'node:crypto'
 import process from 'node:process'
+import { searchTypeSupportsQueries } from '@gscdump/contracts'
 import { runGscSearchAppearanceContextSlice, runGscSyncSlice } from '@gscdump/engine-gsc-api'
 import { createEmptyTypesStore } from '@gscdump/engine/entities'
 import { createRowAccumulator } from '@gscdump/engine/ingest'
@@ -270,8 +271,9 @@ async function runOneDate(
     const totals = apiRows.find(row => row.keys[0] === date)
     if (totals) {
       const deviceRows = await fetchDateRows(client, siteUrl, searchType, ['date', 'device'], date)
-      const queryRows = await fetchDateRows(client, siteUrl, searchType, TABLE_DIMS.queries, date)
-      const queryImpressions = queryRows.reduce((sum, row) => sum + row.impressions, 0)
+      const queryImpressions = searchTypeSupportsQueries(searchType)
+        ? (await fetchDateRows(client, siteUrl, searchType, TABLE_DIMS.queries, date)).reduce((sum, row) => sum + row.impressions, 0)
+        : totals.impressions
       rows.push(assembleDatesRow(date, totals, deviceRows, queryImpressions).row)
     }
   }
@@ -687,7 +689,7 @@ function windowLabel(window: SyncWindow): string {
 async function planSite(opts: SiteOptions): Promise<Record<string, unknown>> {
   const { types, skippedTypes, emptyTypes } = await resolveTypes(opts, true)
   const plan = await buildSitePlan(opts, types, skippedTypes, emptyTypes)
-  const items = plan.jobs.flatMap(({ job, dates }) => dates.map(date => ({ table: job.table, searchType: job.type, date, calls: minimumCallsPerDate(job.table) })))
+  const items = plan.jobs.flatMap(({ job, dates }) => dates.map(date => ({ table: job.table, searchType: job.type, date, calls: minimumCallsPerDate(job.table, job.type) })))
   const minimumCalls = items.reduce((sum, item) => sum + item.calls, 0)
   const ranges = groupIntoRanges([...new Set(items.map(item => item.date))])
   if (!opts.json) {
