@@ -4,6 +4,7 @@ import {
   matchesTopLevelPage,
   metricValue,
 } from '@gscdump/engine/resolver'
+import { normalizeUrl } from 'gscdump/normalize'
 
 import {
   extractMetricFilters,
@@ -31,9 +32,12 @@ function compileDimensionFilter(filter: InternalFilter): RowMatcher {
   const { dimension, expression } = filter
   switch (filter.operator) {
     case 'equals':
-      return row => dimensionValue(row, dimension) === expression
-    case 'notEquals':
-      return row => dimensionValue(row, dimension) !== expression
+    case 'notEquals': {
+      const value = dimension === 'page' && expression.startsWith('/')
+        ? (row: Row) => normalizeUrl(dimensionValue(row, dimension))
+        : (row: Row) => dimensionValue(row, dimension)
+      return filter.operator === 'equals' ? row => value(row) === expression : row => value(row) !== expression
+    }
     case 'contains':
       return row => dimensionValue(row, dimension).includes(expression)
     case 'notContains':
