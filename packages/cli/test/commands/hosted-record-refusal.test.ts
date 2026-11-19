@@ -1,3 +1,4 @@
+import type { AnalyticsRowsV1Request } from '@gscdump/contracts/v1/http'
 import type { CliRuntime } from '../../src/runtime'
 import fs from 'node:fs/promises'
 import os from 'node:os'
@@ -11,17 +12,19 @@ import { createCliRuntime } from '../../src/runtime'
 // `total: 0` and exited 0, because the host answered an unreadable record
 // with an empty 200. The host now refuses that read with a typed 409. The CLI
 // must say why in plain words, name the next step, and exit non-zero.
-describe('hosted query when the Site\'s record cannot serve the read', () => {
+describe('hosted query', () => {
   let runtime: CliRuntime
   let stdout: string[]
   let stderr: string
   let refusal: Record<string, unknown>
+  let rowsRequest: AnalyticsRowsV1Request | undefined
 
   beforeEach(async () => {
     const configDir = await fs.mkdtemp(path.join(os.tmpdir(), 'gscdump-hosted-refusal-'))
     await fs.writeFile(path.join(configDir, 'config.json'), JSON.stringify({ dataDir: path.join(configDir, 'data') }))
     stderr = ''
     stdout = []
+    rowsRequest = undefined
     runtime = createCliRuntime({
       configDir,
       environment: { GSCDUMP_API_KEY: 'gsd_user_private', GSCDUMP_CONFIG_DIR: configDir },
@@ -39,7 +42,7 @@ describe('hosted query when the Site\'s record cannot serve the read', () => {
     vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
       throw new Error(`process.exit(${code})`)
     }) as never)
-    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request, options?: RequestInit) => {
       const url = new URL(input instanceof Request ? input.url : input)
       if (url.origin !== 'https://gscdump.com')
         throw new Error(`Hosted mode called ${url.origin}`)
@@ -50,6 +53,13 @@ describe('hosted query when the Site\'s record cannot serve the read', () => {
         })
       }
       if (url.pathname === '/api/analytics/v1/sites/s_site/rows') {
+        rowsRequest = JSON.parse(String(options?.body)) as AnalyticsRowsV1Request
+        if (rowsRequest.source === 'live') {
+          return Response.json({
+            data: { rows: [{ page: 'https://harlanzw.com/landing', clicks: 4 }] },
+            meta: { requestId: 'req_rows', surface: 'analytics', version: '1.0', sourceName: 'gsc-api', sourceKind: 'row', queryMs: 1 },
+          })
+        }
         return Response.json({
           error: { code: 'invalid_request', message: 'The record for this Site is not readable yet. Try again in a few minutes.', requestId: 'req_rows', retryable: false, details: refusal },
         }, { status: 409 })
@@ -65,6 +75,22 @@ describe('hosted query when the Site\'s record cannot serve the read', () => {
   })
 
   const query = () => runCli({ rawArgs: ['query', '--site', 'harlanzw.com', '--dimensions', 'date', '--limit', '7'], runtime, loadEnv: false })
+
+  it('keeps a full page URL when Google classifies queries in Hosted mode', async () => {
+    await expect(runCli({
+      rawArgs: ['query', '--site', 'harlanzw.com', '-d', 'page', '--branded-classification', 'BRANDED', '--page', 'https://harlanzw.com/landing'],
+      runtime,
+      loadEnv: false,
+    })).resolves.toBe(0)
+
+    expect(rowsRequest).toMatchObject({
+      source: 'live',
+      filter: { _filters: expect.arrayContaining([
+        { dimension: 'page', operator: 'equals', expression: 'https://harlanzw.com/landing' },
+        { dimension: 'brandedClassification', operator: 'equals', expression: 'BRANDED' },
+      ]) },
+    })
+  })
 
   it('says the record is not readable yet, when Sync finished, and exits non-zero', async () => {
     refusal = { reason: 'record_not_ready', syncStatus: 'synced', lastSyncAt: 1790824592, oldestDateSynced: '2025-05-30', newestDateSynced: '2026-09-29' }

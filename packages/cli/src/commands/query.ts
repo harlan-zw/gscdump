@@ -251,8 +251,9 @@ export const queryCommand = defineCommand({
         localAlternative: 'run `gscdump sync --site <site>` first, or pass --live',
       })
       const { start: startDate, end: endDate } = windowOrExit(windowFlags, getLatestGscDate())
+      const dimensionFilter = usesBrand ? toLiveFilter(filters, site.siteUrl) : toLocalFilter(filters)
       const state = {
-        ...buildLocalState(dimNames, startDate, endDate, rowLimit, toLocalFilter(filters)),
+        ...buildLocalState(dimNames, startDate, endDate, rowLimit, dimensionFilter),
         searchType: localSearchType,
       }
       const source = usesBrand ? 'live' : 'hosted'
