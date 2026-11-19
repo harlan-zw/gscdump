@@ -216,18 +216,18 @@ export const queryCommand = defineCommand({
       return
     }
 
-    const dimNames = await resolveDimensions(args, args.type ?? ctxConfig.defaultSearchType)
+    const searchType = await resolveSearchType(args, ctxConfig.defaultSearchType)
+    const dimNames = await resolveDimensions(args, searchType)
     const windowFlags = await promptRange(args)
     const invalidWindow = checkWindowFlags(windowFlags)
     if (invalidWindow)
       throw commandLineError(invalidWindow.message)
-    await promptFilters(args as Record<string, unknown>)
+    await promptFilters(args, searchType)
     const limitArg = String(args.limit ?? ctxConfig.defaultLimit ?? 1000)
     const rowLimit = Number(limitArg)
     if (!POSITIVE_INTEGER_RE.test(limitArg) || !Number.isSafeInteger(rowLimit) || rowLimit < 1)
       throw commandLineError('Invalid --limit. Use a positive safe integer, such as --limit 1000.')
     const filters = parseFilterArgs(args as Record<string, unknown>)
-    const searchType = parseSearchType(args.type ?? ctxConfig.defaultSearchType, '--type')
     // The Store holds every search type; reading them together adds web and image rows into one total.
     const localSearchType: SearchType = searchType ?? 'web'
     const dataState = args['data-state']
@@ -384,7 +384,27 @@ export const queryCommand = defineCommand({
   },
 })
 
-async function resolveDimensions(args: Record<string, unknown>, searchType: string | undefined): Promise<string[]> {
+async function resolveSearchType(args: Record<string, unknown>, defaultType: SearchType | undefined): Promise<SearchType | undefined> {
+  if (!args.interactive || args.type != null)
+    return parseSearchType(args.type ?? defaultType, '--type')
+  const input = await text({
+    message: `Search type (blank for ${defaultType ?? 'web'}; allowed: ${ALL_SEARCH_TYPES.join(', ')})`,
+    placeholder: '',
+  })
+  if (isCancel(input)) {
+    cancel('Cancelled')
+    process.exit(0)
+  }
+  return parseSearchType(input || defaultType, '--type')
+}
+
+function supportsQueryPromptDimension(dimension: string, searchType: SearchType | undefined): boolean {
+  if (dimension === 'brandedClassification')
+    return searchType == null || ['web', 'image', 'video', 'news'].includes(searchType)
+  return dimension !== 'query' || searchType !== 'webMultimodal'
+}
+
+async function resolveDimensions(args: Record<string, unknown>, searchType: SearchType | undefined): Promise<string[]> {
   if (args.dimensions != null) {
     const dimensions = String(args.dimensions).split(',').map(d => d.trim())
     if (dimensions.some(d => !(DIMENSIONS as readonly string[]).includes(d)))
@@ -396,7 +416,7 @@ async function resolveDimensions(args: Record<string, unknown>, searchType: stri
   if (args.interactive) {
     const selected = await multiselect({
       message: 'Select dimensions',
-      options: DIMENSIONS.map(d => ({ value: d, label: d })),
+      options: DIMENSIONS.filter(d => supportsQueryPromptDimension(d, searchType)).map(d => ({ value: d, label: d })),
       initialValues: defaultDimensions,
     })
     if (isCancel(selected)) {
@@ -447,15 +467,14 @@ function windowOrExit(flags: WindowFlags, anchor: string): { start: string, end:
   return window.value
 }
 
-// Interactive mode fills in args.query/page/country/device/searchAppearance/type/data-state
-// from prompts when the user hasn't already passed them. Mutates `args` in place.
-async function promptFilters(args: Record<string, unknown>): Promise<void> {
+// Interactive mode fills missing filter and data state flags in place.
+async function promptFilters(args: Record<string, unknown>, searchType: SearchType | undefined): Promise<void> {
   if (!args.interactive)
     return
   for (const dim of FILTER_DIMS) {
     const brand = dim === 'brandedClassification'
     const flag = brand ? 'branded-classification' : dim
-    if (args[flag])
+    if (args[flag] || !supportsQueryPromptDimension(dim, searchType))
       continue
     const v = await text({
       message: brand
@@ -469,18 +488,6 @@ async function promptFilters(args: Record<string, unknown>): Promise<void> {
     }
     if (v && String(v).length > 0)
       args[flag] = String(v)
-  }
-  if (!args.type) {
-    const t = await text({
-      message: `Search type (blank for default web; allowed: ${ALL_SEARCH_TYPES.join(', ')})`,
-      placeholder: '',
-    })
-    if (isCancel(t)) {
-      cancel('Cancelled')
-      process.exit(0)
-    }
-    if (t && String(t).length > 0)
-      args.type = String(t)
   }
   if (!args['data-state']) {
     const ds = await text({

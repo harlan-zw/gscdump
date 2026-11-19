@@ -14,6 +14,13 @@ const mocks = vi.hoisted(() => ({
   loadConfig: vi.fn(() => Promise.resolve({})),
   storeQuery: vi.fn(),
   storeWatermarks: vi.fn(),
+  promptText: vi.fn(),
+}))
+
+vi.mock('@clack/prompts', async importOriginal => ({
+  ...await importOriginal<typeof import('@clack/prompts')>(),
+  text: mocks.promptText,
+  multiselect: vi.fn(({ initialValues }) => Promise.resolve(initialValues)),
 }))
 
 vi.mock('gscdump/client', async (importOriginal) => {
@@ -138,6 +145,14 @@ describe('query command', () => {
     await runCommand(queryCommand, { rawArgs: ['--live', '--explain', '--dimensions', 'page, query,page'] })
 
     expect(JSON.parse(consoleOutput[0]!).body.dimensions).toEqual(['page', 'query'])
+  })
+
+  it('defaults to page when the wizard selects Web Multimodal', async () => {
+    mocks.promptText.mockImplementation(async ({ message }) => message.startsWith('Search type') ? 'webMultimodal' : '')
+
+    await runCommand(queryCommand, { rawArgs: ['--live', '--explain', '--interactive', '--site', 'https://example.com/'] })
+
+    expect(JSON.parse(consoleOutput[0]!).body).toMatchObject({ type: 'webMultimodal', dimensions: ['page'] })
   })
 
   it.each([
