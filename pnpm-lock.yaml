@@ -512,6 +512,9 @@ importers:
       '@types/proper-lockfile':
         specifier: 'catalog:'
         version: 4.1.4
+      fflate:
+        specifier: catalog:deps
+        version: 0.8.3
       vitest:
         specifier: catalog:dev-test
         version: 5.0.1(@types/node@26.6.2)(@vitest/browser-playwright@5.0.1)(@vitest/ui@5.0.1)(vite@8.3.2)

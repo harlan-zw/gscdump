@@ -29,6 +29,10 @@ export type StopCode
     | 'RANGE_NOT_SYNCED'
   // A Google API quota is used up until its reset time.
     | 'QUOTA_USED_UP'
+  // Generative AI report uploads.
+    | 'GENERATIVE_AI_EXPORT_REFUSED'
+    | 'GENERATIVE_AI_UPLOAD_NOT_FOUND'
+    | 'GENERATIVE_AI_UNAVAILABLE'
 
 /**
  * The `code` of a JSON error. A stop has its own code. Every other failure has

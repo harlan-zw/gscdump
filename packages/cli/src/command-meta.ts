@@ -108,3 +108,4 @@ export const papercutCommandMeta = {
 }
 export const telemetryCommandMeta = { name: 'telemetry', description: 'Record an explicit agent task outcome' }
 export const bingCommandMeta = { name: 'bing', description: 'Authenticate Bing, list sites, dump data, and read Indexing Evidence' }
+export const generativeAiCommandMeta = { name: 'generative-ai', description: 'Upload and read Generative AI report exports from Search Console (Hosted mode)' }

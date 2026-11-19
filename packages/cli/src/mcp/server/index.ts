@@ -21,6 +21,7 @@ import {
 } from 'gscdump/sites'
 import { z } from 'zod'
 import { formatSiteResolution } from '../../context'
+import { GENERATIVE_AI_TOOL_NOTE } from '../../generative-ai-guidance'
 import { discoverLiveSitemap } from '../../sitemap'
 import { toolErrorMessage } from '../errors'
 import { diagnostics } from '../handlers/diagnostics'
@@ -310,7 +311,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
   registerTool(
     'query',
     {
-      description: 'Run a custom search analytics query with dimension filters (regex/contains/equals). Multiple filter groups do not implement OR.',
+      description: `Run a custom search analytics query with dimension filters (regex/contains/equals). Multiple filter groups do not implement OR. ${GENERATIVE_AI_TOOL_NOTE}`,
       inputSchema: z.object({
         siteUrl: siteUrlSchema,
         startDate: z.string().describe('Start date (YYYY-MM-DD)'),
