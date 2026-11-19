@@ -5,7 +5,7 @@ import path from 'node:path'
 import process from 'node:process'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { runCli } from '../../src/cli'
-import { matchHostedSite } from '../../src/hosted-site'
+import { matchHostedSite, siteMatchStop } from '../../src/hosted-site'
 import { createCliRuntime } from '../../src/runtime'
 
 const envelope = (data: unknown) => Response.json({ data, meta: { requestId: 'req_idx', surface: 'partner', version: '1.0' } })
@@ -230,6 +230,19 @@ describe('matchHostedSite', () => {
   it('reports an ambiguous match instead of picking one', () => {
     const both = [...sites, { siteId: 's_prefix', siteUrl: 'https://example.com/' }]
     expect(matchHostedSite(both, 'example.com')).toMatchObject({ kind: 'ambiguous', matches: [both[0], both[2]] })
+  })
+
+  it('refuses an exact Site URL that two hosted Sites share', () => {
+    // One user can hold a Hosted Site and a partner Site for the same host.
+    const shared = [{ siteId: 's_hosted', siteUrl: 'example.com' }, { siteId: 's_partner', siteUrl: 'example.com' }]
+    expect(matchHostedSite(shared, 'example.com')).toEqual({ kind: 'ambiguous', target: 'example.com', matches: shared })
+    expect(matchHostedSite(shared, 's_partner')).toEqual({ kind: 'found', site: shared[1] })
+  })
+
+  it('names each Site ID when Sites share a Site URL', () => {
+    const shared = [{ siteId: 's_hosted', siteUrl: 'example.com' }, { siteId: 's_partner', siteUrl: 'example.com' }]
+    const stop = siteMatchStop({ kind: 'ambiguous', target: 'example.com', matches: shared }, { _tag: 'gscdump' })
+    expect(stop.message).toBe('Multiple hosted Sites match "example.com": s_hosted (example.com), s_partner (example.com). Pass one Site ID with --site.')
   })
 
   it('uses the only Site when --site is absent, and asks for --site otherwise', () => {
