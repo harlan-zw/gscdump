@@ -107,7 +107,7 @@ const candidate = z.strictObject({
   version: z.number().int().positive(),
   namespace: z.string().regex(/^[a-z][a-z0-9_]*$/),
   requestedUrl: registeredUrl,
-  window: collectionWindow,
+  window: siteVersionWindowSchema,
   requiredSlices: z.array(siteVersionSliceSchema).min(1),
 })
 
