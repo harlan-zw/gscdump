@@ -376,10 +376,16 @@ export function resolveToBodyResult(input: BuilderState): Result<GscSearchAnalyt
 
   const filterGroups = resolveFilter(dimensionFilter)
   const apiLeafFilters = filterGroups.flatMap(g => g.filters ?? [])
-  if ((body.dimensions?.includes('brandedClassification') || apiLeafFilters.some(f => f.dimension === 'brandedClassification'))
-    && apiLeafFilters.some(f => f.dimension === 'query')) {
-    return err(queryErrors.brandWithQueryFilter())
+  const filtersByQuery = apiLeafFilters.some(f => f.dimension === 'query')
+  const usesBrand = body.dimensions?.includes('brandedClassification') || apiLeafFilters.some(f => f.dimension === 'brandedClassification')
+  if (usesBrand) {
+    if (body.type === 'webMultimodal' || body.type === 'discover' || body.type === 'googleNews')
+      return err(queryErrors.brandUnsupportedForSearchType())
+    if (filtersByQuery)
+      return err(queryErrors.brandWithQueryFilter())
   }
+  if (body.type === 'webMultimodal' && (body.dimensions?.includes('query') || filtersByQuery))
+    return err(queryErrors.multimodalQueryUnsupported())
   const listDimensions = new Set(filterGroups.flatMap(g => (g.filterLists ?? []).map(filter => filter.dimension)))
   if (apiLeafFilters.some(f => (f.dimension === 'country' || f.dimension === 'device') && listDimensions.has(f.dimension)))
     return err(queryErrors.conflictingFilterList())

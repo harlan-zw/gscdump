@@ -255,7 +255,10 @@ from 21 February 2026 for eligible top-level properties. Omit query filters
 when using Google's brand classification.
 
 Use `searchType: "webMultimodal"` for Google Lens, Circle to Search and image
-uploads. For multiple countries or devices, send one OR group of exact
+uploads. Use page, date, country, or device for Web Multimodal.
+Use Web, Image, Video, or News for Google brand classification.
+
+For multiple countries or devices, send one OR group of exact
 matches per dimension. The host sends them to Google as `filterLists`.
 
 ## Bing and Sitemap submission states

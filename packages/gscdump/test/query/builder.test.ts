@@ -180,6 +180,20 @@ describe('gSCQueryBuilder', () => {
       expect(body.type).toBe('webMultimodal')
     })
 
+    it.each(['webMultimodal', 'discover', 'googleNews'] as const)('rejects brand grouping and filters for %s', (type) => {
+      const range = between(date, '2026-10-01', '2026-10-31')
+      expect(() => gsc.select('brandedClassification').where(range).type(type).toBody()).toThrow('Use Web, Image, Video, or News')
+      const filtered = gsc.select('date').where(and(range, eq(brandedClassification, 'BRANDED'))).type(type)
+      expect(() => filtered.toBody()).toThrow('Use Web, Image, Video, or News')
+    })
+
+    it('rejects query grouping and filters for Web Multimodal', () => {
+      const range = between(date, '2026-10-01', '2026-10-31')
+      expect(() => gsc.select('query').where(range).type('webMultimodal').toBody()).toThrow('remove the query dimension or filter')
+      const filtered = gsc.select('date').where(and(range, eq(queryColumn, 'example'))).type('webMultimodal')
+      expect(() => filtered.toBody()).toThrow('remove the query dimension or filter')
+    })
+
     it('builds body with contains filter', () => {
       const body = gsc
         .select('page')

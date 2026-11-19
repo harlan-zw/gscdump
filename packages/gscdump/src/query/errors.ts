@@ -88,6 +88,12 @@ export const queryErrors = {
   brandWithQueryFilter(): QueryError {
     return { kind: 'invalid-filter', message: 'The brandedClassification dimension cannot be combined with a query filter.' }
   },
+  brandUnsupportedForSearchType(): QueryError {
+    return { kind: 'invalid-filter', message: 'Use Web, Image, Video, or News for Google brand classification.' }
+  },
+  multimodalQueryUnsupported(): QueryError {
+    return { kind: 'invalid-filter', message: 'For Web Multimodal, remove the query dimension or filter.' }
+  },
   conflictingFilterList(): QueryError {
     return { kind: 'invalid-filter', message: 'The same dimension cannot appear in both filters and filterLists.' }
   },

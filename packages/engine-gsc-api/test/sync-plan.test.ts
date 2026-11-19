@@ -2,6 +2,14 @@ import { gscSyncFanout, ledgerTablesForGscSync, planGscBackfillDates, planGscSyn
 import { describe, expect, it } from 'vitest'
 
 describe('sync coverage plan', () => {
+  it('syncs Web Multimodal using the dimensions Google serves', () => {
+    expect(gscSyncFanout(['webMultimodal'])).toEqual([
+      { table: 'pages', searchType: 'webMultimodal' },
+      { table: 'countries', searchType: 'webMultimodal' },
+      { table: 'dates', searchType: 'webMultimodal' },
+    ])
+  })
+
   it('builds web and Discover fanout without a redundant web dates job', () => {
     expect(gscSyncFanout(['web', 'discover'], { omitWebDates: true })).toEqual([
       { table: 'pages' },

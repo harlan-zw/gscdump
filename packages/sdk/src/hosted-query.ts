@@ -38,10 +38,12 @@ type DataDetailOptionsWithSearchType = DataDetailOptions & SearchTypeOptions
 
 export const DEFAULT_SEARCH_TYPE: GscSearchType = 'web'
 
-export interface LiveSearchPerformanceInput {
+type LiveSearchPerformanceSelection
+  = | { searchType: 'web', brand: 'all' | 'split' | GscBrandedClassification }
+    | { searchType: 'webMultimodal', brand: 'all' }
+
+export type LiveSearchPerformanceInput = LiveSearchPerformanceSelection & {
   range: { start: string, end: string }
-  searchType: Extract<GscSearchType, 'web' | 'webMultimodal'>
-  brand: 'all' | 'split' | GscBrandedClassification
   countries: readonly string[]
   devices: readonly ('DESKTOP' | 'MOBILE' | 'TABLET')[]
 }

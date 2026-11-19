@@ -78,6 +78,17 @@ describe('hosted query', () => {
 
   const query = () => runCli({ rawArgs: ['query', '--site', 'harlanzw.com', '--dimensions', 'date', '--limit', '7'], runtime, loadEnv: false })
 
+  it('defaults Web Multimodal to a page breakdown', async () => {
+    await expect(runCli({
+      rawArgs: ['query', '--site', 'harlanzw.com', '--type', 'webMultimodal', '--explain'],
+      runtime,
+      loadEnv: false,
+    })).resolves.toBe(0)
+    expect(JSON.parse(stdout.join('\n'))).toMatchObject({
+      state: { dimensions: ['page'], searchType: 'webMultimodal' },
+    })
+  })
+
   it.each([
     ['harlanzw.com', 'https://harlanzw.com/landing', 'equals', 'https://harlanzw.com/landing'],
     ['harlanzw.com', '/landing?tab=1', 'includingRegex', '^https?://harlanzw\\.com/landing\\?tab=1$'],

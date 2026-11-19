@@ -319,7 +319,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
         endDate: z.string().describe('End date (YYYY-MM-DD)'),
         dimensions: z.array(z.enum(['date', 'query', 'page', 'country', 'device', 'searchAppearance', 'brandedClassification'])).describe('Google brand classification requires an eligible top-level property and dates from 2026-02-21. Omit query filters when using it.'),
         rowLimit: z.number().optional().describe('Max rows (default 25000)'),
-        type: z.enum(SearchTypes).optional().describe('Search type'),
+        type: z.enum(SearchTypes).optional().describe('Use page, date, country, or device for Web Multimodal. Use Web, Image, Video, or News for brand classification.'),
         dataState: z.enum(['final', 'all']).optional().describe('Data state: final (settled) or all (includes fresh)'),
         aggregationType: z.enum(['byPage', 'byProperty']).optional().describe('Aggregation type'),
         dimensionFilterGroups: z.array(filterGroupSchema).optional().describe('Filter groups use "and" internally. Multiple groups do not implement OR.'),

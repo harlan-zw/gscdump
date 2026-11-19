@@ -216,7 +216,7 @@ export const queryCommand = defineCommand({
       return
     }
 
-    const dimNames = await resolveDimensions(args)
+    const dimNames = await resolveDimensions(args, args.type ?? ctxConfig.defaultSearchType)
     const windowFlags = await promptRange(args)
     const invalidWindow = checkWindowFlags(windowFlags)
     if (invalidWindow)
@@ -384,7 +384,7 @@ export const queryCommand = defineCommand({
   },
 })
 
-async function resolveDimensions(args: Record<string, unknown>): Promise<string[]> {
+async function resolveDimensions(args: Record<string, unknown>, searchType: string | undefined): Promise<string[]> {
   if (args.dimensions != null) {
     const dimensions = String(args.dimensions).split(',').map(d => d.trim())
     if (dimensions.some(d => !(DIMENSIONS as readonly string[]).includes(d)))
@@ -392,11 +392,12 @@ async function resolveDimensions(args: Record<string, unknown>): Promise<string[
     return [...new Set(dimensions)]
   }
 
+  const defaultDimensions = searchType === 'webMultimodal' ? ['page'] : ['page', 'query']
   if (args.interactive) {
     const selected = await multiselect({
       message: 'Select dimensions',
       options: DIMENSIONS.map(d => ({ value: d, label: d })),
-      initialValues: ['page', 'query'],
+      initialValues: defaultDimensions,
     })
     if (isCancel(selected)) {
       cancel('Cancelled')
@@ -405,7 +406,7 @@ async function resolveDimensions(args: Record<string, unknown>): Promise<string[
     return selected as string[]
   }
 
-  return ['page', 'query']
+  return defaultDimensions
 }
 
 /** Collect `--start`/`--end`, prompting for them in interactive mode. */

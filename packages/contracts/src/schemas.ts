@@ -34,7 +34,7 @@ export const searchTypeSchema = z.enum(GSC_SEARCH_TYPES)
  * dimensions Web exposes — Discover has no `query`/`position`/`device`/`country`
  * breakdown at all, and Google News only reports clicks/impressions.
  *
- * - `queries`: the slice exposes per-query rows (query/position breakdowns).
+ * - `queries`: the slice exposes per-query rows.
  * - `dimensions`: the slice exposes country/device facets (Web-family only).
  *
  * Consumers use this to hide inapplicable metric columns and dimension filters
@@ -42,7 +42,7 @@ export const searchTypeSchema = z.enum(GSC_SEARCH_TYPES)
  */
 export const SEARCH_TYPE_CAPABILITIES: Record<GscSearchType, { queries: boolean, dimensions: boolean }> = {
   web: { queries: true, dimensions: true },
-  webMultimodal: { queries: true, dimensions: true },
+  webMultimodal: { queries: false, dimensions: true },
   image: { queries: true, dimensions: true },
   video: { queries: true, dimensions: true },
   news: { queries: true, dimensions: true },
