@@ -222,6 +222,9 @@ catalogs:
     consola:
       specifier: ^3.4.2
       version: 3.4.2
+    fflate:
+      specifier: ^0.8.3
+      version: 0.8.3
     google-auth-library:
       specifier: ^11.1.0
       version: 11.1.0
@@ -765,6 +768,9 @@ importers:
       '@gscdump/contracts':
         specifier: workspace:^
         version: link:../contracts
+      fflate:
+        specifier: catalog:deps
+        version: 0.8.3
       gscdump:
         specifier: workspace:^
         version: link:../gscdump

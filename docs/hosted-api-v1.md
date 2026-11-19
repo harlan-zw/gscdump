@@ -178,6 +178,28 @@ Revoking an API key does not affect the partner, and repairing the partner crede
 - If the key is unknown or another issuer created it, revoke returns `404 api_key_not_found`.
 - `createdAt` and `lastUsedAt` are Unix seconds. `lastUsedAt` is `null` until first use.
 
+## Generative AI report uploads
+
+Google has no API for the Generative AI report, so a user uploads the export zip. The decision is gscdump.com ADR-0023.
+
+| Operation | Route | Success |
+| --- | --- | --- |
+| `partner.sites.generative_ai.uploads.create` | `POST /api/partner/v1/sites/{siteId}/generative-ai/uploads` | `200` |
+| `partner.sites.generative_ai.uploads.list` | `GET /api/partner/v1/sites/{siteId}/generative-ai/uploads` | `200` |
+| `partner.sites.generative_ai.uploads.remove` | `DELETE /api/partner/v1/sites/{siteId}/generative-ai/uploads/{uploadId}` | `200` |
+| `partner.sites.generative_ai.get` | `GET /api/partner/v1/sites/{siteId}/generative-ai` | `200` |
+
+- The caller parses the zip with `parseGenerativeAiReportExport` from `@gscdump/sdk/generative-ai-report`, then sends the normalized JSON. The host never opens a zip.
+- The uploader selects the Site, because nothing inside the zip names one. A filename mismatch adds a warning.
+- If an export has Pages rows but none on the registered host, the SDK parser refuses it, and create returns `no_registered_host_rows`.
+- Create is idempotent. The same content on the same Site returns the same `uploadId` with `deduped: true`.
+- Create and remove need `sites:write`. List and read need `analytics:read`.
+- If `uploadId` is unknown, read and remove return `generative_ai_report_upload_not_found`.
+- The read has no total field. Pages rows use the registered host scope. Chart, country, and device rows use the property scope, so their sums can differ.
+- A zero reads as `zero-or-unavailable`, because Google writes both as zero. A page with no row reads as `not-listed`.
+- `http://` and `https://` rows stay separate. A read for one URL returns the other scheme in `otherSchemeRows`.
+- Each read says `source._tag: 'upload'`, because the host cannot prove the numbers came from Google.
+
 ## Entitlements
 
 gscdump bills each partner in one of two modes. An exempt partner's Sites count
