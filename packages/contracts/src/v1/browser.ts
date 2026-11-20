@@ -1,6 +1,7 @@
 import type { RealtimeV1Schemas } from './realtime'
 import { z } from 'zod'
 import { siteHoldReasonSchema } from '../entitlements'
+import { legacyHistoryNoticeSchema } from '../legacy-history'
 import {
   accountNextActions,
   accountStatuses,
@@ -270,6 +271,8 @@ export function createGscdumpV1BrowserSchemas(
     sourceName: z.string().min(1),
     sourceKind: z.enum(['row', 'sql']),
     queryMs: z.number().nonnegative(),
+    legacyHistory: legacyHistoryNoticeSchema.optional(),
+    warnings: z.array(z.string()).optional(),
   })
 
   return {

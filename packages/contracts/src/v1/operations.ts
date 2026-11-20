@@ -201,14 +201,10 @@ export function createGscdumpV1Protocol() {
     lifecycleResponse,
   } = browserSchemas
   const dimensions = GSCDUMP_V1_ANALYTICS_DIMENSIONS
-  const analyticsMeta = defineResponseObject({
-    requestId: realtimeSchemas.publicRequestId,
-    surface: z.literal('analytics'),
-    version: z.literal(GSCDUMP_HTTP_V1_VERSION),
-    sourceName: z.string().min(1),
-    sourceKind: z.enum(['row', 'sql']),
-    queryMs: z.number().nonnegative(),
-  })
+  const analyticsMeta = {
+    producer: analyticsRowsResponse.producer.shape.meta,
+    client: analyticsRowsResponse.client.shape.meta,
+  }
 
   // Reports preserve the richer hosted read model (totals, comparisons and
   // sync metadata) that cannot be reconstructed from the raw rows operation.
