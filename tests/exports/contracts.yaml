@@ -285,6 +285,8 @@
   bingCnameVerificationV1Schema: object
   bingConnectionV1Schema: object
   bingDataQueryV1Schema: object
+  bingDataTotalsQueryV1Schema: object
+  bingDataTotalsV1Schemas: object
   bingDataV1Schemas: object
   bingGrantV1Schemas: object
   bingLinkResultV1Schemas: object
@@ -402,6 +404,8 @@
   bingCnameVerificationV1Schema: object
   bingConnectionV1Schema: object
   bingDataQueryV1Schema: object
+  bingDataTotalsQueryV1Schema: object
+  bingDataTotalsV1Schemas: object
   bingDataV1Schemas: object
   bingGrantV1Schemas: object
   bingLinkResultV1Schemas: object
