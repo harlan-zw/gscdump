@@ -1,0 +1,54 @@
+{
+  "harness": 1,
+  "commit": "678c6ec13c0caa7b668ef62ce51754cba4aa9c85",
+  "parentCommit": "a3ccb234c2c472e732c3012253dce6911bcd3044",
+  "dependenciesChanged": false,
+  "runner": "ubuntu26",
+  "node": "v22.23.5",
+  "cpu": "AMD EPYC 7763 64-Core Processor",
+  "measuredAt": "2026-11-20T05:57:27.121Z",
+  "benchmarks": [
+    {
+      "id": "engine/decode-parquet-200k",
+      "kind": "time",
+      "unit": "ms",
+      "repeats": 9,
+      "head": {
+        "min": 217.71,
+        "median": 224.218
+      },
+      "parent": {
+        "min": 220.107,
+        "median": 221.925
+      },
+      "control": {
+        "min": 216.964,
+        "median": 219.807
+      },
+      "deltaPercent": -1.089,
+      "controlPercent": -0.343,
+      "verified": true
+    },
+    {
+      "id": "engine/dist-bytes",
+      "kind": "count",
+      "unit": "bytes",
+      "repeats": 1,
+      "head": {
+        "min": 1105232,
+        "median": 1105232
+      },
+      "parent": {
+        "min": 1105232,
+        "median": 1105232
+      },
+      "control": {
+        "min": 1105232,
+        "median": 1105232
+      },
+      "deltaPercent": 0,
+      "controlPercent": 0,
+      "verified": true
+    }
+  ]
+}
