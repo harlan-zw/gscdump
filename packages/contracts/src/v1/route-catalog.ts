@@ -33,6 +33,7 @@ export const GSCDUMP_V1_ROUTE_CATALOG = {
     'partner.sites.indexing.get': { surface: 'partner', method: 'GET', template: '/sites/{siteId}/indexing' },
     'partner.sites.indexing.urls.list': { surface: 'partner', method: 'GET', template: '/sites/{siteId}/indexing/urls' },
     'partner.sites.bing.data.get': { surface: 'partner', method: 'GET', template: '/sites/{siteId}/bing/data' },
+    'partner.sites.bing.data.totals.get': { surface: 'partner', method: 'GET', template: '/sites/{siteId}/bing/data/totals' },
     'partner.sites.indexing.bing.evidence.list': { surface: 'partner', method: 'GET', template: '/sites/{siteId}/indexing/bing/evidence' },
     'partner.sites.indexing.indexnow.connection.get': { surface: 'partner', method: 'GET', template: '/sites/{siteId}/indexing/indexnow/connection' },
     'partner.sites.indexing.indexnow.connection.configure': { surface: 'partner', method: 'POST', template: '/sites/{siteId}/indexing/indexnow/connection' },

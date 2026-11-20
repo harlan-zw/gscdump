@@ -788,6 +788,7 @@ export function createGscdumpV1Client(options: CreateGscdumpV1ClientOptions): Gs
     getSiteAnalyticsCoverage: (input, executeOptions) => execute('partner.sites.analytics.coverage.get' satisfies MethodId<'getSiteAnalyticsCoverage'>, input, executeOptions),
     listSiteIndexingUrls: (input, executeOptions) => execute('partner.sites.indexing.urls.list' satisfies MethodId<'listSiteIndexingUrls'>, input, executeOptions),
     getSiteBingData: (input, executeOptions) => execute('partner.sites.bing.data.get' satisfies MethodId<'getSiteBingData'>, input, executeOptions),
+    getSiteBingDataTotals: (input, executeOptions) => execute('partner.sites.bing.data.totals.get' satisfies MethodId<'getSiteBingDataTotals'>, input, executeOptions),
     listSiteBingIndexingEvidence: (input, executeOptions) => execute('partner.sites.indexing.bing.evidence.list' satisfies MethodId<'listSiteBingIndexingEvidence'>, input, executeOptions),
     getSiteIndexNowConnection: (input, executeOptions) => execute('partner.sites.indexing.indexnow.connection.get' satisfies MethodId<'getSiteIndexNowConnection'>, input, executeOptions),
     configureSiteIndexNowConnection: (input, executeOptions) => execute('partner.sites.indexing.indexnow.connection.configure' satisfies MethodId<'configureSiteIndexNowConnection'>, input, executeOptions),

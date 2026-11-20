@@ -76,7 +76,7 @@ import {
 import { userIntegrationActivityV1Schemas } from './agent-usage'
 import { analyticsCoverageQueryV1Schema, analyticsCoverageV1Schemas } from './analytics-coverage'
 import { bingConnectionV1Schemas } from './bing'
-import { bingDataQueryV1Schema, bingDataV1Schemas } from './bing-data'
+import { bingDataQueryV1Schema, bingDataTotalsQueryV1Schema, bingDataTotalsV1Schemas, bingDataV1Schemas } from './bing-data'
 import {
   bingAuthorizationRequestV1Schema,
   bingAuthorizationV1Schemas,
@@ -1416,6 +1416,31 @@ export function createGscdumpV1Protocol() {
           examples: {
             request: { params: { siteId: 's_01' }, query: { dataset: 'traffic', startDate: '2026-08-01', endDate: '2026-08-31', limit: 100, offset: 0 } },
             response: { data: { searchEngine: 'bing', siteUrl: 'https://example.com/', dataset: 'traffic', semantics: 'site-totals', sync: { _tag: 'missing' }, rows: [], pagination: { total: 0, limit: 100, offset: 0, hasMore: false } }, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } },
+          },
+        },
+      }),
+      getSiteBingDataTotals: defineHttpOperation({
+        ...gscdumpV1OperationRoute('partner.sites.bing.data.totals.get'),
+        visibility: 'public',
+        semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
+        auth: {
+          credentials: ['user_key', 'partner_key'],
+          scopes: ['analytics:read'],
+          ownership: [{ credential: 'user_key', rule: 'authorized_site' }, { credential: 'partner_key', rule: 'authorized_site' }],
+        },
+        request: { params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }), query: bingDataTotalsQueryV1Schema, headers: requestHeaders, body: null },
+        responses: { 200: defineSuccessResponse(bingDataTotalsV1Schemas, partnerResponseMeta) },
+        errors: partnerSiteErrors,
+        errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [{ type: 'site.analytics', idFrom: 'params.siteId' }], changes: [] },
+        lifecycle: { introduced: '7.19.0' },
+        docs: {
+          summary: 'Read ranked Bing keyword or Page totals',
+          description: 'Sums each keyword or Page across a bounded provider-date range from the latest successful dataset, ranked by clicks, then impressions, then the keyword or Page URL in binary order. `pagination.total` counts distinct keywords or Pages, and `totals` sums every row in the range. Ranked rows are not complete Site totals.',
+          tags: ['Analytics'],
+          examples: {
+            request: { params: { siteId: 's_01' }, query: { dataset: 'keywords', startDate: '2026-08-01', endDate: '2026-08-31', limit: 10, offset: 0 } },
+            response: { data: { searchEngine: 'bing', siteUrl: 'https://example.com/', dataset: 'keywords', semantics: 'ranked-keyword-totals', sync: { _tag: 'missing' }, totals: { clicks: 0, impressions: 0 }, rows: [], pagination: { total: 0, limit: 10, offset: 0, hasMore: false } }, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } },
           },
         },
       }),

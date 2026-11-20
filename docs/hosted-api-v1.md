@@ -312,6 +312,7 @@ principal and operation:
 | `partner.sites.analysis.bundle.get` | 20 |
 | `partner.sites.analysis.get` | 30 |
 | `partner.sites.bing.data.get` | 60 |
+| `partner.sites.bing.data.totals.get` | 60 |
 | `partner.sites.canonical.mismatches.get` | 60 |
 | `partner.sites.content.velocity.get` | 60 |
 | `partner.sites.ctr.curve.get` | 30 |
