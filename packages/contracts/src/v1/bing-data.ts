@@ -1,17 +1,28 @@
 import { z } from 'zod'
 import { defineResponseObject } from './http-core'
 
-export const bingDataQueryV1Schema = z.strictObject({
-  dataset: z.enum(['traffic', 'pages', 'keywords', 'crawl']),
+const windowQuery = {
   startDate: z.iso.date(),
   endDate: z.iso.date(),
   limit: z.coerce.number().int().min(1).max(500).default(100),
   offset: z.coerce.number().int().min(0).max(100_000).default(0),
-}).refine(value => value.endDate >= value.startDate
-  && Date.parse(value.endDate) - Date.parse(value.startDate) <= 366 * 86_400_000, {
-  message: 'The date range must be ordered and span at most 366 days.',
-  path: ['endDate'],
-})
+}
+function withinWindow(value: { startDate: string, endDate: string }): boolean {
+  return value.endDate >= value.startDate
+    && Date.parse(value.endDate) - Date.parse(value.startDate) <= 366 * 86_400_000
+}
+const windowError = { message: 'The date range must be ordered and span at most 366 days.', path: ['endDate'] }
+
+export const bingDataQueryV1Schema = z.strictObject({
+  dataset: z.enum(['traffic', 'pages', 'keywords', 'crawl']),
+  ...windowQuery,
+}).refine(withinWindow, windowError)
+
+/** One keyword or Page per row, summed across the date range and ranked by clicks, then impressions, then value. */
+export const bingDataTotalsQueryV1Schema = z.strictObject({
+  dataset: z.enum(['pages', 'keywords']),
+  ...windowQuery,
+}).refine(withinWindow, windowError)
 
 const observed = {
   observedAt: z.iso.datetime(),
@@ -82,3 +93,41 @@ export const bingDataV1Schemas = {
 }
 export type BingDataV1 = z.infer<typeof bingDataV1Schemas.producer>
 export type BingDataQueryV1 = z.infer<typeof bingDataQueryV1Schema>
+
+const metrics = { clicks: z.number().nonnegative(), impressions: z.number().nonnegative() }
+/** Clicks and impressions summed over every row in the date range, not only the rows on this page. */
+const windowTotals = defineResponseObject(metrics)
+const pageTotals = defineResponseObject({ page: z.url(), ...metrics, ...positions })
+const keywordTotals = defineResponseObject({ keyword: z.string(), ...metrics, ...positions })
+function totalsDataset<const D extends string, const S extends string, R extends z.ZodRawShape>(
+  name: D,
+  semantics: S,
+  rows: ReturnType<typeof defineResponseObject<R>>,
+): ReturnType<typeof defineResponseObject<{
+  searchEngine: z.ZodLiteral<'bing'>
+  siteUrl: z.ZodURL
+  dataset: z.ZodLiteral<D>
+  semantics: z.ZodLiteral<S>
+  sync: typeof sync.producer
+  totals: typeof windowTotals.producer
+  rows: z.ZodArray<z.ZodObject<R>>
+  pagination: typeof pagination.producer
+}>> {
+  const common = { searchEngine: z.literal('bing'), siteUrl: z.url(), dataset: z.literal(name), semantics: z.literal(semantics) }
+  return defineResponseObject(
+    { ...common, sync: sync.producer, totals: windowTotals.producer, rows: z.array(rows.producer), pagination: pagination.producer },
+    { ...common, sync: sync.client, totals: windowTotals.client, rows: z.array(rows.client), pagination: pagination.client },
+  )
+}
+const totalsDatasets = [totalsDataset('pages', 'ranked-page-totals', pageTotals), totalsDataset('keywords', 'ranked-keyword-totals', keywordTotals)] as const
+/**
+ * One row per keyword or Page, summed across the date range. `pagination.total`
+ * counts the distinct keywords or Pages. Bing reports ranked rows, so these
+ * totals are not complete Site totals.
+ */
+export const bingDataTotalsV1Schemas = {
+  producer: z.discriminatedUnion('dataset', [totalsDatasets[0].producer, totalsDatasets[1].producer]),
+  client: z.discriminatedUnion('dataset', [totalsDatasets[0].client, totalsDatasets[1].client]),
+}
+export type BingDataTotalsV1 = z.infer<typeof bingDataTotalsV1Schemas.producer>
+export type BingDataTotalsQueryV1 = z.infer<typeof bingDataTotalsQueryV1Schema>

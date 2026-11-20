@@ -9,7 +9,7 @@ import { SearchTypes } from './constants'
 import { queryErrors, queryErrorToException } from './errors'
 import { isDateOperator, isMetric, isMetricOperator, isQueryParam, isSpecialOperator } from './operator-meta'
 
-const KNOWN_DIMENSIONS = new Set<string>(['page', 'query', 'queryCanonical', 'country', 'device', 'date', 'hour', 'searchAppearance'])
+const KNOWN_DIMENSIONS = new Set<string>(['page', 'query', 'queryCanonical', 'country', 'device', 'date', 'hour', 'searchAppearance', 'brandedClassification'])
 const FILTER_OPERATORS = new Set<string>(['equals', 'notEquals', 'contains', 'notContains', 'includingRegex', 'excludingRegex'])
 const KNOWN_SEARCH_TYPES = new Set<string>(Object.values(SearchTypes))
 
@@ -73,6 +73,8 @@ function parseFilterResult(input: unknown, ancestors = new Set<object>()): Resul
       return invalid()
     if (dimension === 'searchType' && (operator !== 'equals' || !KNOWN_SEARCH_TYPES.has(expression)))
       return invalid()
+    if (dimension === 'brandedClassification' && (operator !== 'equals' || (expression !== 'BRANDED' && expression !== 'NON_BRANDED')))
+      return err(queryErrors.invalidBrandFilter())
     if (isDateOperator(operator) && (dimension !== 'date' || !isCalendarDate(expression)
       || (expression2 !== undefined && !isCalendarDate(expression2)))) {
       return invalid()
@@ -373,13 +375,26 @@ export function resolveToBodyResult(input: BuilderState): Result<GscSearchAnalyt
   }
 
   const filterGroups = resolveFilter(dimensionFilter)
+  const apiLeafFilters = filterGroups.flatMap(g => g.filters ?? [])
+  const filtersByQuery = apiLeafFilters.some(f => f.dimension === 'query')
+  const usesBrand = body.dimensions?.includes('brandedClassification') || apiLeafFilters.some(f => f.dimension === 'brandedClassification')
+  if (usesBrand) {
+    if (body.type === 'webMultimodal' || body.type === 'discover' || body.type === 'googleNews')
+      return err(queryErrors.brandUnsupportedForSearchType())
+    if (filtersByQuery)
+      return err(queryErrors.brandWithQueryFilter())
+  }
+  if (body.type === 'webMultimodal' && (body.dimensions?.includes('query') || filtersByQuery))
+    return err(queryErrors.multimodalQueryUnsupported())
+  const listDimensions = new Set(filterGroups.flatMap(g => (g.filterLists ?? []).map(filter => filter.dimension)))
+  if (apiLeafFilters.some(f => (f.dimension === 'country' || f.dimension === 'device') && listDimensions.has(f.dimension)))
+    return err(queryErrors.conflictingFilterList())
   if (filterGroups.length > 0) {
     body.dimensionFilterGroups = filterGroups
   }
 
   if (state.aggregationType) {
     const groupsByPage = (body.dimensions ?? []).includes('page' as GscSearchAnalyticsDimension)
-    const apiLeafFilters = filterGroups.flatMap(g => g.filters ?? [])
     const filtersByPage = apiLeafFilters.some(f => f.dimension === 'page')
 
     if (state.aggregationType === 'byProperty') {
@@ -425,7 +440,13 @@ function resolveFilter(filter?: Filter<any>): GscSearchAnalyticsFilterGroup[] {
   // currently accepts it on the searchAnalytics.query endpoint. We pass it through
   // and let Google decide; revisit if 400s start appearing in the wild.
   if (groupType === 'or') {
-    if (apiFilters.length > 0) {
+    const dimension = apiFilters[0]?.dimension
+    if ((dimension === 'country' || dimension === 'device')
+      && apiFilters.length === filter._filters.length
+      && apiFilters.every(f => f.dimension === dimension && f.operator === 'equals')) {
+      groups.push({ filters: [], filterLists: [{ dimension, expressions: [...new Set(apiFilters.map(f => f.expression))] }] })
+    }
+    else if (apiFilters.length > 0) {
       groups.push({
         groupType: 'or',
         filters: apiFilters.map(f => ({

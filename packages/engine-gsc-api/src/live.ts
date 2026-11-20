@@ -51,7 +51,7 @@ export interface CreateLiveGscSourceOptions {
   createClient?: (accessToken: string) => GoogleSearchConsoleClient | Promise<GoogleSearchConsoleClient>
   /**
    * GSC `searchType` slice this source is scoped to (`web`, `discover`,
-   * `news`, `googleNews`, `image`, `video`). When set, the slice is injected
+   * `news`, `googleNews`, `image`, `video`, `webMultimodal`). When set, the slice is injected
    * into every outgoing builder state so the live API returns rows for that
    * slice only. An explicit search type already present on the state wins.
    */

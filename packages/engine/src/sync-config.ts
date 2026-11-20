@@ -21,6 +21,7 @@ export type SyncTableName = Extract<TableName, 'pages' | 'queries' | 'countries'
 
 export const TABLES_BY_SEARCH_TYPE: Record<SearchType, readonly SyncTableName[]> = {
   web: ['pages', 'queries', 'countries', 'page_queries', 'dates'],
+  webMultimodal: ['pages', 'countries', 'dates'],
   // Discover has no `query` dimension — drop query-bearing tables.
   discover: ['pages', 'countries', 'dates'],
   news: ['pages', 'countries', 'dates'],

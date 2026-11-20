@@ -11,8 +11,8 @@ const TABLE_NEEDS: Record<TableName, { queries: boolean, dimensions: boolean }> 
   pages: { queries: false, dimensions: false },
   queries: { queries: true, dimensions: false },
   countries: { queries: false, dimensions: true },
-  // The `dates` row pivots devices and adds query-grained impressions.
-  dates: { queries: true, dimensions: true },
+  // The dates row needs devices. Query-grained impressions are optional.
+  dates: { queries: false, dimensions: true },
   page_queries: { queries: true, dimensions: false },
   // Search appearance is a Web-family facet, like country and device.
   search_appearance: { queries: false, dimensions: true },
@@ -153,9 +153,9 @@ export function fullHistoryStart(oldestGscDate: string): string {
  * `dates` adds device and query reads; appearance tables add per-appearance
  * reads. The quota ledger counts every actual call, including terminal reads.
  */
-export function minimumCallsPerDate(table: TableName): number {
+export function minimumCallsPerDate(table: TableName, type: SearchType): number {
   if (table === 'dates')
-    return 3
+    return searchTypeSupportsQueries(type) ? 3 : 2
   if (table === 'search_appearance' || table === 'hourly_pages')
     return 2
   if (table.startsWith('search_appearance_'))

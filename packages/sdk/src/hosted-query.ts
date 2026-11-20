@@ -8,6 +8,9 @@ import type {
   SourceInfoOptions,
 } from '@gscdump/contracts'
 import type { GscSearchType } from '@gscdump/contracts/search-types'
+import type { NormalizedFilterV1 } from '@gscdump/contracts/v1/browser'
+import type { AnalyticsRowsV1Request } from '@gscdump/contracts/v1/http'
+import type { GscBrandedClassification } from 'gscdump/contracts'
 import { canonicalJson } from './canonical-json'
 
 export type { GscSearchType } from '@gscdump/contracts/search-types'
@@ -34,6 +37,40 @@ type DataQueryOptionsWithSearchType = DataQueryOptions & SearchTypeOptions
 type DataDetailOptionsWithSearchType = DataDetailOptions & SearchTypeOptions
 
 export const DEFAULT_SEARCH_TYPE: GscSearchType = 'web'
+
+type LiveSearchPerformanceSelection
+  = | { searchType: 'web', brand: 'all' | 'split' | GscBrandedClassification }
+    | { searchType: 'webMultimodal', brand: 'all' }
+
+export type LiveSearchPerformanceInput = LiveSearchPerformanceSelection & {
+  range: { start: string, end: string }
+  countries: readonly string[]
+  devices: readonly ('DESKTOP' | 'MOBILE' | 'TABLET')[]
+}
+
+/** Build a live Search Console read for one reporting period. */
+export function liveSearchPerformanceRequest(input: LiveSearchPerformanceInput): AnalyticsRowsV1Request {
+  const group = (dimension: 'country' | 'device', values: readonly string[]): NormalizedFilterV1 => ({
+    _groupType: 'or',
+    _filters: [...new Set(values)].map(expression => ({ dimension, operator: 'equals', expression })),
+  })
+  const classified = input.brand !== 'all'
+  const filters = [{ dimension: 'date', operator: 'between', expression: input.range.start, expression2: input.range.end }]
+  const byBrand = input.brand === 'BRANDED' || input.brand === 'NON_BRANDED'
+    ? [{ dimension: 'brandedClassification', operator: 'equals', expression: input.brand }]
+    : []
+  return {
+    source: 'live',
+    dimensions: [classified ? 'brandedClassification' : 'date'],
+    filter: {
+      _filters: [...filters, ...byBrand],
+      _nestedGroups: [group('country', input.countries), group('device', input.devices)].filter(group => group._filters.length > 0),
+    },
+    metrics: ['clicks', 'impressions'],
+    searchType: input.searchType,
+    rowLimit: byBrand.length ? 1 : classified ? 2 : 750,
+  }
+}
 
 function isAnalysisSourcesOptions(value: unknown): value is AnalysisSourcesOptions {
   return !!value && typeof value === 'object' && !Array.isArray(value)

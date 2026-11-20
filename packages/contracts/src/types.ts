@@ -51,7 +51,7 @@ export type Filter = unknown
 // (`normalizeBuilderState` in gscdump.com `server/utils/normalize-filter.ts`)
 // and the builder output of `gsc(...).getState()` from `gscdump/query`.
 export interface BuilderStateWire {
-  dimensions: Dimension[]
+  dimensions: (Dimension | 'brandedClassification')[]
   metrics?: Metric[]
   filter?: Filter
   orderBy?: { column: Metric | 'date', dir: 'asc' | 'desc' }

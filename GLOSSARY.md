@@ -22,8 +22,11 @@ flowchart LR
   MD[Mode<br/><small>--mode · @gscdump/cli</small>]
   STO[Store<br/><small>Parquet directory · @gscdump/cli</small>]
   HR[Hosted record<br/><small>gscdump.com/api</small>]
+  LH[Legacy history<br/><small>legacyHistoryNoticeSchema · contracts</small>]
 
   SRC -- rows --> AN
+  SRC -- retained dates --> LH
+  LH -- scope disclosure --> HR
   AN -- composed --> RP
   RP -- bounded --> SE
   QB -- compiled --> SRC
@@ -40,6 +43,7 @@ flowchart LR
   QRY(("&quot;query&quot;<br/>customer word"))
   LOC(("&quot;Local&quot;<br/>customer word"))
   HOS(("&quot;Hosted&quot;<br/>customer word"))
+  LHU(("&quot;Legacy history&quot;<br/>customer word"))
 
   AN -.-> TOOL
   RP -.-> TOOL
@@ -50,15 +54,17 @@ flowchart LR
   SRC -.-> QRY
   MD -.-> LOC
   MD -.-> HOS
+  LH -.-> LHU
 
   classDef internal fill:#E7EFF6,stroke:#34648A,color:#16202B;
   classDef customer fill:#F8EEDC,stroke:#9A6714,color:#16202B;
-  class SRC,AN,RP,SE,QB,QT,GO,BI,SEN,IE,SR,MD,STO,HR internal
-  class TOOL,REP,QRY,LOC,HOS customer
+  class SRC,AN,RP,SE,QB,QT,GO,BI,SEN,IE,SR,MD,STO,HR,LH internal
+  class TOOL,REP,QRY,LOC,HOS,LHU customer
 ```
 
 | Term | Table / module | Owner | Cardinality | Customer word |
 | --- | --- | --- | --- | --- |
+| [Legacy history](packages/contracts/GLOSSARY.md#legacy-history) | `legacyHistoryNoticeSchema` | `@gscdump/contracts` | Read 1—N affected dates | Legacy history |
 | Site | (no table; `siteId` string key) | `gscdump/tenant` | Team 1—N Site (hosted); Auth 1—N Site (CLI) | "property" (README, docs), "site" (`--site`, `siteUrl`) |
 | Search Engine | `GoogleSearchConsoleClient`; `gscdump/bing` | `gscdump`, `@gscdump/contracts` | Site 1—N Search Engine | "Google" or "Bing" |
 | Indexing Evidence | `gscdump/api/indexing`; `gscdump/bing`; `@gscdump/contracts/v1` | `gscdump`, `@gscdump/contracts` | (Site, URL, Search Engine) 1—N observation | "indexing evidence" |

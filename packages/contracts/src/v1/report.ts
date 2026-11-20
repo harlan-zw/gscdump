@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { legacyHistoryNoticeSchema } from '../legacy-history'
 import { defineResponseObject } from './http-core'
 
 export const runReportV1RequestSchema = z.strictObject({
@@ -51,6 +52,8 @@ export const runReportV1DataSchemas = defineResponseObject({
   cached: z.boolean(),
   window: range.extend({ days: z.number().int().positive(), comparison: range.optional() }),
   meta: z.strictObject({
+    legacyHistory: legacyHistoryNoticeSchema.optional(),
+    warnings: z.array(z.string()).optional(),
     durationMs: z.number().nonnegative(),
     rowsScanned: z.number().nonnegative(),
     degraded: z.boolean(),

@@ -40,3 +40,47 @@ describe('bing public datasets', () => {
     expect(response.producer.parse({ data: { ...data, sync }, meta }).data).toMatchObject({ sync, rows: data.rows })
   })
 })
+
+describe('bing keyword and Page totals', () => {
+  const totalsRequest = { dataset: 'keywords', startDate: '2026-08-01', endDate: '2026-08-31', limit: 3, offset: 0 }
+  const totals = {
+    searchEngine: 'bing',
+    siteUrl: 'https://nuxtseo.com/',
+    dataset: 'keywords',
+    semantics: 'ranked-keyword-totals',
+    sync: data.sync,
+    totals: { clicks: 9, impressions: 140 },
+    rows: [{ keyword: 'nuxt seo', clicks: 7, impressions: 90, averageClickPosition: 2.5, averageImpressionPosition: null }],
+    pagination: { total: 12, limit: 3, offset: 0, hasMore: true },
+  }
+
+  it('parses a ranked read with window totals and the distinct count', () => {
+    const operation = createGscdumpV1Protocol().surfaces.partner.operations.getSiteBingDataTotals
+    expect(operation.request.query.parse(totalsRequest)).toEqual(totalsRequest)
+    expect(operation.responses[200].producer.parse({ data: totals, meta }).data).toEqual(totals)
+  })
+  it.each([
+    { dataset: 'traffic' },
+    { dataset: 'crawl' },
+    { endDate: '2026-07-31' },
+    { startDate: '2025-08-01' },
+    { limit: 0 },
+    { limit: 501 },
+  ])('rejects invalid totals query %j', (override) => {
+    const operation = createGscdumpV1Protocol().surfaces.partner.operations.getSiteBingDataTotals
+    expect(operation.request.query.safeParse({ ...totalsRequest, ...override }).success).toBe(false)
+  })
+  it('rejects dated rows and missing window totals', () => {
+    const response = createGscdumpV1Protocol().surfaces.partner.operations.getSiteBingDataTotals.responses[200]
+    const { totals: _totals, ...withoutTotals } = totals
+    expect(response.producer.safeParse({ data: withoutTotals, meta }).success).toBe(false)
+    expect(response.producer.safeParse({ data: { ...totals, rows: [{ ...totals.rows[0], date: '2026-08-01' }] }, meta }).success).toBe(false)
+    expect(response.producer.safeParse({ data: { ...totals, semantics: 'ranked-keywords' }, meta }).success).toBe(false)
+  })
+  it('requires Page rows to name a URL', () => {
+    const response = createGscdumpV1Protocol().surfaces.partner.operations.getSiteBingDataTotals.responses[200]
+    const pages = { ...totals, dataset: 'pages', semantics: 'ranked-page-totals', rows: [{ page: 'https://nuxtseo.com/docs', clicks: 1, impressions: 2, averageClickPosition: null, averageImpressionPosition: 3 }] }
+    expect(response.producer.parse({ data: pages, meta }).data).toEqual(pages)
+    expect(response.producer.safeParse({ data: { ...pages, rows: [{ ...pages.rows[0], page: 'docs' }] }, meta }).success).toBe(false)
+  })
+})

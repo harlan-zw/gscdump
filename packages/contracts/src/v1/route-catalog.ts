@@ -37,6 +37,7 @@ export const GSCDUMP_V1_ROUTE_CATALOG = {
     'partner.sites.generative_ai.uploads.list': { surface: 'partner', method: 'GET', template: '/sites/{siteId}/generative-ai/uploads' },
     'partner.sites.generative_ai.uploads.remove': { surface: 'partner', method: 'DELETE', template: '/sites/{siteId}/generative-ai/uploads/{uploadId}' },
     'partner.sites.generative_ai.get': { surface: 'partner', method: 'GET', template: '/sites/{siteId}/generative-ai' },
+    'partner.sites.bing.data.totals.get': { surface: 'partner', method: 'GET', template: '/sites/{siteId}/bing/data/totals' },
     'partner.sites.indexing.bing.evidence.list': { surface: 'partner', method: 'GET', template: '/sites/{siteId}/indexing/bing/evidence' },
     'partner.sites.indexing.indexnow.connection.get': { surface: 'partner', method: 'GET', template: '/sites/{siteId}/indexing/indexnow/connection' },
     'partner.sites.indexing.indexnow.connection.configure': { surface: 'partner', method: 'POST', template: '/sites/{siteId}/indexing/indexnow/connection' },

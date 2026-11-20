@@ -3,8 +3,8 @@ export * from './agent-usage'
 export * from './analytics-coverage'
 export { bingCnameVerificationV1Schema, bingConnectionV1Schema } from './bing'
 export type { BingCnameVerificationV1, BingConnectionV1 } from './bing'
-export { bingDataQueryV1Schema, bingDataV1Schemas } from './bing-data'
-export type { BingDataQueryV1, BingDataV1 } from './bing-data'
+export { bingDataQueryV1Schema, bingDataTotalsQueryV1Schema, bingDataTotalsV1Schemas, bingDataV1Schemas } from './bing-data'
+export type { BingDataQueryV1, BingDataTotalsQueryV1, BingDataTotalsV1, BingDataV1 } from './bing-data'
 export * from './bing-sites'
 export {
   GENERATIVE_AI_REPORT_MAX_ROWS,

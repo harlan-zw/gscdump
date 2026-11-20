@@ -1,6 +1,7 @@
 import type { RealtimeV1Schemas } from './realtime'
 import { z } from 'zod'
 import { siteHoldReasonSchema } from '../entitlements'
+import { legacyHistoryNoticeSchema } from '../legacy-history'
 import {
   accountNextActions,
   accountStatuses,
@@ -37,6 +38,7 @@ export interface NormalizedFilterV1 {
 export const GSCDUMP_V1_ANALYTICS_DIMENSIONS = [
   'page',
   'query',
+  'brandedClassification',
   'queryCanonical',
   'country',
   'device',
@@ -244,6 +246,7 @@ export function createGscdumpV1BrowserSchemas(
     }),
   ]))
   const analyticsRowsRequest = z.strictObject({
+    source: z.literal('live').optional(),
     dimensions: z.array(z.enum(dimensions)).min(1),
     metrics: z.array(z.enum(metrics)).optional(),
     filter: normalizedFilter.optional(),
@@ -268,6 +271,8 @@ export function createGscdumpV1BrowserSchemas(
     sourceName: z.string().min(1),
     sourceKind: z.enum(['row', 'sql']),
     queryMs: z.number().nonnegative(),
+    legacyHistory: legacyHistoryNoticeSchema.optional(),
+    warnings: z.array(z.string()).optional(),
   })
 
   return {

@@ -792,6 +792,7 @@ export function createGscdumpV1Client(options: CreateGscdumpV1ClientOptions): Gs
     listSiteGenerativeAiReportUploads: (input, executeOptions) => execute('partner.sites.generative_ai.uploads.list' satisfies MethodId<'listSiteGenerativeAiReportUploads'>, input, executeOptions),
     removeSiteGenerativeAiReportUpload: (input, executeOptions) => execute('partner.sites.generative_ai.uploads.remove' satisfies MethodId<'removeSiteGenerativeAiReportUpload'>, input, executeOptions),
     getSiteGenerativeAiReport: (input, executeOptions) => execute('partner.sites.generative_ai.get' satisfies MethodId<'getSiteGenerativeAiReport'>, input, executeOptions),
+    getSiteBingDataTotals: (input, executeOptions) => execute('partner.sites.bing.data.totals.get' satisfies MethodId<'getSiteBingDataTotals'>, input, executeOptions),
     listSiteBingIndexingEvidence: (input, executeOptions) => execute('partner.sites.indexing.bing.evidence.list' satisfies MethodId<'listSiteBingIndexingEvidence'>, input, executeOptions),
     getSiteIndexNowConnection: (input, executeOptions) => execute('partner.sites.indexing.indexnow.connection.get' satisfies MethodId<'getSiteIndexNowConnection'>, input, executeOptions),
     configureSiteIndexNowConnection: (input, executeOptions) => execute('partner.sites.indexing.indexnow.connection.configure' satisfies MethodId<'configureSiteIndexNowConnection'>, input, executeOptions),

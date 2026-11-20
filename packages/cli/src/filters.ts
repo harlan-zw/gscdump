@@ -1,6 +1,6 @@
 /**
  * Dimension filter flags (`--query`, `--page`, `--country`, `--device`,
- * `--search-appearance`) parsed once into values, then built for the local
+ * `--search-appearance`, `--branded-classification`) parsed once into values, then built for the local
  * Store or for the live GSC API.
  *
  * `--page` becomes a `PageRef`: the Store keeps page paths, while GSC keeps
@@ -12,11 +12,11 @@
  *   contains:foo contains · eq:foo equals · !foo not equals
  */
 
-import type { Dimension, Filter } from 'gscdump/query'
+import type { Country, Device, Dimension, Filter } from 'gscdump/query'
 import { toPath } from '@gscdump/engine/ingest'
-import { and } from 'gscdump/query'
+import { and, country, device, inArray } from 'gscdump/query'
 
-export const FILTER_DIMS = ['query', 'page', 'country', 'device', 'searchAppearance'] as const
+export const FILTER_DIMS = ['query', 'page', 'country', 'device', 'searchAppearance', 'brandedClassification'] as const
 export type FilterDim = typeof FILTER_DIMS[number]
 
 type MatchOperator = 'equals' | 'notEquals' | 'contains' | 'notContains'
@@ -33,6 +33,7 @@ export interface PageRef {
 
 export type ParsedFilter
   = | { kind: 'match', dim: Exclude<FilterDim, 'page'>, operator: MatchOperator, value: string }
+    | { kind: 'list', dim: 'country' | 'device', values: string[] }
     | { kind: 'page', operator: MatchOperator, page: PageRef }
     | { kind: 'regex', dim: FilterDim, operator: RegexOperator, pattern: string }
 
@@ -68,12 +69,19 @@ export function parseFilterArg(dim: FilterDim, raw: string): ParsedFilter {
     return { kind: 'regex', dim, operator, pattern: value }
   if (dim === 'page')
     return { kind: 'page', operator, page: parsePageRef(value) }
+  if ((dim === 'country' || dim === 'device') && operator === 'equals' && raw === value && value.includes(',')) {
+    const values = value.split(',').map(item => item.trim())
+    const valid = dim === 'country' ? values.every(item => /^[a-z]{3}$/i.test(item)) : values.every(item => /^(?:desktop|mobile|tablet)$/i.test(item))
+    if (!valid)
+      throw new Error(`Invalid --${dim} list. Provide comma-separated ${dim === 'country' ? 'ISO-3 country codes' : 'device names'}.`)
+    return { kind: 'list', dim, values: values.map(item => dim === 'country' ? item.toLowerCase() : item.toUpperCase()) }
+  }
   return { kind: 'match', dim, operator, value }
 }
 
 /** Parse every filter flag present in `args`. */
 export function parseFilterArgs(args: Record<string, unknown>): ParsedFilter[] {
-  const argName: Record<FilterDim, string> = { query: 'query', page: 'page', country: 'country', device: 'device', searchAppearance: 'search-appearance' }
+  const argName: Record<FilterDim, string> = { query: 'query', page: 'page', country: 'country', device: 'device', searchAppearance: 'search-appearance', brandedClassification: 'branded-classification' }
   return FILTER_DIMS.flatMap((dim) => {
     const raw = args[argName[dim]] ?? args[dim]
     return raw == null || raw === '' ? [] : [parseFilterArg(dim, String(raw))]
@@ -100,6 +108,8 @@ function combine(leaves: Filter<any>[]): Filter<any> | undefined {
 function localLeaf(filter: ParsedFilter): Filter<any> {
   if (filter.kind === 'page')
     return leaf('page', filter.operator, filter.page.path)
+  if (filter.kind === 'list')
+    return filter.dim === 'country' ? inArray(country, filter.values as Country[]) : inArray(device, filter.values as Device[])
   return filter.kind === 'match'
     ? leaf(filter.dim, filter.operator, filter.value)
     : leaf(filter.dim, filter.operator, filter.pattern)
@@ -120,9 +130,12 @@ function livePageLeaf(operator: MatchOperator, page: PageRef, siteUrl: string): 
   if (operator === 'contains' || operator === 'notContains')
     return leaf('page', operator, page.path)
   const path = page.path.startsWith('/') ? page.path : `/${page.path}`
-  // A domain property spans every host, so match the path on any of them.
-  if (siteUrl.startsWith('sc-domain:'))
-    return leaf('page', operator === 'equals' ? 'includingRegex' : 'excludingRegex', `^https?://[^/]+${escapeRegex(path)}$`)
+  // Hosted Sites can be bare hostnames. Only Domain properties span hosts.
+  const domainProperty = siteUrl.startsWith('sc-domain:')
+  if (domainProperty || !/^https?:\/\//i.test(siteUrl)) {
+    const host = domainProperty ? '[^/]+' : escapeRegex(siteUrl)
+    return leaf('page', operator === 'equals' ? 'includingRegex' : 'excludingRegex', `^https?://${host}${escapeRegex(path)}$`)
+  }
   // A URL-prefix property owns its path, so a relative path expands against
   // the full prefix. A path that already carries the property's own path is
   // a stored full path: expanding again would double it and match nothing.

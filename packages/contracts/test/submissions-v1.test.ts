@@ -24,6 +24,13 @@ describe('submission summary wire boundary', () => {
 })
 
 describe('submission outcomes wire boundary', () => {
+  it('counts an IndexNow 202 (pending) send as received, and refuses unreceived states', () => {
+    const row = (state: string) => ({ window, outcomes: [{ url: 'https://example.com/new', submission: { ...submission, state }, google: { _tag: 'never-inspected' } }], pagination: page })
+    expect(submissionOutcomesV1Schemas.producer.parse(row('pending')).outcomes[0]?.submission.state).toBe('pending')
+    expect(submissionOutcomesV1Schemas.client.parse(row('pending')).outcomes[0]?.submission.state).toBe('pending')
+    expect(submissionOutcomesV1Schemas.producer.safeParse(row('failed')).success).toBe(false)
+  })
+
   it('keeps the receipt and the later Google inspection as separate clocks', () => {
     const value = { window, outcomes: [{ url: 'https://example.com/new', submission, google: { _tag: 'inspected-after', ...inspection } }], pagination: page }
     expect(submissionOutcomesV1Schemas.producer.parse(value)).toEqual(value)

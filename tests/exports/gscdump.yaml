@@ -215,6 +215,7 @@
 ./query:
   and: function
   between: function
+  brandedClassification: object
   buildLogicalComparisonPlan: function
   buildLogicalComparisonPlanResult: function
   buildLogicalPlan: function

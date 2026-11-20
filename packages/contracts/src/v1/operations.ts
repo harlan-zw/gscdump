@@ -76,7 +76,7 @@ import {
 import { userIntegrationActivityV1Schemas } from './agent-usage'
 import { analyticsCoverageQueryV1Schema, analyticsCoverageV1Schemas } from './analytics-coverage'
 import { bingConnectionV1Schemas } from './bing'
-import { bingDataQueryV1Schema, bingDataV1Schemas } from './bing-data'
+import { bingDataQueryV1Schema, bingDataTotalsQueryV1Schema, bingDataTotalsV1Schemas, bingDataV1Schemas } from './bing-data'
 import {
   bingAuthorizationRequestV1Schema,
   bingAuthorizationV1Schemas,
@@ -210,14 +210,10 @@ export function createGscdumpV1Protocol() {
     lifecycleResponse,
   } = browserSchemas
   const dimensions = GSCDUMP_V1_ANALYTICS_DIMENSIONS
-  const analyticsMeta = defineResponseObject({
-    requestId: realtimeSchemas.publicRequestId,
-    surface: z.literal('analytics'),
-    version: z.literal(GSCDUMP_HTTP_V1_VERSION),
-    sourceName: z.string().min(1),
-    sourceKind: z.enum(['row', 'sql']),
-    queryMs: z.number().nonnegative(),
-  })
+  const analyticsMeta = {
+    producer: analyticsRowsResponse.producer.shape.meta,
+    client: analyticsRowsResponse.client.shape.meta,
+  }
 
   // Reports preserve the richer hosted read model (totals, comparisons and
   // sync metadata) that cannot be reconstructed from the raw rows operation.
@@ -1518,6 +1514,31 @@ export function createGscdumpV1Protocol() {
           },
         },
       }),
+      getSiteBingDataTotals: defineHttpOperation({
+        ...gscdumpV1OperationRoute('partner.sites.bing.data.totals.get'),
+        visibility: 'public',
+        semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
+        auth: {
+          credentials: ['user_key', 'partner_key'],
+          scopes: ['analytics:read'],
+          ownership: [{ credential: 'user_key', rule: 'authorized_site' }, { credential: 'partner_key', rule: 'authorized_site' }],
+        },
+        request: { params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }), query: bingDataTotalsQueryV1Schema, headers: requestHeaders, body: null },
+        responses: { 200: defineSuccessResponse(bingDataTotalsV1Schemas, partnerResponseMeta) },
+        errors: partnerSiteErrors,
+        errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [{ type: 'site.analytics', idFrom: 'params.siteId' }], changes: [] },
+        lifecycle: { introduced: '7.19.0' },
+        docs: {
+          summary: 'Read ranked Bing keyword or Page totals',
+          description: 'Sums each keyword or Page across a bounded provider-date range from the latest successful dataset, ranked by clicks, then impressions, then the keyword or Page URL in binary order. `pagination.total` counts distinct keywords or Pages, and `totals` sums every row in the range. Ranked rows are not complete Site totals.',
+          tags: ['Analytics'],
+          examples: {
+            request: { params: { siteId: 's_01' }, query: { dataset: 'keywords', startDate: '2026-08-01', endDate: '2026-08-31', limit: 10, offset: 0 } },
+            response: { data: { searchEngine: 'bing', siteUrl: 'https://example.com/', dataset: 'keywords', semantics: 'ranked-keyword-totals', sync: { _tag: 'missing' }, totals: { clicks: 0, impressions: 0 }, rows: [], pagination: { total: 0, limit: 10, offset: 0, hasMore: false } }, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } },
+          },
+        },
+      }),
       listSiteBingIndexingEvidence: defineHttpOperation({
         ...gscdumpV1OperationRoute('partner.sites.indexing.bing.evidence.list'),
         visibility: 'public',
@@ -1648,7 +1669,7 @@ export function createGscdumpV1Protocol() {
         errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
         resources: { reads: [{ type: 'site.indexing', idFrom: 'params.siteId' }], changes: [] },
         lifecycle: { introduced: '7.17.0' },
-        docs: { summary: 'List Submission outcomes', description: 'Returns each URL with an accepted Submission in the last `days` days, newest first, with its newest accepted Submission and Google\'s latest stored URL Inspection compared with the recorded time of the accepted delivery attempt. It reads stored inspections only and spends no URL Inspections. It shows order in time, never cause, and a receipt proves receipt only.', tags: ['Indexing'], examples: { request: { params: { siteId: 's_01' }, query: { days: 30, limit: 25, offset: 0 } }, response: { data: { window: { days: 30, from: '2026-10-19T00:00:00.000Z', to: '2026-11-18T00:00:00.000Z' }, outcomes: [{ url: 'https://example.com/new', submission: { channel: 'indexnow', receiptId: 'in_01', state: 'accepted', trigger: 'automatic', submittedAt: '2026-11-10T00:00:00.000Z' }, google: { _tag: 'inspected-after', inspectedAt: '2026-11-12T00:00:00.000Z', verdict: 'PASS', coverageState: 'indexed', lastCrawledAt: '2026-11-11T00:00:00.000Z' } }], pagination: { total: 1, limit: 25, offset: 0, hasMore: false } }, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } } } },
+        docs: { summary: 'List Submission outcomes', description: 'Returns each URL an engine received in the last `days` days, newest first: IndexNow `accepted` or `pending` (HTTP 202), or Google `accepted`. Each URL carries its newest received Submission and Google\'s latest stored URL Inspection compared with the time the engine received it. Queued, retrying, failed, and rejected Submissions do not appear. It reads stored inspections only and spends no URL Inspections. It shows order in time, never cause, and a receipt proves receipt only.', tags: ['Indexing'], examples: { request: { params: { siteId: 's_01' }, query: { days: 30, limit: 25, offset: 0 } }, response: { data: { window: { days: 30, from: '2026-10-19T00:00:00.000Z', to: '2026-11-18T00:00:00.000Z' }, outcomes: [{ url: 'https://example.com/new', submission: { channel: 'indexnow', receiptId: 'in_01', state: 'accepted', trigger: 'automatic', submittedAt: '2026-11-10T00:00:00.000Z' }, google: { _tag: 'inspected-after', inspectedAt: '2026-11-12T00:00:00.000Z', verdict: 'PASS', coverageState: 'indexed', lastCrawledAt: '2026-11-11T00:00:00.000Z' } }], pagination: { total: 1, limit: 25, offset: 0, hasMore: false } }, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } } } },
       }),
       updateSiteIndexNowAutomaticSending: defineHttpOperation({
         ...gscdumpV1OperationRoute('partner.sites.indexing.indexnow.automatic_sending.update'),

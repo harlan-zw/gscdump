@@ -136,6 +136,7 @@
   inspectionHistoryResponseSchema: object
   inspectionIndexSchema: object
   inspectionRecordRawSchema: object
+  legacyHistoryNoticeSchema: object
   lifecycleErrorCodes: object
   lifecycleErrorSchema: object
   lifecycleProgressSchema: object
@@ -284,6 +285,8 @@
   bingCnameVerificationV1Schema: object
   bingConnectionV1Schema: object
   bingDataQueryV1Schema: object
+  bingDataTotalsQueryV1Schema: object
+  bingDataTotalsV1Schemas: object
   bingDataV1Schemas: object
   bingGrantV1Schemas: object
   bingLinkResultV1Schemas: object
@@ -386,6 +389,7 @@
   sitemapSubmitResultV1Schemas: object
   SUBMISSION_CHANNELS: object
   SUBMISSION_OUTCOME_PAGE_MAX: number
+  SUBMISSION_OUTCOME_STATES: object
   SUBMISSION_WINDOW_MAX_DAYS: number
   submissionChannelV1Schema: object
   submissionOutcomesQueryV1Schema: object
@@ -408,6 +412,8 @@
   bingCnameVerificationV1Schema: object
   bingConnectionV1Schema: object
   bingDataQueryV1Schema: object
+  bingDataTotalsQueryV1Schema: object
+  bingDataTotalsV1Schemas: object
   bingDataV1Schemas: object
   bingGrantV1Schemas: object
   bingLinkResultV1Schemas: object
@@ -489,6 +495,7 @@
   sitemapSubmitResultV1Schemas: object
   SUBMISSION_CHANNELS: object
   SUBMISSION_OUTCOME_PAGE_MAX: number
+  SUBMISSION_OUTCOME_STATES: object
   SUBMISSION_WINDOW_MAX_DAYS: number
   submissionChannelV1Schema: object
   submissionOutcomesQueryV1Schema: object

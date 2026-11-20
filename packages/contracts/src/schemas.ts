@@ -2,6 +2,7 @@ import type { GscSearchType } from './search-types'
 import { z } from 'zod'
 import { siteHoldReasonSchema, userAllowanceNoticeDataSchema } from './entitlements'
 import { coverageStatesPointSchema, indexingCaptureSchema } from './indexing-coverage'
+import { legacyHistoryNoticeSchema } from './legacy-history'
 import {
   accountNextActions,
   accountStatuses,
@@ -34,7 +35,7 @@ export const searchTypeSchema = z.enum(GSC_SEARCH_TYPES)
  * dimensions Web exposes — Discover has no `query`/`position`/`device`/`country`
  * breakdown at all, and Google News only reports clicks/impressions.
  *
- * - `queries`: the slice exposes per-query rows (query/position breakdowns).
+ * - `queries`: the slice exposes per-query rows.
  * - `dimensions`: the slice exposes country/device facets (Web-family only).
  *
  * Consumers use this to hide inapplicable metric columns and dimension filters
@@ -42,6 +43,7 @@ export const searchTypeSchema = z.enum(GSC_SEARCH_TYPES)
  */
 export const SEARCH_TYPE_CAPABILITIES: Record<GscSearchType, { queries: boolean, dimensions: boolean }> = {
   web: { queries: true, dimensions: true },
+  webMultimodal: { queries: false, dimensions: true },
   image: { queries: true, dimensions: true },
   video: { queries: true, dimensions: true },
   news: { queries: true, dimensions: true },
@@ -179,6 +181,8 @@ export const gscRowQueryMetaSchema = z.object({
   sourceName: z.string(),
   sourceKind: z.enum(['row', 'sql']),
   queryMs: z.number(),
+  legacyHistory: legacyHistoryNoticeSchema.optional(),
+  warnings: z.array(z.string()).optional(),
 }).loose()
 
 export const gscRowQueryResponseSchema = z.object({
@@ -410,6 +414,7 @@ export const gscdumpMetaSchema = z.object({
   dataDelay: z.string().optional(),
   dataEndDate: z.string().nullable().optional(),
   warnings: z.array(z.string()).optional(),
+  legacyHistory: legacyHistoryNoticeSchema.optional(),
   enrichment: z.object({
     lastEnriched: z.number(),
     isDue: z.boolean(),

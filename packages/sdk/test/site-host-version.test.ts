@@ -108,3 +108,37 @@ it('preserves the data cache clock independently of the registered binding', asy
     .resolves
     .toMatchObject({ data: { identity: { version: 1, revision: 3, catalogRevision: 4, dataVersion: 8 } } })
 })
+
+it('returns an aborted preserved-history candidate through the partner protocol', async () => {
+  const candidate = {
+    version: 1,
+    namespace: 'gsc_v1',
+    requestedUrl: 'https://example.test/',
+    window: { startDate: '2025-02-22', endDate: '2026-11-16' },
+    requiredSlices: [{ table: 'dates', searchType: 'web' }],
+    state: 'aborted',
+  }
+  const fetch = vi.fn<typeof globalThis.fetch>(async () => new Response(JSON.stringify({
+    data: candidate,
+    meta: { requestId: 'req_fixture', surface: 'partner', version: '1.0' },
+  }), { headers: { 'content-type': 'application/json' } }))
+  const client = createGscdumpV1Client({ credential: 'fixture_partner_key', fetch })
+  const result = await client.execute('partner.sites.registered_host.abort', {
+    params: { siteId: 's_fixture' },
+    body: { version: 1, identity: {
+      siteId: 's_fixture',
+      userId: 'u_fixture',
+      teamId: 't_fixture',
+      requestedUrl: 'https://example.test/',
+      catalogSiteId: 17,
+      warehouse: 'fixture_catalog',
+      namespace: 'gsc',
+      version: 0,
+      revision: 1,
+      catalogRevision: 1,
+      dataVersion: 1,
+    } },
+  })
+  expect(result.data).toEqual(candidate)
+  expect(fetch).toHaveBeenCalledOnce()
+})
