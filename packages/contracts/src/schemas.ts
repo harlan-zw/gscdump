@@ -2,6 +2,7 @@ import type { GscSearchType } from './search-types'
 import { z } from 'zod'
 import { siteHoldReasonSchema, userAllowanceNoticeDataSchema } from './entitlements'
 import { coverageStatesPointSchema, indexingCaptureSchema } from './indexing-coverage'
+import { legacyHistoryNoticeSchema } from './legacy-history'
 import {
   accountNextActions,
   accountStatuses,
@@ -180,6 +181,8 @@ export const gscRowQueryMetaSchema = z.object({
   sourceName: z.string(),
   sourceKind: z.enum(['row', 'sql']),
   queryMs: z.number(),
+  legacyHistory: legacyHistoryNoticeSchema.optional(),
+  warnings: z.array(z.string()).optional(),
 }).loose()
 
 export const gscRowQueryResponseSchema = z.object({
@@ -411,6 +414,7 @@ export const gscdumpMetaSchema = z.object({
   dataDelay: z.string().optional(),
   dataEndDate: z.string().nullable().optional(),
   warnings: z.array(z.string()).optional(),
+  legacyHistory: legacyHistoryNoticeSchema.optional(),
   enrichment: z.object({
     lastEnriched: z.number(),
     isDue: z.boolean(),

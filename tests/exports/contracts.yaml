@@ -136,6 +136,7 @@
   inspectionHistoryResponseSchema: object
   inspectionIndexSchema: object
   inspectionRecordRawSchema: object
+  legacyHistoryNoticeSchema: object
   lifecycleErrorCodes: object
   lifecycleErrorSchema: object
   lifecycleProgressSchema: object
