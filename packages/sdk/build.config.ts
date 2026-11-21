@@ -12,6 +12,7 @@ export default defineBuildConfig({
         './src/country-names.ts',
         './src/cwv-thresholds.ts',
         './src/errors.ts',
+        './src/generative-ai-report.ts',
         './src/gsc-console-url.ts',
         './src/gsc-constants.ts',
         './src/gsc-error.ts',
