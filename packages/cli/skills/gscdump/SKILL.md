@@ -470,8 +470,9 @@ If submission fails, mention it and continue. Never retry an uncertain submissio
   delete local data. `indexing watch add` spends URL Inspections every week,
   and `indexing watch remove` deletes Watched URL inspections.
 - **Check which commands accept `--yes`.** Pass it only when the command's
-  `--help` lists it. After you have consent, run `sitemaps submit` and
-  `sitemaps delete` without `--yes`.
+  `--help` lists it. Follow the reporting rules above for papercuts and telemetry.
+  For other commands, get the user's consent before passing `--yes`.
+  After you have consent, run `sitemaps submit` and `sitemaps delete` without `--yes`.
 - **Never loop unattended.** One `sync` per Site per task. Inspection batches
   spend a daily pool. Use `--dry-run` and `--explain` to plan first.
 - **Report the result as the CLI gave it.** Zero clicks with impressions means rows exist with no clicks.
