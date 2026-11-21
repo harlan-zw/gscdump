@@ -468,8 +468,10 @@ If submission fails, mention it and continue. Never retry an uncertain submissio
   `sites verify`, `sitemaps submit`, `sitemaps delete`, `indexing submit`,
   `indexing remove`, `store reset`, and `store rm-site` change Google or
   delete local data. `indexing watch add` spends URL Inspections every week,
-  and `indexing watch remove` deletes Watched URL inspections. `--yes` is consent you
-  borrow from the user.
+  and `indexing watch remove` deletes Watched URL inspections.
+- **Check which commands accept `--yes`.** Use it only with user consent and
+  when the command's `--help` lists it. Run `sitemaps submit` and `sitemaps delete`
+  without `--yes` after you have consent.
 - **Never loop unattended.** One `sync` per Site per task. Inspection batches
   spend a daily pool. Use `--dry-run` and `--explain` to plan first.
 - **Report the result as the CLI gave it.** Zero clicks with impressions means rows exist with no clicks.
