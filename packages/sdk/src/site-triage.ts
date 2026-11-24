@@ -476,7 +476,7 @@ export function classifyReachStage(input: SiteTriageInput): ReachVerdict {
       '28d clicks',
       clicks.current,
       recoveryTarget,
-      `About ${formatSearchConsoleCount(Math.max(0, recoveryTarget - clicks.current))} more clicks would bring this period within 10% of the previous period.`,
+      `About ${formatSearchConsoleCount(Math.max(0, recoveryTarget - clicks.current))} more clicks would bring the last 28 days within 10% of the 28 days before.`,
     ))
   }
   if (clicks.prior >= 50 && clicks.current >= 50 && clicksDirection === 'up') {
@@ -505,7 +505,7 @@ export function classifyReachStage(input: SiteTriageInput): ReachVerdict {
         '28d impressions',
         visibility.current,
         recoveryTarget,
-        `About ${formatSearchConsoleCount(Math.max(0, recoveryTarget - visibility.current))} more impressions would bring this period within 10% of the previous period.`,
+        `About ${formatSearchConsoleCount(Math.max(0, recoveryTarget - visibility.current))} more impressions would bring the last 28 days within 10% of the 28 days before.`,
       ))
     }
     if (visibility.prior >= 1000 && visibility.current >= 1000 && impressionsDirection === 'up') {

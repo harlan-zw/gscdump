@@ -104,6 +104,19 @@ describe('classifyReachStage', () => {
     expect(classify(100, 160).progression?.direction).toBe('sustain')
   })
 
+  // nuxtseo.com weekly Summary, 2026-11-09: "About 46 more clicks would bring
+  // this period within 10% of the previous period" sat beside "11 clicks, +6
+  // from 5". The gap is measured over 28 days, so it names 28 days.
+  it('names the 28-day window a recovery gap measures', () => {
+    expect(classify(100, 60).progression?.gapLabel).toMatch(/^About \d+ more clicks would bring the last 28 days within 10% of the 28 days before\.$/)
+
+    const daily = observations(3, 3, 10000, 6000).map((row, index) => ({
+      ...row,
+      impressions: Math.floor((index < 28 ? 10000 : 6000) / 28) + (index % 7 < (index < 28 ? 10000 : 6000) / 4 % 7 ? 1 : 0),
+    }))
+    expect(classifyReachStage({ daily, impressions28d: 6000 }).progression?.gapLabel).toMatch(/^About [\d,]+ more impressions would bring the last 28 days within 10% of the 28 days before\.$/)
+  })
+
   it('uses measured impressions when clicks are sparse', () => {
     const verdict = classify(2, 3, 1000, 1600)
     expect(verdict.stage).toBe('growing')
