@@ -57,6 +57,8 @@ export const fleetSummaryV1RequestSchema = z.strictObject({
 }).superRefine((value, context) => {
   if (Boolean(value.startDate) !== Boolean(value.endDate) || (value.period === 'custom' && !value.startDate))
     context.addIssue({ code: 'custom', path: ['startDate'], message: 'Custom windows require both startDate and endDate.' })
+  if (value.period !== 'custom' && (value.startDate || value.endDate))
+    context.addIssue({ code: 'custom', path: ['period'], message: 'Pass period: "custom" when specifying startDate and endDate.' })
   if (value.startDate && value.endDate && value.startDate > value.endDate)
     context.addIssue({ code: 'custom', path: ['endDate'], message: 'endDate must be on or after startDate.' })
 })

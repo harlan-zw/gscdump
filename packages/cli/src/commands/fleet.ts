@@ -1,3 +1,4 @@
+import type { TableName } from '@gscdump/contracts'
 import type {
   FleetSummarySortDir,
   FleetSummarySortField,
@@ -6,27 +7,38 @@ import type {
   FleetSummaryV1Totals,
 } from '@gscdump/contracts/v1'
 import type { FleetSummarySiteOutcome } from '@gscdump/sdk/fleet-summary'
+import type { SiteManager } from '../auth-state'
+import type { HostedSite } from '../hosted-site'
+import type { LocalStore } from '../local-store'
 import { analyzeTrajectory } from '@gscdump/analysis'
 import { FLEET_SUMMARY_SORT_FIELDS, fleetSummaryV1RequestSchema } from '@gscdump/contracts/v1'
-import { createEngineQuerySource } from '@gscdump/engine/source'
 import { buildFleetSummary, computeFleetDeltas } from '@gscdump/sdk/fleet-summary'
 import { createGscdumpV1Client } from '@gscdump/sdk/v1'
 import { defineCommand } from 'citty'
 import { getLatestGscDate } from 'gscdump/dates'
 import { between, date } from 'gscdump/query'
 import { unwrapResult } from 'gscdump/result'
-import { hostedCredential, parseAuthentication, resolveAuthentication } from '../auth-state'
+import { getHostedAccount, hostedCredential, parseAuthentication, resolveAuthentication, siteManagerOf } from '../auth-state'
 import { fleetCommandMeta } from '../command-meta'
 import { createCommandContext } from '../context'
 import { resolveCliEnvironment } from '../environment'
 import { hostedRequestContext } from '../hosted-context'
+import { matchHostedSite, siteMatchStop } from '../hosted-site'
 import { renderTable, textLines } from '../render/layout'
 import { formatChange, formatMetric } from '../render/metrics'
 import { terminalOutputOptions } from '../render/terminal'
-import { commandLineError } from '../stop'
+import { commandLineError, stopError } from '../stop'
 import { readSiteMap, siteUrlForId } from '../store-sites'
-import { applyOutputMode, OUTPUT_ARGS } from '../utils'
-import { COMPARISON_FLAGS, parseWindowFlags, PERIOD_FLAGS, windowFlagErrorToException } from '../window'
+import { applyOutputMode, OUTPUT_ARGS, parseSearchType } from '../utils'
+import {
+  checkWindowFlags,
+  COMPARISON_ALIASES,
+  COMPARISON_FLAGS,
+  parseWindowFlags,
+  PERIOD_ALIASES,
+  PERIOD_FLAGS,
+  windowFlagErrorToException,
+} from '../window'
 
 const SORT_ALIASES: Readonly<Record<string, FleetSummarySortField>> = {
   'clicks': 'clicks',
@@ -42,6 +54,8 @@ const SORT_ALIASES: Readonly<Record<string, FleetSummarySortField>> = {
   'position-delta': 'positionDelta',
   'positionDelta': 'positionDelta',
 }
+
+const LOCAL_AGGREGATE_TABLES: readonly TableName[] = ['dates', 'countries', 'pages']
 
 export function parseFleetSort(raw: string | undefined): FleetSummarySortField {
   if (!raw)
@@ -59,28 +73,71 @@ export function parseFleetSiteIds(raw: string | undefined): string[] | undefined
   return values.length > 0 ? values : undefined
 }
 
-export function buildHostedFleetRequest(args: Record<string, unknown>): FleetSummaryV1Request {
+export function resolveHostedSiteTokens(
+  sites: readonly HostedSite[],
+  tokens: readonly string[],
+  manager: SiteManager,
+): string[] {
+  const resolved = new Set<string>()
+  for (const token of tokens) {
+    const match = matchHostedSite(sites, token)
+    if (match.kind !== 'found')
+      throw stopError(siteMatchStop(match, manager))
+    resolved.add(match.site.siteId)
+  }
+  return [...resolved]
+}
+
+export function buildHostedFleetRequest(
+  args: Record<string, unknown>,
+  resolvedSiteIds?: readonly string[],
+): FleetSummaryV1Request {
   const periodRaw = args.period ? String(args.period) : undefined
+  const vsRaw = args.vs ? String(args.vs) : undefined
+  const startRaw = args.start ? String(args.start) : undefined
+  const endRaw = args.end ? String(args.end) : undefined
+
+  const flagError = checkWindowFlags({ period: periodRaw, vs: vsRaw, start: startRaw, end: endRaw })
+  if (flagError)
+    throw windowFlagErrorToException(flagError)
+
   const period = periodRaw
-    ? periodRaw.replace(/^(\d+d)$/, 'last-$1')
-    : (args.start || args.end ? 'custom' : 'last-28d')
+    ? PERIOD_ALIASES[periodRaw.toLowerCase()]!
+    : (startRaw || endRaw ? 'custom' : 'last-28d')
+  const comparison = vsRaw ? COMPARISON_ALIASES[vsRaw.toLowerCase()]! : 'prev-period'
+  const searchType = parseSearchType(args['search-type']) ?? 'web'
   const sortBy = parseFleetSort(args.sort ? String(args.sort) : undefined)
   const sortDir: FleetSummarySortDir = args.asc ? 'asc' : 'desc'
-  const siteIds = parseFleetSiteIds(args.sites ? String(args.sites) : undefined)
+  const siteIds = resolvedSiteIds ? [...resolvedSiteIds] : parseFleetSiteIds(args.sites ? String(args.sites) : undefined)
   const includeIndexing = Boolean(args.indexing)
   const includeTrajectory = Boolean(args.trajectory)
 
-  return fleetSummaryV1RequestSchema.parse({
+  const parsed = fleetSummaryV1RequestSchema.safeParse({
     period,
-    comparison: args.vs ? String(args.vs) : 'prev-period',
-    ...(args.start ? { startDate: String(args.start) } : {}),
-    ...(args.end ? { endDate: String(args.end) } : {}),
-    ...(args['search-type'] ? { searchType: String(args['search-type']) } : {}),
+    comparison,
+    ...(startRaw ? { startDate: startRaw } : {}),
+    ...(endRaw ? { endDate: endRaw } : {}),
+    searchType,
     ...(siteIds ? { siteIds } : {}),
     ...(includeIndexing || includeTrajectory ? { include: { indexing: includeIndexing, trajectory: includeTrajectory } } : {}),
     sortBy,
     sortDir,
   })
+  if (!parsed.success)
+    throw commandLineError(parsed.error.issues[0]?.message ?? 'Invalid fleet options.')
+  return parsed.data
+}
+
+function formatRowDate(value: unknown): string {
+  if (value instanceof Date && Number.isFinite(value.getTime()))
+    return value.toISOString().slice(0, 10)
+  if (typeof value === 'number' && Number.isFinite(value))
+    return new Date(value > 1e10 ? value : value * 86_400_000).toISOString().slice(0, 10)
+  if (typeof value === 'bigint') {
+    const n = Number(value)
+    return new Date(n > 1e10 ? n : n * 86_400_000).toISOString().slice(0, 10)
+  }
+  return String(value ?? '').slice(0, 10)
 }
 
 function aggregateDailyRows(rows: readonly Record<string, unknown>[]): FleetSummaryV1Totals {
@@ -91,7 +148,7 @@ function aggregateDailyRows(rows: readonly Record<string, unknown>[]): FleetSumm
   for (const row of rows) {
     const c = Number(row.clicks ?? 0)
     const imp = Number(row.impressions ?? 0)
-    const pos = Number(row.position)
+    const pos = row.position != null && row.position !== '' ? Number(row.position) : Number.NaN
     if (Number.isFinite(c))
       clicks += c
     if (Number.isFinite(imp))
@@ -115,6 +172,18 @@ function inclusiveDays(startDate: string, endDate: string): number {
   return Math.max(1, Math.floor((end - start) / 86_400_000) + 1)
 }
 
+function rangesOverlap(aStart: string, aEnd: string, bStart: string, bEnd: string): boolean {
+  return aStart <= bEnd && aEnd >= bStart
+}
+
+function clampDate(value: string, min: string, max: string): string {
+  if (value < min)
+    return min
+  if (value > max)
+    return max
+  return value
+}
+
 async function runHostedFleet(args: Record<string, unknown>): Promise<FleetSummaryV1Data & { source: 'hosted', requestId: string }> {
   const environment = resolveCliEnvironment().values
   const authentication = args['api-key']
@@ -122,12 +191,23 @@ async function runHostedFleet(args: Record<string, unknown>): Promise<FleetSumma
     : await resolveAuthentication()
   if (authentication._tag !== 'Hosted')
     throw new Error('Hosted mode required.')
+  if (args['api-root'] && String(args['api-root']).replace(/\/+$/, '') !== authentication.apiRoot)
+    throw new Error('The API root changed. Pass --api-key for the new API root.')
+
+  const rawSites = parseFleetSiteIds(args.sites ? String(args.sites) : undefined)
+  const resolvedSiteIds = rawSites
+    ? await (async () => {
+        const account = await getHostedAccount(authentication)
+        return resolveHostedSiteTokens(account.sites, rawSites, siteManagerOf(authentication, account.issuer))
+      })()
+    : undefined
+
   const client = createGscdumpV1Client({
     apiRoot: authentication.apiRoot,
     credential: hostedCredential(authentication),
     requestContext: hostedRequestContext(environment),
   })
-  const body = buildHostedFleetRequest(args)
+  const body = buildHostedFleetRequest(args, resolvedSiteIds)
   const response = await client.queryFleetSummary({ body })
   return {
     ...response.data,
@@ -136,12 +216,13 @@ async function runHostedFleet(args: Record<string, unknown>): Promise<FleetSumma
   }
 }
 
-async function runLocalFleet(args: Record<string, unknown>): Promise<FleetSummaryV1Data & { source: 'local' }> {
-  const ctx = await createCommandContext({ needsStore: true })
-  const store = ctx.store!
+export async function runLocalFleetWithStore(
+  store: LocalStore,
+  args: Record<string, unknown>,
+): Promise<FleetSummaryV1Data & { source: 'local' }> {
   const sortBy = parseFleetSort(args.sort ? String(args.sort) : undefined)
   const sortDir: FleetSummarySortDir = args.asc ? 'asc' : 'desc'
-  const searchType = (args['search-type'] ? String(args['search-type']) : 'web') as FleetSummaryV1Data['searchType']
+  const searchType = parseSearchType(args['search-type']) ?? 'web'
   const filterSites = parseFleetSiteIds(args.sites ? String(args.sites) : undefined)
   const includeTrajectory = Boolean(args.trajectory)
 
@@ -156,8 +237,15 @@ async function runLocalFleet(args: Record<string, unknown>): Promise<FleetSummar
     .map(e => e.siteId!))]
     .filter(id => !filterSites || filterSites.includes(id) || filterSites.includes(siteUrlForId(siteMap, id)))
     .sort()
+  const siteIdSet = new Set(siteIds)
 
   const latestSynced = watermarks
+    .filter(w =>
+      w.siteId !== undefined
+      && siteIdSet.has(w.siteId)
+      && (w.searchType ?? 'web') === searchType
+      && LOCAL_AGGREGATE_TABLES.includes(w.table as TableName),
+    )
     .map(w => w.newestDateSynced)
     .filter((d): d is string => Boolean(d))
     .sort()
@@ -177,14 +265,28 @@ async function runLocalFleet(args: Record<string, unknown>): Promise<FleetSummar
     ...(resolved.comparison ? { comparison: { startDate: resolved.comparison.start, endDate: resolved.comparison.end } } : {}),
   }
 
+  const queryDailyRange = async (siteId: string, table: TableName, startDate: string, endDate: string): Promise<Record<string, unknown>[]> => {
+    const result = await store.engine.query(
+      { userId: store.userId, siteId, table, searchType },
+      {
+        dimensions: ['date'],
+        filter: between(date, startDate, endDate),
+        orderBy: { column: 'date', dir: 'asc' },
+        rowLimit: inclusiveDays(startDate, endDate) + 8,
+      },
+    )
+    return result.rows as Record<string, unknown>[]
+  }
+
   const outcomes: FleetSummarySiteOutcome[] = []
   for (const siteId of siteIds) {
     const siteUrl = siteUrlForId(siteMap, siteId)
     const siteWatermarks = watermarks.filter(w => w.siteId === siteId && (w.searchType ?? 'web') === searchType)
-    const oldestDateSynced = siteWatermarks.map(w => w.oldestDateSynced).filter(Boolean).sort()[0] ?? null
-    const newestDateSynced = siteWatermarks.map(w => w.newestDateSynced).filter(Boolean).sort().at(-1) ?? null
+    const tableWatermark = LOCAL_AGGREGATE_TABLES
+      .map(table => siteWatermarks.find(w => w.table === table && w.newestDateSynced))
+      .find((w): w is NonNullable<typeof w> => Boolean(w))
 
-    if (!newestDateSynced) {
+    if (!tableWatermark || !tableWatermark.oldestDateSynced || !tableWatermark.newestDateSynced) {
       outcomes.push({
         _tag: 'NotSynced',
         siteId,
@@ -192,66 +294,44 @@ async function runLocalFleet(args: Record<string, unknown>): Promise<FleetSummar
         gscProperty: siteUrl,
         partner: null,
         syncStatus: 'unsynced',
-        oldestDateSynced,
-        newestDateSynced,
-        reason: 'No synced analytics partitions found in local Store.',
+        oldestDateSynced: null,
+        newestDateSynced: null,
+        reason: `No synced dates, countries, or pages partitions for ${searchType} in local Store.`,
       })
       continue
     }
 
-    const source = createEngineQuerySource({ engine: store.engine, ctx: { userId: store.userId, siteId } })
-    const syncedTables = new Set(siteWatermarks.map(w => w.table))
-    // Prefer exact site-level tables (`dates`, then `countries`, then `pages`)
-    // so local Stores synced without a dedicated `dates` table still aggregate accurately.
-    const queryDims: Array<'date' | 'country' | 'page'> = syncedTables.has('dates')
-      ? ['date']
-      : syncedTables.has('countries')
-        ? ['date', 'country']
-        : syncedTables.has('pages')
-          ? ['date', 'page']
-          : ['date']
+    const selectedTable = tableWatermark.table as TableName
+    const oldestDateSynced = tableWatermark.oldestDateSynced
+    const newestDateSynced = tableWatermark.newestDateSynced
 
-    const collapseByDate = (rows: readonly Record<string, unknown>[]): Record<string, unknown>[] => {
-      if (queryDims.length === 1)
-        return [...rows]
-      const byDate = new Map<string, { clicks: number, impressions: number, weightedPos: number, posImpressions: number }>()
-      for (const row of rows) {
-        const d = String(row.date ?? '')
-        if (!d)
-          continue
-        const c = Number(row.clicks ?? 0)
-        const imp = Number(row.impressions ?? 0)
-        const pos = Number(row.position)
-        const acc = byDate.get(d) ?? { clicks: 0, impressions: 0, weightedPos: 0, posImpressions: 0 }
-        if (Number.isFinite(c))
-          acc.clicks += c
-        if (Number.isFinite(imp))
-          acc.impressions += imp
-        if (Number.isFinite(pos) && Number.isFinite(imp) && imp > 0) {
-          acc.weightedPos += pos * imp
-          acc.posImpressions += imp
-        }
-        byDate.set(d, acc)
-      }
-      return [...byDate.entries()]
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([d, acc]) => ({
-          date: d,
-          clicks: acc.clicks,
-          impressions: acc.impressions,
-          ctr: acc.impressions > 0 ? acc.clicks / acc.impressions : 0,
-          position: acc.posImpressions > 0 ? acc.weightedPos / acc.posImpressions : null,
-        }))
+    if (!rangesOverlap(oldestDateSynced, newestDateSynced, window.startDate, window.endDate)) {
+      outcomes.push({
+        _tag: 'NotSynced',
+        siteId,
+        siteUrl,
+        gscProperty: siteUrl,
+        partner: null,
+        syncStatus: 'idle',
+        oldestDateSynced,
+        newestDateSynced,
+        reason: `Synced ${searchType} range (${oldestDateSynced} to ${newestDateSynced}) does not cover ${window.startDate} to ${window.endDate}.`,
+      })
+      continue
     }
 
     try {
-      const currentRows = collapseByDate(await source.queryRows({
-        dimensions: queryDims,
-        filter: between(date, window.startDate, window.endDate),
-        searchType,
-        orderBy: { column: 'date', dir: 'asc' },
-      }))
-      if (currentRows.length === 0) {
+      const currentRows = await queryDailyRange(siteId, selectedTable, window.startDate, window.endDate)
+      const comparisonCovered = Boolean(
+        window.comparison
+        && oldestDateSynced <= window.comparison.startDate
+        && newestDateSynced >= window.comparison.endDate,
+      )
+      const previousRows = comparisonCovered && window.comparison
+        ? await queryDailyRange(siteId, selectedTable, window.comparison.startDate, window.comparison.endDate)
+        : []
+
+      if (currentRows.length === 0 && previousRows.length === 0) {
         outcomes.push({
           _tag: 'Empty',
           siteId,
@@ -265,30 +345,24 @@ async function runLocalFleet(args: Record<string, unknown>): Promise<FleetSummar
         })
         continue
       }
+
       const totals = aggregateDailyRows(currentRows)
-      const previousRows = window.comparison
-        ? collapseByDate(await source.queryRows({
-            dimensions: queryDims,
-            filter: between(date, window.comparison.startDate, window.comparison.endDate),
-            searchType,
-            orderBy: { column: 'date', dir: 'asc' },
-          }))
-        : []
-      const previousTotals = window.comparison ? aggregateDailyRows(previousRows) : undefined
+      const previousTotals = comparisonCovered ? aggregateDailyRows(previousRows) : undefined
       const deltas = previousTotals ? computeFleetDeltas(totals, previousTotals) : undefined
-      const complete = Boolean(
-        oldestDateSynced && oldestDateSynced <= window.startDate
-        && newestDateSynced && newestDateSynced >= window.endDate,
-      )
+
+      const primaryComplete = oldestDateSynced <= window.startDate && newestDateSynced >= window.endDate
+      const complete = primaryComplete && (!window.comparison || comparisonCovered)
+
       const trajectory = includeTrajectory
-        ? (() => {
+        ? await (async () => {
+            const historyRows = await queryDailyRange(siteId, selectedTable, oldestDateSynced, newestDateSynced)
             const t = analyzeTrajectory({
-              days: currentRows.map(r => ({
-                date: String(r.date ?? ''),
+              days: historyRows.map(r => ({
+                date: formatRowDate(r.date),
                 clicks: Number(r.clicks ?? 0),
                 impressions: Number(r.impressions ?? 0),
               })),
-              knownThrough: newestDateSynced < window.endDate ? newestDateSynced : window.endDate,
+              knownThrough: newestDateSynced,
             })
             return {
               peakWeekClicks: t.peak?.clicks ?? null,
@@ -309,8 +383,8 @@ async function runLocalFleet(args: Record<string, unknown>): Promise<FleetSummar
         oldestDateSynced,
         newestDateSynced,
         coverage: {
-          startDate: oldestDateSynced,
-          endDate: newestDateSynced,
+          startDate: clampDate(oldestDateSynced, window.startDate, window.endDate),
+          endDate: clampDate(newestDateSynced, window.startDate, window.endDate),
           complete,
         },
         totals,
@@ -344,6 +418,11 @@ async function runLocalFleet(args: Record<string, unknown>): Promise<FleetSummar
     }),
     source: 'local',
   }
+}
+
+async function runLocalFleet(args: Record<string, unknown>): Promise<FleetSummaryV1Data & { source: 'local' }> {
+  const ctx = await createCommandContext({ needsStore: true })
+  return runLocalFleetWithStore(ctx.store!, args)
 }
 
 export function renderFleetSummary(summary: FleetSummaryV1Data): string {

@@ -80,9 +80,13 @@ function sortMetricValue(
   }
 }
 
+function compareCodePoint(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0
+}
+
 function compareIdentity(a: FleetSummaryV1Site, b: FleetSummaryV1Site): number {
-  const byUrl = a.siteUrl.localeCompare(b.siteUrl)
-  return byUrl !== 0 ? byUrl : a.siteId.localeCompare(b.siteId)
+  const byUrl = compareCodePoint(a.siteUrl, b.siteUrl)
+  return byUrl !== 0 ? byUrl : compareCodePoint(a.siteId, b.siteId)
 }
 
 /** Deterministic ADR-0027 sort: Ok rows by sortBy/sortDir (nulls last), then non-Ok rows by identity. */
@@ -149,8 +153,8 @@ function pickCanonicalSiteForHost(group: readonly FleetSummaryV1Site[]): FleetSu
     const aNewest = a.newestDateSynced ?? ''
     const bNewest = b.newestDateSynced ?? ''
     if (aNewest !== bNewest)
-      return bNewest.localeCompare(aNewest)
-    return a.siteId.localeCompare(b.siteId)
+      return compareCodePoint(bNewest, aNewest)
+    return compareCodePoint(a.siteId, b.siteId)
   })
   return ranked[0]!
 }
@@ -195,7 +199,6 @@ export function deduplicateFleetTotals(
   const failedSiteIds: string[] = []
   const currentTotals: FleetSummaryV1Totals[] = []
   const previousTotals: FleetSummaryV1Totals[] = []
-  let hasAnyPrevious = false
 
   for (const group of byUrl.values()) {
     const canonical = pickCanonicalSiteForHost(group)
@@ -206,10 +209,8 @@ export function deduplicateFleetTotals(
     if (canonical._tag === 'Ok') {
       includedSiteIds.push(canonical.siteId)
       currentTotals.push(canonical.totals)
-      if (canonical.previousTotals) {
+      if (canonical.previousTotals)
         previousTotals.push(canonical.previousTotals)
-        hasAnyPrevious = true
-      }
     }
     else if (canonical._tag === 'Empty') {
       includedSiteIds.push(canonical.siteId)
@@ -224,7 +225,10 @@ export function deduplicateFleetTotals(
   failedSiteIds.sort()
 
   const totals = aggregateTotals(currentTotals)
-  const prev = hasComparison && hasAnyPrevious ? aggregateTotals(previousTotals) : undefined
+  // Emit Fleet comparison deltas only when every included Ok Site has comparison totals,
+  // avoiding a mismatched numerator vs denominator across partial history.
+  const allOkHavePrevious = currentTotals.length > 0 && previousTotals.length === currentTotals.length
+  const prev = hasComparison && allOkHavePrevious ? aggregateTotals(previousTotals) : undefined
   const deltas = prev ? computeFleetDeltas(totals, prev) : undefined
   const _tag = failedSiteIds.length > 0 ? 'Partial' as const : 'Complete' as const
 
