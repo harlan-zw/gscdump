@@ -110,28 +110,9 @@ export function analyzeClustering(
   const clusterMap = new Map<string, { name: string, type: 'prefix' | 'intent' | 'canonical', keywords: QueriesRow[] }>()
   const clusteredKeywords = new Set<string>()
 
-  if (clusterBy === 'intent' || clusterBy === 'both') {
-    for (const kw of filtered) {
-      const intent = extractIntentPrefix(kw.query)
-      if (intent) {
-        const key = `intent:${intent}`
-        const existing = clusterMap.get(key)
-        if (existing) {
-          existing.keywords.push(kw)
-        }
-        else {
-          clusterMap.set(key, { name: intent, type: 'intent', keywords: [kw] })
-        }
-        clusteredKeywords.add(kw.query)
-      }
-    }
-  }
-
   if (canonical) {
     const canonMap = new Map<string, QueriesRow[]>()
     for (const kw of filtered) {
-      if (clusteredKeywords.has(kw.query))
-        continue
       const canon = normalizeQuery(kw.query)
       if (!canon)
         continue
@@ -147,6 +128,30 @@ export function analyzeClustering(
         const sorted = [...kws].sort((a, b) => num(b.impressions) - num(a.impressions) || num(b.clicks) - num(a.clicks) || a.query.localeCompare(b.query))
         clusterMap.set(`canonical:${canon}`, { name: sorted[0]!.query, type: 'canonical', keywords: sorted })
         for (const kw of sorted)
+          clusteredKeywords.add(kw.query)
+      }
+    }
+  }
+
+  if (clusterBy === 'intent' || clusterBy === 'both') {
+    const intentMap = new Map<string, QueriesRow[]>()
+    for (const kw of filtered) {
+      if (clusteredKeywords.has(kw.query))
+        continue
+      const intent = extractIntentPrefix(kw.query)
+      if (intent) {
+        const existing = intentMap.get(intent)
+        if (existing)
+          existing.push(kw)
+        else
+          intentMap.set(intent, [kw])
+      }
+    }
+
+    for (const [intent, kws] of intentMap) {
+      if (kws.length >= minClusterSize) {
+        clusterMap.set(`intent:${intent}`, { name: intent, type: 'intent', keywords: kws })
+        for (const kw of kws)
           clusteredKeywords.add(kw.query)
       }
     }

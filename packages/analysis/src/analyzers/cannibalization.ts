@@ -114,34 +114,41 @@ export function analyzeCannibalization(
   } = options
 
   if (canonical) {
-    const groups = new Map<string, {
-      pages: Map<string, { clicks: number, impressions: number, weightedPos: number, posSum: number, count: number }>
+    const groups = new Map<string, Map<string, {
+      clicks: number
+      impressions: number
+      weightedPos: number
+      posSum: number
+      count: number
       variants: Map<string, number>
-    }>()
+    }>>()
 
     for (const row of rows) {
       const ck = normalizeQuery(row.query) || row.query
-      let g = groups.get(ck)
-      if (!g) {
-        g = { pages: new Map(), variants: new Map() }
-        groups.set(ck, g)
+      let pagesByUrl = groups.get(ck)
+      if (!pagesByUrl) {
+        pagesByUrl = new Map()
+        groups.set(ck, pagesByUrl)
       }
-      g.variants.set(row.query, (g.variants.get(row.query) ?? 0) + row.impressions)
-      const p = g.pages.get(row.page) ?? { clicks: 0, impressions: 0, weightedPos: 0, posSum: 0, count: 0 }
+      const p = pagesByUrl.get(row.page) ?? { clicks: 0, impressions: 0, weightedPos: 0, posSum: 0, count: 0, variants: new Map<string, number>() }
       p.clicks += row.clicks
       p.impressions += row.impressions
       p.weightedPos += (row.position - 1) * row.impressions
       p.posSum += row.position
       p.count += 1
-      g.pages.set(row.page, p)
+      p.variants.set(row.query, (p.variants.get(row.query) ?? 0) + row.impressions)
+      pagesByUrl.set(row.page, p)
     }
 
     const results: CannibalizationResult[] = []
-    for (const [canonicalKey, g] of groups) {
+    for (const [canonicalKey, pagesByUrl] of groups) {
       const pages: CannibalizationPage[] = []
-      for (const [page, p] of g.pages) {
+      const qualifyingVariants = new Map<string, number>()
+      for (const [page, p] of pagesByUrl) {
         if (p.impressions < minImpressions)
           continue
+        for (const [q, imp] of p.variants)
+          qualifyingVariants.set(q, (qualifyingVariants.get(q) ?? 0) + imp)
         pages.push({
           page,
           clicks: p.clicks,
@@ -168,7 +175,7 @@ export function analyzeCannibalization(
         continue
 
       pages.sort((a, b) => b.clicks - a.clicks || b.impressions - a.impressions || a.page.localeCompare(b.page))
-      const variants = [...g.variants.entries()]
+      const variants = [...qualifyingVariants.entries()]
         .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
         .map(([q]) => q)
       results.push({
@@ -283,10 +290,14 @@ function reduceCanonicalCannibalization(
   options: { minImpressions: number, minQueryImpressions: number, limit: number },
 ): { results: CannibalizationEvent[], meta: Record<string, unknown> } {
   const { minImpressions, minQueryImpressions, limit } = options
-  const groups = new Map<string, {
-    urls: Map<string, { clicks: number, impressions: number, weightedPos: number, posSum: number, count: number }>
+  const groups = new Map<string, Map<string, {
+    clicks: number
+    impressions: number
+    weightedPos: number
+    posSum: number
+    count: number
     variants: Map<string, number>
-  }>()
+  }>>()
 
   for (const r of rows) {
     const query = str(r.query)
@@ -297,29 +308,32 @@ function reduceCanonicalCannibalization(
     const clicks = num(r.clicks)
     const position = num(r.position)
     const ck = normalizeQuery(query) || query
-    let g = groups.get(ck)
-    if (!g) {
-      g = { urls: new Map(), variants: new Map() }
-      groups.set(ck, g)
+    let urlsByKey = groups.get(ck)
+    if (!urlsByKey) {
+      urlsByKey = new Map()
+      groups.set(ck, urlsByKey)
     }
-    g.variants.set(query, (g.variants.get(query) ?? 0) + impressions)
-    const u = g.urls.get(url) ?? { clicks: 0, impressions: 0, weightedPos: 0, posSum: 0, count: 0 }
+    const u = urlsByKey.get(url) ?? { clicks: 0, impressions: 0, weightedPos: 0, posSum: 0, count: 0, variants: new Map<string, number>() }
     u.clicks += clicks
     u.impressions += impressions
     u.weightedPos += (position - 1) * impressions
     u.posSum += position
     u.count += 1
-    g.urls.set(url, u)
+    u.variants.set(query, (u.variants.get(query) ?? 0) + impressions)
+    urlsByKey.set(url, u)
   }
 
   const allEvents: CannibalizationEvent[] = []
-  for (const [canonicalKey, g] of groups) {
+  for (const [canonicalKey, urlsByKey] of groups) {
     const qualifying: Array<{ url: string, clicks: number, impressions: number, ctr: number, position: number }> = []
+    const qualifyingVariants = new Map<string, number>()
     let totalImpressions = 0
     let totalClicks = 0
-    for (const [url, u] of g.urls) {
+    for (const [url, u] of urlsByKey) {
       if (u.impressions < minImpressions)
         continue
+      for (const [q, imp] of u.variants)
+        qualifyingVariants.set(q, (qualifyingVariants.get(q) ?? 0) + imp)
       totalImpressions += u.impressions
       totalClicks += u.clicks
       qualifying.push({
@@ -354,7 +368,7 @@ function reduceCanonicalCannibalization(
         * Math.min(Math.log10(Math.max(totalImpressions, 10)) / 5, 1)
       ) ** (1 / 3),
     ))
-    const variants = [...g.variants.entries()]
+    const variants = [...qualifyingVariants.entries()]
       .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
       .map(([q]) => q)
 

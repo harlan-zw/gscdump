@@ -770,7 +770,7 @@ describe('runAnalyzerWithEngine', () => {
       rows: [
         { query: 'schema validator', date: d, clicks: 50, impressions: 1000, sum_position: 2000 },
         { query: 'schema validator online', date: d, clicks: 10, impressions: 200, sum_position: 600 },
-        { query: 'schema checker', date: d, clicks: 20, impressions: 500, sum_position: 1500 },
+        { query: 'free schema checker', date: d, clicks: 20, impressions: 500, sum_position: 1500 },
         // Tab-padded 1-word queries must not form a bogus prefix cluster.
         { query: '\tsolo', date: d, clicks: 1, impressions: 50, sum_position: 100 },
         { query: '\tsolo\n', date: d, clicks: 1, impressions: 50, sum_position: 100 },
@@ -786,10 +786,11 @@ describe('runAnalyzerWithEngine', () => {
     expect(rawClusters).toHaveLength(1)
     expect(rawClusters[0]).toMatchObject({ clusterName: 'schema validator', keywordCount: 2 })
 
+    // Default clusterBy ('both') must fold free-prefixed canonical variants instead of losing them to a singleton intent bucket.
     const canon = await runAnalyzerWithEngine(
       { engine: env.engine },
       { userId: USER, siteId: SITE },
-      { type: 'clustering', startDate: d, endDate: d, minImpressions: 10, minClusterSize: 2, clusterBy: 'prefix', canonical: true },
+      { type: 'clustering', startDate: d, endDate: d, minImpressions: 10, minClusterSize: 2, canonical: true },
     )
     const canonClusters = canon.results as Array<{ clusterName: string, clusterType: string, keywordCount: number, totalImpressions: number }>
     expect(canonClusters.find(c => c.clusterName === 'schema validator')).toMatchObject({
@@ -947,20 +948,27 @@ describe('runAnalyzerWithEngine', () => {
         { url: '/tools/schema-validator', query: 'schema validator', date: '2026-04-10', clicks: 20, impressions: 200, sum_position: 400 },
         { url: '/docs/schema-org', query: 'schema checker', date: '2026-04-10', clicks: 2, impressions: 100, sum_position: 600 },
         { url: '/docs/schema-org', query: 'free schema tester online', date: '2026-04-10', clicks: 1, impressions: 50, sum_position: 350 },
+        // Sub-threshold tail URLs whose combined impressions for another variant exceed qualifying variants must not pollute `variants` or `keyword`.
+        { url: '/tail-1', query: 'schema verifier', date: '2026-04-10', clicks: 0, impressions: 40, sum_position: 400 },
+        { url: '/tail-2', query: 'schema verifier', date: '2026-04-10', clicks: 0, impressions: 40, sum_position: 400 },
+        { url: '/tail-3', query: 'schema verifier', date: '2026-04-10', clicks: 0, impressions: 40, sum_position: 400 },
+        { url: '/tail-4', query: 'schema verifier', date: '2026-04-10', clicks: 0, impressions: 40, sum_position: 400 },
+        { url: '/tail-5', query: 'schema verifier', date: '2026-04-10', clicks: 0, impressions: 40, sum_position: 400 },
+        { url: '/tail-6', query: 'schema verifier', date: '2026-04-10', clicks: 0, impressions: 40, sum_position: 400 },
       ],
     }])
 
     const rawOut = await runAnalyzerWithEngine(
       { engine: env.engine },
       { userId: USER, siteId: SITE },
-      { type: 'cannibalization', startDate: '2026-04-10', endDate: '2026-04-10' },
+      { type: 'cannibalization', startDate: '2026-04-10', endDate: '2026-04-10', minImpressions: 50 },
     )
     expect(rawOut.results).toHaveLength(0)
 
     const canonOut = await runAnalyzerWithEngine(
       { engine: env.engine },
       { userId: USER, siteId: SITE },
-      { type: 'cannibalization', startDate: '2026-04-10', endDate: '2026-04-10', canonical: true },
+      { type: 'cannibalization', startDate: '2026-04-10', endDate: '2026-04-10', minImpressions: 50, canonical: true },
     )
     const rows = canonOut.results as Array<{
       keyword: string

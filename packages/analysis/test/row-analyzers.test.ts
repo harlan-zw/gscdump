@@ -126,8 +126,9 @@ describe('row analyzer reductions', () => {
       { query: 'free schema tester online', clicks: 5, impressions: 100, ctr: 0.05, position: 4 },
       { query: 'nuxt sitemap guide', clicks: 3, impressions: 60, ctr: 0.05, position: 5 },
       { query: 'nuxt sitemap setup', clicks: 2, impressions: 40, ctr: 0.05, position: 6 },
+      { query: 'best standalone orphan', clicks: 1, impressions: 30, ctr: 0.03, position: 7 },
     ]
-    const result = analyzeClustering(rows, { canonical: true, clusterBy: 'prefix' })
+    const result = analyzeClustering(rows, { canonical: true })
 
     expect(result.clusters.find(c => c.clusterType === 'canonical')).toMatchObject({
       clusterName: 'schema validator',
@@ -138,6 +139,25 @@ describe('row analyzer reductions', () => {
       clusterType: 'prefix',
       keywordCount: 2,
     })
+    // Singleton intent query must not vanish from unclustered.
+    expect(result.unclustered.map(k => k.query)).toEqual(['best standalone orphan'])
+  })
+
+  it('folds free-prefixed variant with base query under default clusterBy=both', () => {
+    const rows: QueriesRow[] = [
+      { query: 'schema validator', clicks: 10, impressions: 200, ctr: 0.05, position: 2 },
+      { query: 'free schema validator', clicks: 5, impressions: 100, ctr: 0.05, position: 3 },
+    ]
+    const result = analyzeClustering(rows, { canonical: true })
+
+    expect(result.clusters).toHaveLength(1)
+    expect(result.clusters[0]).toMatchObject({
+      clusterName: 'schema validator',
+      clusterType: 'canonical',
+      keywordCount: 2,
+      totalImpressions: 300,
+    })
+    expect(result.unclustered).toEqual([])
   })
 
   it('computes cannibalization totals and spread before sorting qualifying pages', () => {
@@ -177,6 +197,23 @@ describe('row analyzer reductions', () => {
       variants: ['schema validator', 'schema checker', 'free schema tester online'],
     })
     expect(canonical[0]?.pages.map(p => p.page)).toEqual(['/tools/schema', '/docs/schema'])
+  })
+
+  it('excludes sub-threshold URL variants from canonical cannibalization headline and variants', () => {
+    const rows: QueryPageRow[] = [
+      { query: 'schema validator', page: '/a', clicks: 6, impressions: 60, ctr: 0.1, position: 3 },
+      { query: 'schema validator', page: '/b', clicks: 5, impressions: 55, ctr: 0.09, position: 4 },
+      { query: 'schema checker', page: '/c', clicks: 2, impressions: 40, ctr: 0.05, position: 5 },
+      { query: 'schema checker', page: '/d', clicks: 2, impressions: 40, ctr: 0.05, position: 5 },
+      { query: 'schema checker', page: '/e', clicks: 2, impressions: 40, ctr: 0.05, position: 5 },
+    ]
+    const canonical = analyzeCannibalization(rows, { canonical: true, minImpressions: 50 })
+    expect(canonical).toHaveLength(1)
+    expect(canonical[0]).toMatchObject({
+      query: 'schema validator',
+      canonicalKey: 'schema validator',
+      variants: ['schema validator'],
+    })
   })
 
   it('keeps the best-positioned page for each zero-click query', () => {
