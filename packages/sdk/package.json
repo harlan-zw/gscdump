@@ -56,6 +56,11 @@
       "import": "./dist/errors.mjs",
       "default": "./dist/errors.mjs"
     },
+    "./fleet-summary": {
+      "types": "./dist/fleet-summary.d.mts",
+      "import": "./dist/fleet-summary.mjs",
+      "default": "./dist/fleet-summary.mjs"
+    },
     "./gsc-console-url": {
       "types": "./dist/gsc-console-url.d.mts",
       "import": "./dist/gsc-console-url.mjs",
