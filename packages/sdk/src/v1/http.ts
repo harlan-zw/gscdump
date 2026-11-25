@@ -859,6 +859,7 @@ export function createGscdumpV1Client(options: CreateGscdumpV1ClientOptions): Gs
     listUserApiKeys: (input, executeOptions) => execute('partner.users.api_keys.list' satisfies MethodId<'listUserApiKeys'>, input, executeOptions),
     revokeUserApiKey: (input, executeOptions) => execute('partner.users.api_keys.revoke' satisfies MethodId<'revokeUserApiKey'>, input, executeOptions),
     queryAnalyticsRows: (input, executeOptions) => execute('analytics.rows.query' satisfies MethodId<'queryAnalyticsRows'>, input, executeOptions),
+    queryFleetSummary: (input, executeOptions) => execute('analytics.fleet.summary.query' satisfies MethodId<'queryFleetSummary'>, input, executeOptions),
     runReport: (input, executeOptions) => execute('analytics.reports.run' satisfies MethodId<'runReport'>, input, executeOptions),
     queryAnalyticsReport: (input, executeOptions) => execute('analytics.reports.query' satisfies MethodId<'queryAnalyticsReport'>, input, executeOptions),
     queryAnalyticsReportDetail: (input, executeOptions) => execute('analytics.reports.detail.query' satisfies MethodId<'queryAnalyticsReportDetail'>, input, executeOptions),

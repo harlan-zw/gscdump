@@ -77,7 +77,7 @@ gscdump sites --json
 gscdump query --site example.com -d page -f json
 ```
 
-Hosted mode can run these commands: `sites`, `query`, `report`, `sitemaps current`, `sitemaps history`, `sitemaps membership`,
+Hosted mode can run these commands: `sites`, `fleet`, `query`, `report`, `sitemaps current`, `sitemaps history`, `sitemaps membership`,
 `sitemaps lastmod`, `sitemaps export`, `sitemaps inspect`, `indexing urls`, `indexing inspect --yes`, `indexing summary`, `indexing watch list|add|remove`,
 and the `bing` commands `login --site`, `sites`, `status`, `dump`, `inspect`, and `verify`.
 Direct Google commands need Local mode: `sync`, `inspect`, `query --live`, `analyze --live`, `report --live`,
@@ -279,6 +279,7 @@ A routing stop also has `siteUrl`. `STORE_RANGE_NOT_COVERED` adds `missingDates`
 | Command | Use it for |
 | --- | --- |
 | `gscdump sites` | Local mode: list Google Sites and permission levels. Hosted mode: list hosted Sites and sync state |
+| `gscdump fleet` | Ranked totals, period deltas, coverage, and deduplicated totals across every Site in Local or Hosted mode |
 | `gscdump bing login`, `status`, `logout` | Manage Bing authentication and check connections |
 | `gscdump bing sites` | List Bing Sites and connection details |
 | `gscdump bing dump` | Export Bing traffic, pages, keywords, and crawl data |
