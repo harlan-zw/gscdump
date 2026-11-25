@@ -18,6 +18,12 @@
   cwvBucket: function
   siteUrlToHostname: function
   truncateQuery: function
+./fleet-summary:
+  buildFleetSummary: function
+  computeFleetDeltas: function
+  deduplicateFleetTotals: function
+  linkSameSiteUrls: function
+  sortFleetSummarySites: function
 ./gsc-console-url:
   gscConsoleUrl: function
 ./gsc-constants:
