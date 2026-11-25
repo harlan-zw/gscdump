@@ -18,6 +18,7 @@ import { METRIC_EXPR } from '@gscdump/engine/sql-fragments'
 import { queriesQueryState } from '../analyzer/adapt-rows'
 import { paginateInMemory, TOTAL_COUNT_SELECT, totalCountOf } from '../analyzer/paginate'
 import { parseJsonRows as parseJsonList, rowString as str } from '../analyzer/row-values'
+import { normalizeQuery } from '../query/normalize'
 import { createSorter } from '../types'
 
 export type CannibalizationSortMetric = 'clicks' | 'impressions' | 'positionSpread' | 'pageCount'
@@ -33,6 +34,8 @@ export interface CannibalizationOptions {
   sortBy?: CannibalizationSortMetric
   /** Sort order. Default: desc */
   sortOrder?: SortOrder
+  /** Fold near-duplicate query variants via `normalizeQuery()` before detecting overlap. Default: false */
+  canonical?: boolean
 }
 
 export interface CannibalizationPage {
@@ -45,6 +48,8 @@ export interface CannibalizationPage {
 
 export interface CannibalizationResult {
   query: string
+  canonicalKey?: string
+  variants?: string[]
   pages: CannibalizationPage[]
   totalClicks: number
   totalImpressions: number
@@ -63,6 +68,8 @@ export interface CannibalizationCompetitor {
 
 export interface CannibalizationEvent {
   keyword: string
+  canonicalKey?: string
+  variants?: string[]
   totalImpressions: number
   totalClicks: number
   competitorCount: number
@@ -103,7 +110,87 @@ export function analyzeCannibalization(
     minPages = 2,
     sortBy = 'clicks',
     sortOrder = 'desc',
+    canonical = false,
   } = options
+
+  if (canonical) {
+    const groups = new Map<string, Map<string, {
+      clicks: number
+      impressions: number
+      weightedPos: number
+      posSum: number
+      count: number
+      variants: Map<string, number>
+    }>>()
+
+    for (const row of rows) {
+      const ck = normalizeQuery(row.query) || row.query
+      let pagesByUrl = groups.get(ck)
+      if (!pagesByUrl) {
+        pagesByUrl = new Map()
+        groups.set(ck, pagesByUrl)
+      }
+      const p = pagesByUrl.get(row.page) ?? { clicks: 0, impressions: 0, weightedPos: 0, posSum: 0, count: 0, variants: new Map<string, number>() }
+      p.clicks += row.clicks
+      p.impressions += row.impressions
+      p.weightedPos += (row.position - 1) * row.impressions
+      p.posSum += row.position
+      p.count += 1
+      p.variants.set(row.query, (p.variants.get(row.query) ?? 0) + row.impressions)
+      pagesByUrl.set(row.page, p)
+    }
+
+    const results: CannibalizationResult[] = []
+    for (const [canonicalKey, pagesByUrl] of groups) {
+      const pages: CannibalizationPage[] = []
+      const qualifyingVariants = new Map<string, number>()
+      for (const [page, p] of pagesByUrl) {
+        if (p.impressions < minImpressions)
+          continue
+        for (const [q, imp] of p.variants)
+          qualifyingVariants.set(q, (qualifyingVariants.get(q) ?? 0) + imp)
+        pages.push({
+          page,
+          clicks: p.clicks,
+          impressions: p.impressions,
+          ctr: p.impressions > 0 ? p.clicks / p.impressions : 0,
+          position: p.impressions > 0 ? p.weightedPos / p.impressions + 1 : p.posSum / p.count,
+        })
+      }
+      if (pages.length < minPages)
+        continue
+
+      let minPosition = Number.POSITIVE_INFINITY
+      let maxPosition = Number.NEGATIVE_INFINITY
+      let totalClicks = 0
+      let totalImpressions = 0
+      for (const page of pages) {
+        minPosition = Math.min(minPosition, page.position)
+        maxPosition = Math.max(maxPosition, page.position)
+        totalClicks += page.clicks
+        totalImpressions += page.impressions
+      }
+      const positionSpread = maxPosition - minPosition
+      if (positionSpread > maxPositionSpread)
+        continue
+
+      pages.sort((a, b) => b.clicks - a.clicks || b.impressions - a.impressions || a.page.localeCompare(b.page))
+      const variants = [...qualifyingVariants.entries()]
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+        .map(([q]) => q)
+      results.push({
+        query: variants[0] ?? canonicalKey,
+        canonicalKey,
+        variants,
+        pages,
+        totalClicks,
+        totalImpressions,
+        positionSpread,
+      })
+    }
+
+    return sortRowResults(results, sortBy, sortOrder)
+  }
 
   const queryMap = new Map<string, CannibalizationPage[]>()
 
@@ -156,6 +243,171 @@ export function analyzeCannibalization(
   return sortRowResults(results, sortBy, sortOrder)
 }
 
+interface CompetitorGraph {
+  nodes: Array<{ url: string, impressions: number, clicks: number, queryCount: number }>
+  edges: Array<{ source: string, target: string, weight: number, queries: number }>
+}
+
+function buildCompetitorGraph(events: CannibalizationEvent[]): CompetitorGraph {
+  const nodeAgg = new Map<string, { impressions: number, clicks: number, queries: Set<string> }>()
+  const edgeAgg = new Map<string, { source: string, target: string, weight: number, queries: number }>()
+
+  for (const ev of events) {
+    for (const c of ev.competitors) {
+      const n = nodeAgg.get(c.url) ?? { impressions: 0, clicks: 0, queries: new Set<string>() }
+      n.impressions += c.impressions
+      n.clicks += c.clicks
+      n.queries.add(ev.canonicalKey ?? ev.keyword)
+      nodeAgg.set(c.url, n)
+    }
+    for (let i = 0; i < ev.competitors.length; i++) {
+      for (let j = i + 1; j < ev.competitors.length; j++) {
+        const a = ev.competitors[i]!
+        const b = ev.competitors[j]!
+        const [src, tgt] = a.url < b.url ? [a.url, b.url] : [b.url, a.url]
+        const key = `${src}\x01${tgt}`
+        const weight = Math.min(a.impressions, b.impressions)
+        const edge = edgeAgg.get(key) ?? { source: src, target: tgt, weight: 0, queries: 0 }
+        edge.weight += weight
+        edge.queries += 1
+        edgeAgg.set(key, edge)
+      }
+    }
+  }
+
+  const nodes = [...nodeAgg.entries()].map(([url, n]) => ({
+    url,
+    impressions: n.impressions,
+    clicks: n.clicks,
+    queryCount: n.queries.size,
+  }))
+  const edges = [...edgeAgg.values()]
+  return { nodes, edges }
+}
+
+function reduceCanonicalCannibalization(
+  rows: Row[],
+  options: { minImpressions: number, minQueryImpressions: number, limit: number },
+): { results: CannibalizationEvent[], meta: Record<string, unknown> } {
+  const { minImpressions, minQueryImpressions, limit } = options
+  const groups = new Map<string, Map<string, {
+    clicks: number
+    impressions: number
+    weightedPos: number
+    posSum: number
+    count: number
+    variants: Map<string, number>
+  }>>()
+
+  for (const r of rows) {
+    const query = str(r.query)
+    const url = str(r.url)
+    if (!query || !url)
+      continue
+    const impressions = num(r.impressions)
+    const clicks = num(r.clicks)
+    const position = num(r.position)
+    const ck = normalizeQuery(query) || query
+    let urlsByKey = groups.get(ck)
+    if (!urlsByKey) {
+      urlsByKey = new Map()
+      groups.set(ck, urlsByKey)
+    }
+    const u = urlsByKey.get(url) ?? { clicks: 0, impressions: 0, weightedPos: 0, posSum: 0, count: 0, variants: new Map<string, number>() }
+    u.clicks += clicks
+    u.impressions += impressions
+    u.weightedPos += (position - 1) * impressions
+    u.posSum += position
+    u.count += 1
+    u.variants.set(query, (u.variants.get(query) ?? 0) + impressions)
+    urlsByKey.set(url, u)
+  }
+
+  const allEvents: CannibalizationEvent[] = []
+  for (const [canonicalKey, urlsByKey] of groups) {
+    const qualifying: Array<{ url: string, clicks: number, impressions: number, ctr: number, position: number }> = []
+    const qualifyingVariants = new Map<string, number>()
+    let totalImpressions = 0
+    let totalClicks = 0
+    for (const [url, u] of urlsByKey) {
+      if (u.impressions < minImpressions)
+        continue
+      for (const [q, imp] of u.variants)
+        qualifyingVariants.set(q, (qualifyingVariants.get(q) ?? 0) + imp)
+      totalImpressions += u.impressions
+      totalClicks += u.clicks
+      qualifying.push({
+        url,
+        clicks: u.clicks,
+        impressions: u.impressions,
+        ctr: u.impressions > 0 ? u.clicks / u.impressions : 0,
+        position: u.impressions > 0 ? u.weightedPos / u.impressions + 1 : u.posSum / u.count,
+      })
+    }
+    if (qualifying.length < 2 || totalImpressions < minQueryImpressions)
+      continue
+
+    qualifying.sort((a, b) => b.impressions - a.impressions || b.clicks - a.clicks || (a.url < b.url ? -1 : a.url > b.url ? 1 : 0))
+    const leader = qualifying[0]!
+    let hhi = 0
+    let stolenClicks = 0
+    const competitors: CannibalizationCompetitor[] = qualifying.map((u, idx) => {
+      const share = totalImpressions > 0 ? u.impressions / totalImpressions : 0
+      hhi += (share * 100) ** 2
+      if (idx > 0 && leader.ctr > u.ctr)
+        stolenClicks += (leader.ctr - u.ctr) * u.impressions
+      return { ...u, share, rank: idx + 1 }
+    })
+
+    const fragmentation = Math.max(0, 1 - hhi / 10_000)
+    const severity = Math.round(Math.min(
+      100,
+      100 * (
+        fragmentation
+        * Math.min(stolenClicks / Math.max(totalClicks + stolenClicks, 1), 1)
+        * Math.min(Math.log10(Math.max(totalImpressions, 10)) / 5, 1)
+      ) ** (1 / 3),
+    ))
+    const variants = [...qualifyingVariants.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .map(([q]) => q)
+
+    allEvents.push({
+      keyword: variants[0] ?? canonicalKey,
+      canonicalKey,
+      variants,
+      totalImpressions,
+      totalClicks,
+      competitorCount: competitors.length,
+      leaderUrl: leader.url,
+      leaderCtr: leader.ctr,
+      leaderPosition: leader.position,
+      hhi,
+      fragmentation,
+      stolenClicks,
+      severity,
+      competitors,
+    })
+  }
+
+  allEvents.sort((a, b) => b.severity - a.severity || b.stolenClicks - a.stolenClicks || b.totalImpressions - a.totalImpressions)
+  const totalStolenClicks = allEvents.reduce((s, e) => s + e.stolenClicks, 0)
+  const avgFragmentation = allEvents.length > 0
+    ? allEvents.reduce((s, e) => s + e.fragmentation, 0) / allEvents.length
+    : 0
+  const events = allEvents.slice(0, limit)
+  return {
+    results: events,
+    meta: {
+      total: allEvents.length,
+      returned: events.length,
+      totalStolenClicks,
+      avgFragmentation,
+      graph: buildCompetitorGraph(events),
+    },
+  }
+}
+
 export const cannibalizationAnalyzer = defineAnalyzer<AnalysisParams, Row, CannibalizationEvent[] | CannibalizationResult[]>({
   id: 'cannibalization',
 
@@ -165,6 +417,29 @@ export const cannibalizationAnalyzer = defineAnalyzer<AnalysisParams, Row, Canni
     const minCompetitors = 2
     const minQueryImpressions = minImpressions * 2
     const limit = params.limit ?? 200
+
+    if (params.canonical) {
+      const sql = `
+        SELECT
+          query,
+          url,
+          ${METRIC_EXPR.clicks} AS clicks,
+          ${METRIC_EXPR.impressions} AS impressions,
+          ${METRIC_EXPR.ctr} AS ctr,
+          ${METRIC_EXPR.position} AS position
+        FROM read_parquet({{FILES}}, union_by_name = true)
+        WHERE date >= ? AND date <= ?
+          AND query IS NOT NULL AND query <> ''
+          AND url IS NOT NULL AND url <> ''
+        GROUP BY query, url
+        HAVING SUM(impressions) >= 1
+      `
+      return {
+        sql,
+        params: [startDate, endDate],
+        current: { table: 'page_queries', partitions: enumeratePartitions(startDate, endDate) },
+      }
+    }
 
     const sql = `
       WITH agg AS (
@@ -273,8 +548,16 @@ export const cannibalizationAnalyzer = defineAnalyzer<AnalysisParams, Row, Canni
     }
   },
 
-  reduceSql(rows) {
+  reduceSql(rows, params) {
     const arr = Array.isArray(rows) ? rows : []
+    if (params.canonical) {
+      const minImpressions = params.minImpressions ?? 10
+      return reduceCanonicalCannibalization(arr, {
+        minImpressions,
+        minQueryImpressions: minImpressions * 2,
+        limit: params.limit ?? 200,
+      })
+    }
     const events: CannibalizationEvent[] = arr.map(r => ({
       keyword: str(r.keyword),
       totalImpressions: num(r.totalImpressions),
@@ -360,6 +643,7 @@ export const cannibalizationAnalyzer = defineAnalyzer<AnalysisParams, Row, Canni
       minImpressions: params.minImpressions,
       maxPositionSpread: params.maxPositionSpread,
       minPages: params.minPages,
+      canonical: params.canonical,
     })
     const paged = paginateInMemory(results, { limit: params.limit, offset: params.offset })
     return { results: paged, meta: { total: results.length, returned: paged.length } }

@@ -1172,9 +1172,9 @@ exports[`analyzer plan snapshots > sql plan: clustering 1`] = `
       classified AS (
         SELECT
           query, clicks, impressions, ctr, position,
-          NULLIF(regexp_extract(TRIM(LOWER(query)), '^(how to|what is|what are|why is|why do|where to|when to|best|top|vs|versus|compare|review|buy|cheap|free|near me)(\\s|$)', 1), '') AS intent_prefix,
-          CASE WHEN len(regexp_split_to_array(TRIM(LOWER(query)), '\\s+')) >= 2
-          THEN array_to_string(list_slice(regexp_split_to_array(TRIM(LOWER(query)), '\\s+'), 1, 2), ' ')
+          NULLIF(regexp_extract(regexp_replace(LOWER(query), '^\\s+|\\s+$', '', 'g'), '^(how to|what is|what are|why is|why do|where to|when to|best|top|vs|versus|compare|review|buy|cheap|free|near me)(\\s|$)', 1), '') AS intent_prefix,
+          CASE WHEN len(regexp_split_to_array(regexp_replace(LOWER(query), '^\\s+|\\s+$', '', 'g'), '\\s+')) >= 2
+          THEN array_to_string(list_slice(regexp_split_to_array(regexp_replace(LOWER(query), '^\\s+|\\s+$', '', 'g'), '\\s+'), 1, 2), ' ')
           ELSE CAST(NULL AS VARCHAR) END AS word_prefix
         FROM agg
       ),
@@ -2304,12 +2304,12 @@ exports[`analyzer plan snapshots > sql plan: intent-atlas 1`] = `
       FROM queries
     ),
     tokens AS (
-      SELECT DISTINCT q.query, q.impressions, q.clicks, q.position,
-        LOWER(t.token) AS token
+      SELECT DISTINCT q.query, q.impressions,
+        t.token AS token
       FROM queries q,
         unnest(regexp_split_to_array(LOWER(q.query), '\\s+')) AS t(token)
       WHERE LENGTH(t.token) >= 3
-        AND LOWER(t.token) NOT IN ('the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'of', 'to', 'in', 'for', 'on', 'and', 'or', 'with', 'at', 'by', 'from', 'into', 'about', 'as', 'so', 'than', 'then', 'that', 'this', 'my', 'your', 'our', 'their', 'his', 'her', 'its', 'me', 'you', 'what', 'how', 'why', 'when', 'where', 'who', 'which', 'do', 'does')
+        AND t.token NOT IN ('the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'of', 'to', 'in', 'for', 'on', 'and', 'or', 'with', 'at', 'by', 'from', 'into', 'about', 'as', 'so', 'than', 'then', 'that', 'this', 'my', 'your', 'our', 'their', 'his', 'her', 'its', 'me', 'you', 'what', 'how', 'why', 'when', 'where', 'who', 'which', 'do', 'does')
     ),
     token_weights AS (
       SELECT t.token,
@@ -2318,7 +2318,7 @@ exports[`analyzer plan snapshots > sql plan: intent-atlas 1`] = `
         LN(1.0 + SUM(t.impressions)) * (LN((qt.total_queries + 1.0) / (COUNT(*) + 1.0)) + 1.0) AS token_score
       FROM tokens t, query_total qt
       GROUP BY t.token, qt.total_queries
-      HAVING SUM(t.impressions) >= 50
+      HAVING SUM(t.impressions) >= 30
         AND COUNT(*) >= 3
     ),
     ranked_tokens AS (

@@ -18,6 +18,7 @@ import { METRIC_EXPR } from '@gscdump/engine/sql-fragments'
 import { queriesQueryState } from '../analyzer/adapt-rows'
 import { paginateInMemory } from '../analyzer/paginate'
 import { parseJsonRows as parseJsonList, rowString as str } from '../analyzer/row-values'
+import { normalizeQuery } from '../query/normalize'
 
 export type ClusterType = 'prefix' | 'intent' | 'both'
 
@@ -28,11 +29,13 @@ export interface ClusteringOptions {
   minImpressions?: number
   /** Clustering method. Default: 'both' */
   clusterBy?: ClusterType
+  /** Fold near-duplicate query variants via `normalizeQuery()` before prefix clustering. Default: false */
+  canonical?: boolean
 }
 
 export interface KeywordCluster {
   clusterName: string
-  clusterType: 'prefix' | 'intent'
+  clusterType: 'prefix' | 'intent' | 'canonical'
   keywords: QueriesRow[]
   totalClicks: number
   totalImpressions: number
@@ -69,11 +72,12 @@ const INTENT_PREFIXES = [
 ]
 
 const WHITESPACE_RE = /\s+/
+const SINGLE_WHITESPACE_RE = /^\s$/
 
 function extractIntentPrefix(keyword: string): string | null {
   const lower = keyword.trim().toLowerCase()
   for (const prefix of INTENT_PREFIXES) {
-    if (lower === prefix || lower.startsWith(`${prefix} `))
+    if (lower === prefix || (lower.startsWith(prefix) && SINGLE_WHITESPACE_RE.test(lower[prefix.length] ?? '')))
       return prefix
   }
   return null
@@ -87,8 +91,8 @@ function extractWordPrefix(keyword: string, wordCount = 2): string | null {
 }
 
 /**
- * Pure helper: clusters keywords by intent prefix or common word prefix.
- * Re-exported from `@gscdump/analysis` for portable callers.
+ * Pure helper: clusters keywords by intent prefix, canonical equivalence, or
+ * common word prefix. Re-exported from `@gscdump/analysis` for portable callers.
  */
 export function analyzeClustering(
   keywords: QueriesRow[],
@@ -98,25 +102,57 @@ export function analyzeClustering(
     minClusterSize = 2,
     minImpressions = 10,
     clusterBy = 'both',
+    canonical = false,
   } = options
 
   const filtered = keywords.filter(k => num(k.impressions) >= minImpressions)
 
-  const clusterMap = new Map<string, { type: 'prefix' | 'intent', keywords: QueriesRow[] }>()
+  const clusterMap = new Map<string, { name: string, type: 'prefix' | 'intent' | 'canonical', keywords: QueriesRow[] }>()
   const clusteredKeywords = new Set<string>()
 
-  if (clusterBy === 'intent' || clusterBy === 'both') {
+  if (canonical) {
+    const canonMap = new Map<string, QueriesRow[]>()
     for (const kw of filtered) {
+      const canon = normalizeQuery(kw.query)
+      if (!canon)
+        continue
+      const existing = canonMap.get(canon)
+      if (existing)
+        existing.push(kw)
+      else
+        canonMap.set(canon, [kw])
+    }
+
+    for (const [canon, kws] of canonMap) {
+      if (kws.length >= minClusterSize) {
+        const sorted = [...kws].sort((a, b) => num(b.impressions) - num(a.impressions) || num(b.clicks) - num(a.clicks) || a.query.localeCompare(b.query))
+        clusterMap.set(`canonical:${canon}`, { name: sorted[0]!.query, type: 'canonical', keywords: sorted })
+        for (const kw of sorted)
+          clusteredKeywords.add(kw.query)
+      }
+    }
+  }
+
+  if (clusterBy === 'intent' || clusterBy === 'both') {
+    const intentMap = new Map<string, QueriesRow[]>()
+    for (const kw of filtered) {
+      if (clusteredKeywords.has(kw.query))
+        continue
       const intent = extractIntentPrefix(kw.query)
       if (intent) {
-        const existing = clusterMap.get(intent)
-        if (existing) {
-          existing.keywords.push(kw)
-        }
-        else {
-          clusterMap.set(intent, { type: 'intent', keywords: [kw] })
-        }
-        clusteredKeywords.add(kw.query)
+        const existing = intentMap.get(intent)
+        if (existing)
+          existing.push(kw)
+        else
+          intentMap.set(intent, [kw])
+      }
+    }
+
+    for (const [intent, kws] of intentMap) {
+      if (kws.length >= minClusterSize) {
+        clusterMap.set(`intent:${intent}`, { name: intent, type: 'intent', keywords: kws })
+        for (const kw of kws)
+          clusteredKeywords.add(kw.query)
       }
     }
   }
@@ -139,7 +175,7 @@ export function analyzeClustering(
 
     for (const [prefix, kws] of prefixMap) {
       if (kws.length >= minClusterSize) {
-        clusterMap.set(prefix, { type: 'prefix', keywords: kws })
+        clusterMap.set(`prefix:${prefix}`, { name: prefix, type: 'prefix', keywords: kws })
         for (const kw of kws)
           clusteredKeywords.add(kw.query)
       }
@@ -147,7 +183,7 @@ export function analyzeClustering(
   }
 
   const clusters: KeywordCluster[] = []
-  for (const [name, data] of clusterMap) {
+  for (const data of clusterMap.values()) {
     if (data.keywords.length < minClusterSize)
       continue
 
@@ -177,7 +213,7 @@ export function analyzeClustering(
       : positionSum / data.keywords.length
 
     clusters.push({
-      clusterName: name,
+      clusterName: data.name,
       clusterType: data.type,
       keywords: data.keywords,
       totalClicks,
@@ -187,7 +223,7 @@ export function analyzeClustering(
     })
   }
 
-  clusters.sort((a, b) => b.totalClicks - a.totalClicks)
+  clusters.sort((a, b) => b.totalClicks - a.totalClicks || b.totalImpressions - a.totalImpressions)
 
   const unclustered = filtered.filter(kw => !clusteredKeywords.has(kw.query))
 
@@ -202,18 +238,41 @@ export const clusteringAnalyzer = defineAnalyzer<AnalysisParams, Row, KeywordClu
     const minImpressions = params.minImpressions ?? 10
     const minClusterSize = params.minClusterSize ?? 2
     const clusterBy = params.clusterBy ?? 'both'
+
+    if (params.canonical) {
+      const sql = `
+        SELECT
+          query,
+          ${METRIC_EXPR.clicks} AS clicks,
+          ${METRIC_EXPR.impressions} AS impressions,
+          ${METRIC_EXPR.ctr} AS ctr,
+          ${METRIC_EXPR.position} AS position
+        FROM read_parquet({{FILES}}, union_by_name = true)
+        WHERE date >= ? AND date <= ?
+          AND query IS NOT NULL AND query <> ''
+        GROUP BY query
+        HAVING SUM(impressions) >= ?
+      `
+      return {
+        sql,
+        params: [startDate, endDate, minImpressions],
+        current: { table: 'queries', partitions: enumeratePartitions(startDate, endDate) },
+      }
+    }
+
     const doIntent = clusterBy === 'intent' || clusterBy === 'both'
     const doPrefix = clusterBy === 'prefix' || clusterBy === 'both'
+    const trimmedLower = `regexp_replace(LOWER(query), '^\\s+|\\s+$', '', 'g')`
 
     // NULL fallbacks must be typed; a bare NULL is inferred as INTEGER and breaks
     // the downstream COALESCE(intent_prefix, word_prefix) when one mode is off.
     const intentExpr = doIntent
-      ? `NULLIF(regexp_extract(TRIM(LOWER(query)), '${INTENT_PREFIXES_REGEX}', 1), '')`
+      ? `NULLIF(regexp_extract(${trimmedLower}, '${INTENT_PREFIXES_REGEX}', 1), '')`
       : `CAST(NULL AS VARCHAR)`
 
     const prefixExpr = doPrefix
-      ? `CASE WHEN len(regexp_split_to_array(TRIM(LOWER(query)), '\\s+')) >= 2
-          THEN array_to_string(list_slice(regexp_split_to_array(TRIM(LOWER(query)), '\\s+'), 1, 2), ' ')
+      ? `CASE WHEN len(regexp_split_to_array(${trimmedLower}, '\\s+')) >= 2
+          THEN array_to_string(list_slice(regexp_split_to_array(${trimmedLower}, '\\s+'), 1, 2), ' ')
           ELSE CAST(NULL AS VARCHAR) END`
       : `CAST(NULL AS VARCHAR)`
 
@@ -268,6 +327,26 @@ export const clusteringAnalyzer = defineAnalyzer<AnalysisParams, Row, KeywordClu
 
   reduceSql(rows, params) {
     const arr = Array.isArray(rows) ? rows : []
+    if (params.canonical) {
+      const keywords = arr.map(r => ({
+        query: str(r.query),
+        clicks: num(r.clicks),
+        impressions: num(r.impressions),
+        ctr: num(r.ctr),
+        position: num(r.position),
+      })) as unknown as QueriesRow[]
+      const result = analyzeClustering(keywords, {
+        clusterBy: params.clusterBy,
+        minClusterSize: params.minClusterSize,
+        minImpressions: params.minImpressions,
+        canonical: true,
+      })
+      const paged = paginateInMemory(result.clusters, { limit: params.limit, offset: params.offset })
+      return {
+        results: paged,
+        meta: { total: result.clusters.length, returned: paged.length, totalClusters: result.clusters.length },
+      }
+    }
     const clusters: KeywordCluster[] = arr.map(r => ({
       clusterName: str(r.clusterName),
       clusterType: str(r.clusterType) as 'intent' | 'prefix',
@@ -302,6 +381,7 @@ export const clusteringAnalyzer = defineAnalyzer<AnalysisParams, Row, KeywordClu
       clusterBy: params.clusterBy,
       minClusterSize: params.minClusterSize,
       minImpressions: params.minImpressions,
+      canonical: params.canonical,
     })
     const paged = paginateInMemory(result.clusters, { limit: params.limit, offset: params.offset })
     return {
