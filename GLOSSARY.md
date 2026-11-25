@@ -74,7 +74,8 @@ flowchart LR
 | Watched URL | `partner.sites.indexing.watched.*`; `WATCHED_URL_LIMIT` | `@gscdump/contracts` | Site 1—N Watched URL, at most 50 | "watched URL" |
 | Watched URL inspection | `watchedUrlCheckpointSchema`; `checkpoints` | `@gscdump/contracts` | Watched URL 1—N Watched URL inspection, newest 12 returned | "Watched URL inspection" |
 | Count freshness | `indexingCaptureSchema`; `capture` | `@gscdump/contracts` | Indexing summary 1—1 Count freshness | "count freshness" |
-| Portfolio | `IndexingPortfolioSite`; `portfolioIssueCounts`, `portfolioIndexingTrend` in `@gscdump/sdk/indexing` | `@gscdump/sdk` | Portfolio 1—N Site | "portfolio", "across sites" |
+| Fleet | `analytics.fleet.summary.query`; `buildFleetSummary` in `@gscdump/sdk/fleet-summary`; `gscdump fleet` | `@gscdump/contracts`, `@gscdump/sdk`, `@gscdump/cli` | Fleet 1—N Site | "all my sites", "your sites" |
+| Portfolio | `IndexingPortfolioSite`; `portfolioIssueCounts`, `portfolioIndexingTrend` in `@gscdump/sdk/indexing` | `@gscdump/sdk` | Legacy indexing subset of Fleet | "across sites" |
 | Indexing window | `IndexingWindow`; `indexingWindow` in `@gscdump/sdk/indexing` | `@gscdump/sdk` | Portfolio view 1—1 Indexing window | "date range" |
 | Held reading | `windowReadings` in `@gscdump/sdk/indexing` | `@gscdump/sdk` | (Site, Indexing window) 1—0..1 Held reading | not surfaced |
 | Inspection stages | `InspectionStageCounts`; `countInspectionStages` in `@gscdump/sdk/indexing` | `@gscdump/sdk` | Site 1—1 Inspection stages per URL list read | "Inspected, Crawled, Indexable, Indexed" |
@@ -280,11 +281,17 @@ The existing `quality_rejection` tag combines crawled-not-indexed and soft-404 o
 The existing `not_indexed` classification starts at 30% of known URLs, with over 50 affected URLs.
 Known URLs are the supplied denominator, not proof of every URL on the Site.
 
+### Fleet
+**Is:** all Sites a user or agent connection can read together, matching the `Fleet` term in `gscdump.com/GLOSSARY.md`.
+**Use for:** `analytics.fleet.summary.query` (`POST /fleet/summary`), `@gscdump/sdk/fleet-summary` (`buildFleetSummary`), `queryFleetSummary`, and `gscdump fleet`.
+**Never:** workspace, account (as a name for the set), group (as a name for the set), Team (Team is the tenant), rollup (Rollup is a stored engine table).
+**Casing:** `Fleet` in prose, `fleet` in identifiers. Customer-facing copy may pair it with "all Sites" when addressing non-developer owners.
+
 ### Portfolio
-**Is:** the set of Sites one dashboard view shows together, such as a user's Sites or a Site group.
+**Is:** the existing compatibility identifier prefix for multi-Site indexing helpers in `@gscdump/sdk/indexing`. Prefer `Fleet` for new cross-Site surfaces.
 **Use for:** `IndexingPortfolioSite`, `portfolioIssueCounts`, `portfolioIndexingTrend`, and `buildIndexingPortfolioMarkdown` in `@gscdump/sdk/indexing`.
-**Never:** fleet, group (as a name for the set), Team (Team is the tenant), rollup (Rollup is a stored engine table).
-**Casing:** `Portfolio` in prose, `portfolio` in identifiers.
+**Never:** new cross-Site analytics contracts or CLI commands (use `Fleet`).
+**Casing:** `Portfolio` only when naming the existing `@gscdump/sdk/indexing` exports.
 
 ### Indexing window
 **Is:** the UTC days a Portfolio indexing view shows, both ends inclusive. A current window ends today and keeps its Period length. A past window keeps its own days.
