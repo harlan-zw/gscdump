@@ -722,6 +722,85 @@ describe('runAnalyzerWithEngine', () => {
     expect(keys).not.toContain('sneaky + sneaky')
   }, 30_000)
 
+  it('intent-atlas scales its token floor for explicit low minImpressions and supports canonical grouping', async () => {
+    const env = await setup(dir)
+    const d = '2026-04-01'
+    await seed(env.engine, USER, SITE, [{
+      table: 'queries',
+      date: d,
+      rows: [
+        // Low-volume cluster: 3 queries x 10 imp = 30 total token impressions (< 50 hardcoded floor).
+        { query: 'alpha beta one', date: d, clicks: 0, impressions: 10, sum_position: 40 },
+        { query: 'alpha beta two', date: d, clicks: 0, impressions: 10, sum_position: 50 },
+        { query: 'alpha beta three', date: d, clicks: 0, impressions: 10, sum_position: 60 },
+        // Canonical variants that split raw tokens ("hotel" vs "hotels", "validator" vs "checker").
+        { query: 'hotels nyc luxury', date: d, clicks: 2, impressions: 80, sum_position: 240 },
+        { query: 'hotel nyc boutique', date: d, clicks: 2, impressions: 70, sum_position: 210 },
+        { query: 'best hotels nyc', date: d, clicks: 1, impressions: 60, sum_position: 180 },
+        { query: 'schema validator tool', date: d, clicks: 5, impressions: 100, sum_position: 200 },
+        { query: 'schema checker tool', date: d, clicks: 3, impressions: 90, sum_position: 270 },
+        { query: 'schema tester online', date: d, clicks: 2, impressions: 80, sum_position: 240 },
+      ],
+    }])
+
+    const lowFloor = await runAnalyzerWithEngine(
+      { engine: env.engine },
+      { userId: USER, siteId: SITE },
+      { type: 'intent-atlas', startDate: d, endDate: d, minImpressions: 5, minClusterSize: 3 },
+    )
+    const lowKeys = (lowFloor.results as Array<{ clusterKey: string }>).map(c => c.clusterKey)
+    expect(lowKeys).toContain('alpha + beta')
+
+    const canonical = await runAnalyzerWithEngine(
+      { engine: env.engine },
+      { userId: USER, siteId: SITE },
+      { type: 'intent-atlas', startDate: d, endDate: d, minImpressions: 20, minClusterSize: 3, canonical: true },
+    )
+    const canonClusters = canonical.results as Array<{ clusterKey: string, keywordCount: number }>
+    expect(canonClusters.find(c => c.clusterKey === 'hotel + nyc')?.keywordCount).toBe(3)
+    expect(canonClusters.find(c => c.clusterKey === 'schema + validator')?.keywordCount).toBe(3)
+  }, 30_000)
+
+  it('clustering SQL trims non-space whitespace and supports canonical grouping', async () => {
+    const env = await setup(dir)
+    const d = '2026-04-01'
+    await seed(env.engine, USER, SITE, [{
+      table: 'queries',
+      date: d,
+      rows: [
+        { query: 'schema validator', date: d, clicks: 50, impressions: 1000, sum_position: 2000 },
+        { query: 'schema validator online', date: d, clicks: 10, impressions: 200, sum_position: 600 },
+        { query: 'schema checker', date: d, clicks: 20, impressions: 500, sum_position: 1500 },
+        // Tab-padded 1-word queries must not form a bogus prefix cluster.
+        { query: '\tsolo', date: d, clicks: 1, impressions: 50, sum_position: 100 },
+        { query: '\tsolo\n', date: d, clicks: 1, impressions: 50, sum_position: 100 },
+      ],
+    }])
+
+    const raw = await runAnalyzerWithEngine(
+      { engine: env.engine },
+      { userId: USER, siteId: SITE },
+      { type: 'clustering', startDate: d, endDate: d, minImpressions: 10, minClusterSize: 2, clusterBy: 'prefix' },
+    )
+    const rawClusters = raw.results as Array<{ clusterName: string, keywordCount: number }>
+    expect(rawClusters).toHaveLength(1)
+    expect(rawClusters[0]).toMatchObject({ clusterName: 'schema validator', keywordCount: 2 })
+
+    const canon = await runAnalyzerWithEngine(
+      { engine: env.engine },
+      { userId: USER, siteId: SITE },
+      { type: 'clustering', startDate: d, endDate: d, minImpressions: 10, minClusterSize: 2, clusterBy: 'prefix', canonical: true },
+    )
+    const canonClusters = canon.results as Array<{ clusterName: string, clusterType: string, keywordCount: number, totalImpressions: number }>
+    expect(canonClusters.find(c => c.clusterName === 'schema validator')).toMatchObject({
+      clusterType: 'canonical',
+      keywordCount: 3,
+      totalImpressions: 1700,
+    })
+    // Whitespace variants of the same query also fold canonically when canonical=true.
+    expect(canonClusters).toHaveLength(2)
+  }, 30_000)
+
   it('clustering SQL includes 2-word head queries alongside 3+ word siblings', async () => {
     const env = await setup(dir)
     const d = '2026-04-01'
@@ -856,6 +935,56 @@ describe('runAnalyzerWithEngine', () => {
     expect(meta.graph.nodes).toHaveLength(5)
     // 3 URLs competing on "best widget" (C(3,2)=3) + 2 URLs on "nuxt page title" (1) = 4 edges.
     expect(meta.graph.edges).toHaveLength(4)
+  }, 30_000)
+
+  it('cannibalization SQL folds canonical query variants when canonical is enabled', async () => {
+    const env = await setup(dir)
+    await seed(env.engine, USER, SITE, [{
+      table: 'page_queries',
+      date: '2026-04-10',
+      rows: [
+        // Distinct raw strings that normalize to "schema validator" on competing URLs.
+        { url: '/tools/schema-validator', query: 'schema validator', date: '2026-04-10', clicks: 20, impressions: 200, sum_position: 400 },
+        { url: '/docs/schema-org', query: 'schema checker', date: '2026-04-10', clicks: 2, impressions: 100, sum_position: 600 },
+        { url: '/docs/schema-org', query: 'free schema tester online', date: '2026-04-10', clicks: 1, impressions: 50, sum_position: 350 },
+      ],
+    }])
+
+    const rawOut = await runAnalyzerWithEngine(
+      { engine: env.engine },
+      { userId: USER, siteId: SITE },
+      { type: 'cannibalization', startDate: '2026-04-10', endDate: '2026-04-10' },
+    )
+    expect(rawOut.results).toHaveLength(0)
+
+    const canonOut = await runAnalyzerWithEngine(
+      { engine: env.engine },
+      { userId: USER, siteId: SITE },
+      { type: 'cannibalization', startDate: '2026-04-10', endDate: '2026-04-10', canonical: true },
+    )
+    const rows = canonOut.results as Array<{
+      keyword: string
+      canonicalKey: string
+      variants: string[]
+      totalImpressions: number
+      totalClicks: number
+      competitorCount: number
+      leaderUrl: string
+    }>
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({
+      keyword: 'schema validator',
+      canonicalKey: 'schema validator',
+      variants: ['schema validator', 'schema checker', 'free schema tester online'],
+      totalImpressions: 350,
+      totalClicks: 23,
+      competitorCount: 2,
+      leaderUrl: '/tools/schema-validator',
+    })
+    const meta = canonOut.meta as { total: number, graph: { nodes: unknown[], edges: unknown[] } }
+    expect(meta.total).toBe(1)
+    expect(meta.graph.nodes).toHaveLength(2)
+    expect(meta.graph.edges).toHaveLength(1)
   }, 30_000)
 
   it('bayesian-ctr flags outliers via empirical-Bayes shrinkage', async () => {

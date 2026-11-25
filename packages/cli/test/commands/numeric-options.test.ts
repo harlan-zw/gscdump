@@ -79,6 +79,7 @@ const cases = [
   ['analyze trends', child(analyzeCommand, 'trends'), {}, 'min-weeks', 'NaN'],
   ['analyze cannibalization', child(analyzeCommand, 'cannibalization'), {}, 'min-impressions', '-1'],
   ['analyze cannibalization', child(analyzeCommand, 'cannibalization'), {}, 'min-impressions', '1.5'],
+  ['analyze decay', child(analyzeCommand, 'decay'), {}, 'min-impressions', '50'],
 ] as const
 
 describe('cLI numeric options', () => {
@@ -134,5 +135,14 @@ describe('cLI numeric options', () => {
     boundary.analysis.mockResolvedValueOnce({ runAnalysis, anchor: '2026-08-23' })
     await run(child(analyzeCommand, 'cannibalization'), { 'min-impressions': '0' })
     expect(runAnalysis).toHaveBeenCalledWith(expect.objectContaining({ minImpressions: 0 }))
+  })
+
+  it('forwards --canonical on canonical-capable analyzers', async () => {
+    for (const tool of ['cannibalization', 'clustering', 'intent-atlas'] as const) {
+      const runAnalysis = vi.fn().mockResolvedValue({ results: [], meta: {} })
+      boundary.analysis.mockResolvedValueOnce({ runAnalysis, anchor: '2026-08-23' })
+      await run(child(analyzeCommand, tool), { canonical: true })
+      expect(runAnalysis).toHaveBeenCalledWith(expect.objectContaining({ canonical: true }))
+    }
   })
 })
