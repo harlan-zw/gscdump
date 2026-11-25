@@ -43,6 +43,7 @@ available from `@gscdump/sdk/v1`.
 
 Use focused subpaths for pure helpers, including `period`, `period-presets`,
 `site-triage`, `site-baseline`, `search-console-stage`, `indexing-issues`,
+`generative-ai-report`,
 `analytics`, `partner`, `partner-errors`, `lifecycle`, `webhook`, and
 `gsc-console-url`.
 
