@@ -2,9 +2,11 @@
  * intent-atlas
  *
  * Token-cooccurrence clustering. Tokenizes queries via regexp_split_to_array
- * + unnest, drops stop-words and short tokens, weights tokens by impressions,
- * then clusters each query by its top-2 highest-impression tokens (sorted +
- * joined as the cluster key).
+ * + unnest, deduplicates tokens per query, drops stop-words and short tokens,
+ * weights tokens by smooth IDF specificity (`LN(1 + impressions) * (LN((N + 1)
+ * / (df + 1)) + 1)`) so site-wide boilerplate terms do not swallow unrelated
+ * topics, then clusters each query by its top-2 highest-scoring tokens (sorted
+ * + joined as the cluster key).
  */
 
 import type { AnalysisParams } from '@gscdump/engine/analysis-types'
@@ -102,8 +104,12 @@ export const intentAtlasAnalyzer = defineAnalyzer<AnalysisParams, Row, IntentAtl
       GROUP BY query
       HAVING SUM(impressions) >= ?
     ),
+    query_total AS (
+      SELECT CAST(COUNT(*) AS DOUBLE) AS total_queries
+      FROM queries
+    ),
     tokens AS (
-      SELECT q.query, q.impressions, q.clicks, q.position,
+      SELECT DISTINCT q.query, q.impressions, q.clicks, q.position,
         LOWER(t.token) AS token
       FROM queries q,
         unnest(regexp_split_to_array(LOWER(q.query), '\\s+')) AS t(token)
@@ -111,18 +117,20 @@ export const intentAtlasAnalyzer = defineAnalyzer<AnalysisParams, Row, IntentAtl
         AND LOWER(t.token) NOT IN (${stopList})
     ),
     token_weights AS (
-      SELECT token,
-        SUM(impressions) AS token_impressions,
-        COUNT(DISTINCT query) AS query_count
-      FROM tokens
-      GROUP BY token
-      HAVING SUM(impressions) >= ${Number(minTokenImpressions)}
+      SELECT t.token,
+        SUM(t.impressions) AS token_impressions,
+        COUNT(*) AS query_count,
+        LN(1.0 + SUM(t.impressions)) * (LN((qt.total_queries + 1.0) / (COUNT(*) + 1.0)) + 1.0) AS token_score
+      FROM tokens t, query_total qt
+      GROUP BY t.token, qt.total_queries
+      HAVING SUM(t.impressions) >= ${Number(minTokenImpressions)}
+        AND COUNT(*) >= ${Number(minClusterSize)}
     ),
     ranked_tokens AS (
-      SELECT t.query, t.token, tw.token_impressions,
+      SELECT t.query, t.token, tw.token_score, tw.token_impressions,
         ROW_NUMBER() OVER (
           PARTITION BY t.query
-          ORDER BY tw.token_impressions DESC, t.token ASC
+          ORDER BY tw.token_score DESC, tw.token_impressions DESC, t.token ASC
         ) AS rnk
       FROM tokens t
       JOIN token_weights tw USING (token)
