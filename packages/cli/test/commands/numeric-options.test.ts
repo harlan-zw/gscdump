@@ -77,6 +77,8 @@ const cases = [
   ['analyze trends', child(analyzeCommand, 'trends'), {}, 'limit', '2.5'],
   ['analyze trends', child(analyzeCommand, 'trends'), {}, 'weeks', '0'],
   ['analyze trends', child(analyzeCommand, 'trends'), {}, 'min-weeks', 'NaN'],
+  ['analyze cannibalization', child(analyzeCommand, 'cannibalization'), {}, 'min-impressions', '-1'],
+  ['analyze cannibalization', child(analyzeCommand, 'cannibalization'), {}, 'min-impressions', '1.5'],
 ] as const
 
 describe('cLI numeric options', () => {
@@ -125,5 +127,12 @@ describe('cLI numeric options', () => {
     boundary.analysis.mockResolvedValueOnce({ runAnalysis, anchor: '2026-08-23' })
     await run(child(analyzeCommand, 'trends'), { 'limit': '5', 'weeks': '8', 'min-weeks': '2' })
     expect(runAnalysis).toHaveBeenCalledWith(expect.objectContaining({ limit: 5, weeks: 8, minWeeksWithData: 2 }))
+  })
+
+  it('forwards --min-impressions including zero to analyze commands', async () => {
+    const runAnalysis = vi.fn().mockResolvedValue({ results: [], meta: {} })
+    boundary.analysis.mockResolvedValueOnce({ runAnalysis, anchor: '2026-08-23' })
+    await run(child(analyzeCommand, 'cannibalization'), { 'min-impressions': '0' })
+    expect(runAnalysis).toHaveBeenCalledWith(expect.objectContaining({ minImpressions: 0 }))
   })
 })

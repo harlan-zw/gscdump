@@ -59,6 +59,10 @@ function buildParams(tool: AnalysisTool, args: Record<string, unknown>): Analysi
   if (fetchBudget !== undefined)
     params.fetchBudget = fetchBudget
 
+  const minImpressions = parseIntegerOption(args['min-impressions'], '--min-impressions', 0)
+  if (minImpressions !== undefined)
+    params.minImpressions = minImpressions
+
   if (args['brand-terms'])
     params.brandTerms = String(args['brand-terms']).split(',').map(t => t.trim()).filter(Boolean)
 
@@ -124,6 +128,7 @@ function makeToolCommand(tool: AnalysisTool): CommandDef<any> {
       'start': { type: 'string', description: 'Start date (YYYY-MM-DD). Implies --period custom' },
       'end': { type: 'string', description: 'End date (YYYY-MM-DD). Implies --period custom' },
       'limit': { type: 'string', alias: 'l', default: '100', description: 'Max results to return' },
+      'min-impressions': { type: 'string', description: 'Minimum impressions floor (analyzer default when omitted)' },
       'fetch-budget': { type: 'string', description: `Max rows each live fetch reads (default: ${DEFAULT_FETCH_BUDGET}, max: ${MAX_FETCH_BUDGET})` },
       'format': { type: 'string', alias: 'f', default: 'table', description: 'Output: table, json, csv' },
       'json': { type: 'boolean', default: false, description: 'Output as JSON' },

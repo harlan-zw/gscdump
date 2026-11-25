@@ -1172,9 +1172,9 @@ exports[`analyzer plan snapshots > sql plan: clustering 1`] = `
       classified AS (
         SELECT
           query, clicks, impressions, ctr, position,
-          NULLIF(regexp_extract(LOWER(query), '^(how to|what is|what are|why is|why do|where to|when to|best|top|vs|versus|compare|review|buy|cheap|free|near me)(\\s|$)', 1), '') AS intent_prefix,
-          CASE WHEN len(regexp_split_to_array(LOWER(query), '\\s+')) >= 3
-          THEN array_to_string(list_slice(regexp_split_to_array(LOWER(query), '\\s+'), 1, 2), ' ')
+          NULLIF(regexp_extract(TRIM(LOWER(query)), '^(how to|what is|what are|why is|why do|where to|when to|best|top|vs|versus|compare|review|buy|cheap|free|near me)(\\s|$)', 1), '') AS intent_prefix,
+          CASE WHEN len(regexp_split_to_array(TRIM(LOWER(query)), '\\s+')) >= 2
+          THEN array_to_string(list_slice(regexp_split_to_array(TRIM(LOWER(query)), '\\s+'), 1, 2), ' ')
           ELSE CAST(NULL AS VARCHAR) END AS word_prefix
         FROM agg
       ),
@@ -2299,8 +2299,12 @@ exports[`analyzer plan snapshots > sql plan: intent-atlas 1`] = `
       GROUP BY query
       HAVING SUM(impressions) >= ?
     ),
+    query_total AS (
+      SELECT CAST(COUNT(*) AS DOUBLE) AS total_queries
+      FROM queries
+    ),
     tokens AS (
-      SELECT q.query, q.impressions, q.clicks, q.position,
+      SELECT DISTINCT q.query, q.impressions, q.clicks, q.position,
         LOWER(t.token) AS token
       FROM queries q,
         unnest(regexp_split_to_array(LOWER(q.query), '\\s+')) AS t(token)
@@ -2308,18 +2312,20 @@ exports[`analyzer plan snapshots > sql plan: intent-atlas 1`] = `
         AND LOWER(t.token) NOT IN ('the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'of', 'to', 'in', 'for', 'on', 'and', 'or', 'with', 'at', 'by', 'from', 'into', 'about', 'as', 'so', 'than', 'then', 'that', 'this', 'my', 'your', 'our', 'their', 'his', 'her', 'its', 'me', 'you', 'what', 'how', 'why', 'when', 'where', 'who', 'which', 'do', 'does')
     ),
     token_weights AS (
-      SELECT token,
-        SUM(impressions) AS token_impressions,
-        COUNT(DISTINCT query) AS query_count
-      FROM tokens
-      GROUP BY token
-      HAVING SUM(impressions) >= 50
+      SELECT t.token,
+        SUM(t.impressions) AS token_impressions,
+        COUNT(*) AS query_count,
+        LN(1.0 + SUM(t.impressions)) * (LN((qt.total_queries + 1.0) / (COUNT(*) + 1.0)) + 1.0) AS token_score
+      FROM tokens t, query_total qt
+      GROUP BY t.token, qt.total_queries
+      HAVING SUM(t.impressions) >= 50
+        AND COUNT(*) >= 3
     ),
     ranked_tokens AS (
-      SELECT t.query, t.token, tw.token_impressions,
+      SELECT t.query, t.token, tw.token_score, tw.token_impressions,
         ROW_NUMBER() OVER (
           PARTITION BY t.query
-          ORDER BY tw.token_impressions DESC, t.token ASC
+          ORDER BY tw.token_score DESC, tw.token_impressions DESC, t.token ASC
         ) AS rnk
       FROM tokens t
       JOIN token_weights tw USING (token)

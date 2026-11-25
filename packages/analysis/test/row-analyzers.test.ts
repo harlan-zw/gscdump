@@ -68,6 +68,40 @@ describe('row analyzer reductions', () => {
     expect(result.unclustered.map(row => row.query)).toEqual(['different words only'])
   })
 
+  it('includes 2-word head queries in their matching 2-word prefix cluster', () => {
+    const rows: QueriesRow[] = [
+      { query: 'schema validator', clicks: 20, impressions: 1000, ctr: 0.02, position: 3 },
+      { query: 'schema validator online', clicks: 5, impressions: 100, ctr: 0.05, position: 4 },
+      { query: 'solo', clicks: 1, impressions: 50, ctr: 0.02, position: 2 },
+    ]
+    const result = analyzeClustering(rows, { clusterBy: 'prefix' })
+
+    expect(result.clusters).toHaveLength(1)
+    expect(result.clusters[0]).toMatchObject({
+      clusterName: 'schema validator',
+      clusterType: 'prefix',
+      keywordCount: 2,
+      totalImpressions: 1100,
+    })
+    expect(result.unclustered.map(row => row.query)).toEqual(['solo'])
+  })
+
+  it('requires a word boundary before matching an intent prefix', () => {
+    const rows: QueriesRow[] = [
+      { query: 'topic alpha one', clicks: 2, impressions: 20, ctr: 0.1, position: 2 },
+      { query: 'topic alpha two', clicks: 3, impressions: 30, ctr: 0.1, position: 3 },
+      { query: 'top widgets', clicks: 4, impressions: 40, ctr: 0.1, position: 1 },
+      { query: 'top gadgets', clicks: 5, impressions: 50, ctr: 0.1, position: 2 },
+    ]
+    const result = analyzeClustering(rows, { clusterBy: 'both' })
+
+    expect(result.clusters.find(c => c.clusterName === 'top')?.keywords.map(k => k.query).sort()).toEqual(['top gadgets', 'top widgets'])
+    expect(result.clusters.find(c => c.clusterName === 'topic alpha')).toMatchObject({
+      clusterType: 'prefix',
+      keywordCount: 2,
+    })
+  })
+
   it('computes cannibalization totals and spread before sorting qualifying pages', () => {
     const rows: QueryPageRow[] = [
       { query: 'shared', page: '/a', clicks: 2, impressions: 20, ctr: 0.1, position: 5 },

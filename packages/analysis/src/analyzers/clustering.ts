@@ -71,17 +71,17 @@ const INTENT_PREFIXES = [
 const WHITESPACE_RE = /\s+/
 
 function extractIntentPrefix(keyword: string): string | null {
-  const lower = keyword.toLowerCase()
+  const lower = keyword.trim().toLowerCase()
   for (const prefix of INTENT_PREFIXES) {
-    if (lower.startsWith(`${prefix} `) || lower.startsWith(prefix))
+    if (lower === prefix || lower.startsWith(`${prefix} `))
       return prefix
   }
   return null
 }
 
 function extractWordPrefix(keyword: string, wordCount = 2): string | null {
-  const words = keyword.toLowerCase().split(WHITESPACE_RE).filter(Boolean)
-  if (words.length < wordCount + 1)
+  const words = keyword.trim().toLowerCase().split(WHITESPACE_RE).filter(Boolean)
+  if (words.length < wordCount)
     return null
   return words.slice(0, wordCount).join(' ')
 }
@@ -208,12 +208,12 @@ export const clusteringAnalyzer = defineAnalyzer<AnalysisParams, Row, KeywordClu
     // NULL fallbacks must be typed; a bare NULL is inferred as INTEGER and breaks
     // the downstream COALESCE(intent_prefix, word_prefix) when one mode is off.
     const intentExpr = doIntent
-      ? `NULLIF(regexp_extract(LOWER(query), '${INTENT_PREFIXES_REGEX}', 1), '')`
+      ? `NULLIF(regexp_extract(TRIM(LOWER(query)), '${INTENT_PREFIXES_REGEX}', 1), '')`
       : `CAST(NULL AS VARCHAR)`
 
     const prefixExpr = doPrefix
-      ? `CASE WHEN len(regexp_split_to_array(LOWER(query), '\\s+')) >= 3
-          THEN array_to_string(list_slice(regexp_split_to_array(LOWER(query), '\\s+'), 1, 2), ' ')
+      ? `CASE WHEN len(regexp_split_to_array(TRIM(LOWER(query)), '\\s+')) >= 2
+          THEN array_to_string(list_slice(regexp_split_to_array(TRIM(LOWER(query)), '\\s+'), 1, 2), ' ')
           ELSE CAST(NULL AS VARCHAR) END`
       : `CAST(NULL AS VARCHAR)`
 

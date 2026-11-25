@@ -687,6 +687,68 @@ describe('runAnalyzerWithEngine', () => {
     expect(keys.some(k => k.includes('nuxt') && k.includes('seo'))).toBe(true)
   }, 30_000)
 
+  it('intent-atlas weights tokens by specificity so site-wide boilerplate does not swallow distinct topics', async () => {
+    const env = await setup(dir)
+    const d = '2026-04-01'
+    await seed(env.engine, USER, SITE, [{
+      table: 'queries',
+      date: d,
+      rows: [
+        // Every query shares "new york" (highest raw impressions across the site),
+        // yet spans two distinct topics: fashion week vs wedding venues.
+        { query: 'new york fashion week 2026', date: d, clicks: 10, impressions: 500, sum_position: 1000 },
+        { query: 'new york fashion week schedule', date: d, clicks: 8, impressions: 400, sum_position: 1200 },
+        { query: 'new york fashion week dates', date: d, clicks: 6, impressions: 300, sum_position: 900 },
+        { query: 'new york wedding venues', date: d, clicks: 4, impressions: 200, sum_position: 800 },
+        { query: 'new york wedding venues hotel', date: d, clicks: 3, impressions: 150, sum_position: 750 },
+        { query: 'new york wedding venues rooftop', date: d, clicks: 2, impressions: 120, sum_position: 600 },
+        // Duplicate token within one query must not self-pair as "sneaky + sneaky".
+        { query: 'sneaky sneaky', date: d, clicks: 1, impressions: 200, sum_position: 400 },
+        { query: 'sneaky sneaky tour', date: d, clicks: 1, impressions: 150, sum_position: 300 },
+        { query: 'sneaky sneaky live', date: d, clicks: 1, impressions: 120, sum_position: 240 },
+      ],
+    }])
+
+    const out = await runAnalyzerWithEngine(
+      { engine: env.engine },
+      { userId: USER, siteId: SITE },
+      { type: 'intent-atlas', startDate: d, endDate: d, minImpressions: 20, minClusterSize: 3 },
+    )
+    const clusters = out.results as Array<{ clusterKey: string, keywordCount: number }>
+    const keys = clusters.map(c => c.clusterKey)
+    expect(keys).toContain('fashion + week')
+    expect(keys).toContain('venues + wedding')
+    expect(keys).not.toContain('new + york')
+    expect(keys).not.toContain('sneaky + sneaky')
+  }, 30_000)
+
+  it('clustering SQL includes 2-word head queries alongside 3+ word siblings', async () => {
+    const env = await setup(dir)
+    const d = '2026-04-01'
+    await seed(env.engine, USER, SITE, [{
+      table: 'queries',
+      date: d,
+      rows: [
+        { query: 'schema validator', date: d, clicks: 50, impressions: 1000, sum_position: 2000 },
+        { query: 'schema validator online', date: d, clicks: 10, impressions: 200, sum_position: 600 },
+        { query: 'unpaired head', date: d, clicks: 5, impressions: 100, sum_position: 300 },
+      ],
+    }])
+
+    const out = await runAnalyzerWithEngine(
+      { engine: env.engine },
+      { userId: USER, siteId: SITE },
+      { type: 'clustering', startDate: d, endDate: d, minImpressions: 10, minClusterSize: 2, clusterBy: 'prefix' },
+    )
+    const clusters = out.results as Array<{ clusterName: string, keywordCount: number, totalImpressions: number }>
+    expect(clusters).toHaveLength(1)
+    expect(clusters[0]).toMatchObject({
+      clusterName: 'schema validator',
+      keywordCount: 2,
+      totalImpressions: 1200,
+    })
+  }, 30_000)
+
   it('query-migration matches lost queries to fuzzy gainers via levenshtein', async () => {
     const env = await setup(dir)
     // Previous period: /old ranks for "react server components" + "react hooks intro"
@@ -754,8 +816,12 @@ describe('runAnalyzerWithEngine', () => {
           { url: '/blog/widgets', query: 'best widget', date: '2026-04-10', clicks: 2, impressions: 600, sum_position: 7200 },
           // "solo term" has a single URL → not cannibalized, filtered out.
           { url: '/solo', query: 'solo term', date: '2026-04-10', clicks: 100, impressions: 1000, sum_position: 2000 },
-          // Below minImpressions — excluded.
-          { url: '/tiny', query: 'tiny term', date: '2026-04-10', clicks: 1, impressions: 10, sum_position: 100 },
+          // Below default minImpressions (10) — excluded even across 2 URLs.
+          { url: '/tiny-a', query: 'tiny term', date: '2026-04-10', clicks: 0, impressions: 5, sum_position: 50 },
+          { url: '/tiny-b', query: 'tiny term', date: '2026-04-10', clicks: 0, impressions: 6, sum_position: 60 },
+          // Mid-volume collision (15 + 25 impressions) — caught by the aligned default minImpressions = 10.
+          { url: '/docs/titles', query: 'nuxt page title', date: '2026-04-10', clicks: 2, impressions: 25, sum_position: 75 },
+          { url: '/docs/fallback', query: 'nuxt page title', date: '2026-04-10', clicks: 0, impressions: 15, sum_position: 90 },
         ],
       },
     ])
@@ -775,19 +841,21 @@ describe('runAnalyzerWithEngine', () => {
       severity: number
     }>
 
-    expect(rows).toHaveLength(1)
-    expect(rows[0]!.keyword).toBe('best widget')
-    expect(rows[0]!.competitorCount).toBe(3)
-    expect(rows[0]!.competitors[0]!.rank).toBe(1)
-    expect(rows[0]!.competitors[0]!.url).toBe('/widgets')
-    expect(rows[0]!.fragmentation).toBeGreaterThan(0)
-    expect(rows[0]!.stolenClicks).toBeGreaterThan(0)
-    expect(rows[0]!.severity).toBeGreaterThan(0)
+    expect(rows).toHaveLength(2)
+    const best = rows.find(r => r.keyword === 'best widget')!
+    expect(best.competitorCount).toBe(3)
+    expect(best.competitors[0]!.rank).toBe(1)
+    expect(best.competitors[0]!.url).toBe('/widgets')
+    expect(best.fragmentation).toBeGreaterThan(0)
+    expect(best.stolenClicks).toBeGreaterThan(0)
+    expect(best.severity).toBeGreaterThan(0)
+    expect(rows.some(r => r.keyword === 'nuxt page title')).toBe(true)
+    expect(rows.some(r => r.keyword === 'tiny term')).toBe(false)
 
     const meta = out.meta as { graph: { nodes: unknown[], edges: unknown[] } }
-    expect(meta.graph.nodes).toHaveLength(3)
-    // 3 URLs competing → C(3,2) = 3 edges.
-    expect(meta.graph.edges).toHaveLength(3)
+    expect(meta.graph.nodes).toHaveLength(5)
+    // 3 URLs competing on "best widget" (C(3,2)=3) + 2 URLs on "nuxt page title" (1) = 4 edges.
+    expect(meta.graph.edges).toHaveLength(4)
   }, 30_000)
 
   it('bayesian-ctr flags outliers via empirical-Bayes shrinkage', async () => {

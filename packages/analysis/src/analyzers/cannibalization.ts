@@ -161,9 +161,9 @@ export const cannibalizationAnalyzer = defineAnalyzer<AnalysisParams, Row, Canni
 
   buildSql(params) {
     const { startDate, endDate } = periodOf(params)
-    const minImpressions = params.minImpressions ?? 50
+    const minImpressions = params.minImpressions ?? 10
     const minCompetitors = 2
-    const minQueryImpressions = (params.minImpressions ?? 50) * 2
+    const minQueryImpressions = minImpressions * 2
     const limit = params.limit ?? 200
 
     const sql = `
