@@ -21,10 +21,12 @@
   createAnalyzerRegistry: function
   createEngineQuerySource: function
   createSorter: function
+  damerauLevenshteinBounded: function
   defineAnalyzer: function
   diffSitemapHealth: function
   encodeIntent: function
   ENGINE_QUERY_CAPABILITIES: object
+  foldCanonicalTypos: function
   INTENT_CLASSIFIER_VERSION: number
   MOVERS_SORT_METRICS: object
   normalizeQuery: function
@@ -33,6 +35,7 @@
   padTimeseries: function
   periodOf: function
   queryRows: function
+  resolveCanonicalTypoFolds: function
   resolveWindow: function
   runAnalyzerFromSource: function
   runAnalyzerWithEngine: function
@@ -41,6 +44,7 @@
   SITEMAP_TRUST_COLLAPSE_POLICY: object
   sitemapHistoryHasCollapse: function
   TRAJECTORY_DEFAULT_DAYS: number
+  TYPO_FOLD_VERSION: number
 ./errors:
   analysisErrors: object
   analysisErrorToException: function
@@ -48,11 +52,15 @@
   isAnalysisError: function
 ./query-dimension:
   classifyQueryIntent: function
+  damerauLevenshteinBounded: function
   encodeIntent: function
+  foldCanonicalTypos: function
   INTENT_CLASSIFIER_VERSION: number
   normalizeQuery: function
   NORMALIZER_VERSION: number
+  resolveCanonicalTypoFolds: function
   SEARCH_INTENT_CODE: object
+  TYPO_FOLD_VERSION: number
 ./registry:
   defaultAnalyzerRegistry: object
   ROW_ANALYZERS: object
