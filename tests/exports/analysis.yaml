@@ -13,6 +13,7 @@
   analyzeSeasonality: function
   analyzeStrikingDistance: function
   analyzeTrajectory: function
+  analyzeUrlClusters: function
   analyzeZeroClick: function
   classifyQueryIntent: function
   classifySitemapCollapse: function
@@ -24,6 +25,8 @@
   createSorter: function
   damerauLevenshteinBounded: function
   DEFAULT_SEMANTIC_THRESHOLD: number
+  DEFAULT_URL_COOCCURRENCE_COSINE: number
+  DEFAULT_URL_DOMINANCE_SHARE: number
   defineAnalyzer: function
   diffSitemapHealth: function
   encodeIntent: function

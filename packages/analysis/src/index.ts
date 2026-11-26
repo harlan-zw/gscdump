@@ -46,6 +46,18 @@ export type {
   TrajectoryWindow,
 } from './analyzers/trajectory'
 export { analyzeTrajectory, TRAJECTORY_DEFAULT_DAYS } from './analyzers/trajectory'
+export type {
+  UrlClustersOptions,
+  UrlClustersResult,
+  UrlSynonymPair,
+  UrlTopicCluster,
+  UrlTopicClusterMember,
+} from './analyzers/url-clusters'
+export {
+  analyzeUrlClusters,
+  DEFAULT_URL_COOCCURRENCE_COSINE,
+  DEFAULT_URL_DOMINANCE_SHARE,
+} from './analyzers/url-clusters'
 export type { ZeroClickOptions, ZeroClickResult } from './analyzers/zero-click'
 export { analyzeZeroClick } from './analyzers/zero-click'
 export { analyzeInBrowser } from './browser'

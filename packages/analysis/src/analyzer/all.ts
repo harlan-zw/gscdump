@@ -37,6 +37,7 @@ import { strikingDistanceAnalyzer } from '../analyzers/striking-distance'
 import { survivalAnalyzer } from '../analyzers/survival'
 import { trajectoryAnalyzer } from '../analyzers/trajectory'
 import { trendsAnalyzer } from '../analyzers/trends'
+import { urlClustersAnalyzer } from '../analyzers/url-clusters'
 import { zeroClickAnalyzer } from '../analyzers/zero-click'
 
 export const ALL_ANALYZERS: readonly DefinedAnalyzer[] = [
@@ -69,5 +70,6 @@ export const ALL_ANALYZERS: readonly DefinedAnalyzer[] = [
   survivalAnalyzer,
   trajectoryAnalyzer,
   trendsAnalyzer,
+  urlClustersAnalyzer,
   zeroClickAnalyzer,
 ]
