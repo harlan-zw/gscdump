@@ -5,6 +5,7 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import process from 'node:process'
+import { writeFileAtomic } from '@gscdump/engine/filesystem'
 
 /** A heartbeat older than this means the sync stopped without cleanup. */
 export const SYNC_HEARTBEAT_STALE_MS = 2 * 60_000
@@ -71,11 +72,7 @@ export async function readSyncRun(dataDir: string): Promise<SyncRunRecord | unde
 }
 
 async function writeSyncRun(dataDir: string, record: SyncRunRecord): Promise<void> {
-  await fs.mkdir(dataDir, { recursive: true })
-  const file = syncRunPath(dataDir)
-  const temporary = `${file}.${record.pid}.tmp`
-  await fs.writeFile(temporary, JSON.stringify(record, null, 2), 'utf8')
-  await fs.rename(temporary, file)
+  await writeFileAtomic(syncRunPath(dataDir), JSON.stringify(record, null, 2))
 }
 
 export interface SyncRun {

@@ -16,7 +16,8 @@ const mocks = vi.hoisted(() => {
   return { store }
 })
 
-vi.mock('@gscdump/engine/filesystem', () => ({
+vi.mock('@gscdump/engine/filesystem', async importOriginal => ({
+  ...await importOriginal<typeof import('@gscdump/engine/filesystem')>(),
   filesystemStats: vi.fn(),
 }))
 vi.mock('../../src/context', async importOriginal => ({

@@ -10,10 +10,9 @@
 // the map takes a lock, re-reads the map, and replaces the file atomically.
 
 import type { Result } from 'gscdump/result'
-import { randomUUID } from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import process from 'node:process'
+import { writeFileAtomic } from '@gscdump/engine/filesystem'
 import { err, ok } from 'gscdump/result'
 import { decodeSiteId, encodeSiteId } from 'gscdump/tenant'
 import { lock } from 'proper-lockfile'
@@ -112,10 +111,7 @@ export function claimSiteId(map: SiteMap, siteUrl: string, hasData: boolean): Re
 }
 
 async function writeSiteMap(dataDir: string, userId: string, sites: SiteMap): Promise<void> {
-  const file = siteMapPath(dataDir, userId)
-  const temp = `${file}.${process.pid}.${randomUUID()}.tmp`
-  await fs.writeFile(temp, `${JSON.stringify({ version: 1, sites }, null, 2)}\n`)
-  await fs.rename(temp, file)
+  await writeFileAtomic(siteMapPath(dataDir, userId), `${JSON.stringify({ version: 1, sites }, null, 2)}\n`)
 }
 
 // Writers in this process wait here, so they never contend for the file lock.

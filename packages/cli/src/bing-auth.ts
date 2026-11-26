@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import fs from 'node:fs/promises'
 import { createServer } from 'node:http'
 import path from 'node:path'
+import { writeFileAtomic } from '@gscdump/engine/filesystem'
 import { bingWebmaster } from 'gscdump/bing'
 import { z } from 'zod'
 import { getConfigDir } from './config'
@@ -41,15 +42,7 @@ function credentialsPath(): string {
 
 export async function saveBingCredentials(credentials: BingCredentials): Promise<void> {
   const value = credentialsSchema.parse(credentials)
-  await fs.mkdir(getConfigDir(), { recursive: true, mode: 0o700 })
-  const temporary = `${credentialsPath()}.${randomUUID()}.tmp`
-  try {
-    await fs.writeFile(temporary, JSON.stringify(value, null, 2), { mode: 0o600, flag: 'wx' })
-    await fs.rename(temporary, credentialsPath())
-  }
-  finally {
-    await fs.rm(temporary, { force: true })
-  }
+  await writeFileAtomic(credentialsPath(), JSON.stringify(value, null, 2), { dirMode: 0o700, mode: 0o600, flag: 'wx' })
 }
 
 export async function clearBingCredentials(): Promise<void> {

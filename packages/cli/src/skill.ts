@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto'
-import { cp, mkdir, mkdtemp, readdir, readFile, rename, rm, stat } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, readdir, readFile, rm, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { renameWithRetry } from '@gscdump/engine/filesystem'
 
 export const SKILL_NAME = 'gscdump'
 
@@ -90,15 +91,15 @@ async function replaceSkill(source: string, destination: string): Promise<string
       await rm(staging, { recursive: true, force: true })
       throw cause
     })
-  const previous = await rename(destination, backup).then(() => 'moved' as const).catch((cause: unknown) => {
+  const previous = await renameWithRetry(destination, backup).then(() => 'moved' as const).catch((cause: unknown) => {
     if (cause !== null && typeof cause === 'object' && 'code' in cause && cause.code === 'ENOENT')
       return 'absent' as const
     throw cause
   })
-  await rename(candidate, destination).catch(async (cause: unknown) => {
+  await renameWithRetry(candidate, destination).catch(async (cause: unknown) => {
     // Keep the backup if restoration itself fails, so recovery remains possible.
     if (previous === 'moved')
-      await rename(backup, destination)
+      await renameWithRetry(backup, destination)
     await rm(staging, { recursive: true, force: true })
     throw cause
   })

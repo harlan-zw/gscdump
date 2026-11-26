@@ -10,7 +10,7 @@
 import type { FetchContext, FetchOptions } from 'ofetch'
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import process from 'node:process'
+import { writeFileAtomic } from '@gscdump/engine/filesystem'
 import { getNextPstMidnight, getPstDate } from 'gscdump/dates'
 import { classifyError } from 'gscdump/errors'
 
@@ -275,10 +275,7 @@ export async function readLedgerState(file: string): Promise<QuotaLedgerState> {
 }
 
 async function writeLedgerState(file: string, state: QuotaLedgerState): Promise<void> {
-  await fs.mkdir(path.dirname(file), { recursive: true })
-  const temporary = `${file}.${process.pid}.${Date.now()}.tmp`
-  await fs.writeFile(temporary, JSON.stringify(state), 'utf8')
-  await fs.rename(temporary, file)
+  await writeFileAtomic(file, JSON.stringify(state))
 }
 
 export async function openQuotaLedger(opts: { dataDir: string, now?: () => Date }): Promise<QuotaLedger> {

@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdtemp, readdir, readFile, rename, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, parse, relative, sep } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -6,6 +6,8 @@ import {
   createFilesystemDataSource,
   createFilesystemManifestStore,
   filesystemStats,
+  renameWithRetry,
+  writeFileAtomic,
 } from '../src/adapters/filesystem'
 import { createStorageEngine } from '../src/index'
 import { createJsonCodec, createUnionExecutor } from './helpers/in-memory'
@@ -362,6 +364,227 @@ describe('filesystemManifestStore', () => {
     const failedPages = await store.getSyncStates({ userId: 'u1', table: 'pages', state: 'failed' })
     expect(failedPages).toHaveLength(1)
     expect(failedPages[0].date).toBe('2026-04-11')
+  })
+
+  it('retries transient Windows rename failures when replacing manifest.json', async () => {
+    const manifestPath = join(dir, 'manifest.json')
+    let renameAttempts = 0
+    const sleeps: number[] = []
+    const store = createFilesystemManifestStore({
+      path: manifestPath,
+      renameRetry: {
+        sleep: async (ms) => {
+          sleeps.push(ms)
+        },
+        random: () => 0.5,
+        rename: async (src, dst) => {
+          renameAttempts++
+          if (renameAttempts <= 2) {
+            const code = renameAttempts === 1 ? 'EPERM' : 'EBUSY'
+            throw Object.assign(new Error(`${code}: operation not permitted, rename '${src}' -> '${dst}'`), { code })
+          }
+          await rename(src, dst)
+        },
+      },
+    })
+
+    await store.setSyncState({ userId: 'u1', siteId: 's1', table: 'dates', date: '2026-04-10' }, 'done', { at: 1000 })
+
+    expect(renameAttempts).toBe(3)
+    expect(sleeps).toHaveLength(2)
+    expect(await store.getSyncStates({ userId: 'u1' })).toHaveLength(1)
+    const files = await readdir(dir)
+    expect(files).toEqual(['manifest.json'])
+  })
+
+  it('serializes manifest reads and writes for the same path so reads never overlap rename', async () => {
+    const manifestPath = join(dir, 'manifest.json')
+    const events: string[] = []
+    const enteredRename = Promise.withResolvers<void>()
+    const releaseRename = Promise.withResolvers<void>()
+    let gated = false
+
+    const writer = createFilesystemManifestStore({
+      path: manifestPath,
+      renameRetry: {
+        rename: async (src, dst) => {
+          if (!gated) {
+            gated = true
+            events.push('write:rename-start')
+            enteredRename.resolve()
+            await releaseRename.promise
+          }
+          await rename(src, dst)
+          events.push('write:rename-done')
+        },
+      },
+    })
+    const reader = createFilesystemManifestStore({ path: manifestPath })
+
+    const writePromise = writer.setSyncState(
+      { userId: 'u1', siteId: 's1', table: 'dates', date: '2026-04-10' },
+      'done',
+      { at: 1000 },
+    )
+    await enteredRename.promise
+
+    const readPromise = reader.getSyncStates({ userId: 'u1' }).then((states) => {
+      events.push(`read:done(${states.length})`)
+      return states
+    })
+
+    // Give the event loop a turn to confirm the read waits until rename finishes.
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(events).toEqual(['write:rename-start'])
+
+    releaseRename.resolve()
+    const [, states] = await Promise.all([writePromise, readPromise])
+    expect(states).toHaveLength(1)
+    expect(events).toEqual(['write:rename-start', 'write:rename-done', 'read:done(1)'])
+  })
+
+  it('survives parallel reads and writes across search types on the same manifest', async () => {
+    const manifestPath = join(dir, 'manifest.json')
+    const store = createFilesystemManifestStore({ path: manifestPath })
+    const searchTypes = ['web', 'image', 'video', 'news', 'discover', 'googleNews'] as const
+
+    await Promise.all(searchTypes.map(async (searchType, typeIdx) => {
+      for (let day = 1; day <= 8; day++) {
+        const date = `2026-04-${String(day).padStart(2, '0')}`
+        const scope = { userId: 'u1', siteId: 's1', table: 'dates' as const, date, searchType }
+        await store.setSyncState(scope, 'inflight', { at: typeIdx * 100 + day })
+        await store.listLive({ userId: 'u1', siteId: 's1', table: 'dates', searchType })
+        await store.registerVersion({
+          userId: 'u1',
+          siteId: 's1',
+          table: 'dates',
+          searchType,
+          partition: `daily/${date}`,
+          objectKey: `u_u1/s1/dates/daily/${date}__${searchType}.parquet`,
+          rowCount: 1,
+          bytes: 64,
+          createdAt: typeIdx * 100 + day,
+        })
+        await store.bumpWatermark({ userId: 'u1', siteId: 's1', table: 'dates', searchType }, date, typeIdx * 100 + day)
+        await store.setSyncState(scope, 'done', { at: typeIdx * 100 + day + 1 })
+      }
+    }))
+
+    expect(await store.listLive({ userId: 'u1', siteId: 's1', table: 'dates' })).toHaveLength(searchTypes.length * 8)
+    expect(await store.getSyncStates({ userId: 'u1', siteId: 's1', state: 'done' })).toHaveLength(searchTypes.length * 8)
+    const files = await readdir(dir)
+    expect(files.filter(name => name.endsWith('.tmp'))).toEqual([])
+  })
+})
+
+describe('renameWithRetry and writeFileAtomic', () => {
+  let dir: string
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'gscdump-atomic-'))
+  })
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true })
+  })
+
+  it.each(['EPERM', 'EBUSY', 'EACCES'] as const)('retries transient %s rename errors with bounded backoff until rename succeeds', async (code) => {
+    let attempts = 0
+    const sleeps: number[] = []
+    await renameWithRetry('a.tmp', 'a.json', {
+      maxAttempts: 5,
+      baseDelayMs: 20,
+      maxDelayMs: 50,
+      random: () => 1,
+      sleep: async (ms) => {
+        sleeps.push(ms)
+      },
+      rename: async () => {
+        attempts++
+        if (attempts < 4)
+          throw Object.assign(new Error(`${code}: busy`), { code })
+      },
+    })
+
+    expect(attempts).toBe(4)
+    expect(sleeps).toEqual([20, 40, 50])
+  })
+
+  it.each(['ENOENT', 'EXDEV', 'ENOSPC', 'EISDIR'] as const)('does not retry non-transient %s rename errors', async (code) => {
+    let attempts = 0
+    const sleeps: number[] = []
+    await expect(renameWithRetry('a.tmp', 'a.json', {
+      maxAttempts: 5,
+      sleep: async (ms) => {
+        sleeps.push(ms)
+      },
+      rename: async () => {
+        attempts++
+        throw Object.assign(new Error(`${code}: permanent`), { code })
+      },
+    })).rejects.toMatchObject({ code })
+
+    expect(attempts).toBe(1)
+    expect(sleeps).toEqual([])
+  })
+
+  it('rethrows the last transient error after maxAttempts', async () => {
+    let attempts = 0
+    const sleeps: number[] = []
+    await expect(renameWithRetry('a.tmp', 'a.json', {
+      maxAttempts: 4,
+      baseDelayMs: 10,
+      maxDelayMs: 100,
+      random: () => 0,
+      sleep: async (ms) => {
+        sleeps.push(ms)
+      },
+      rename: async () => {
+        attempts++
+        throw Object.assign(new Error(`attempt ${attempts}`), { code: 'EPERM' })
+      },
+    })).rejects.toThrow('attempt 4')
+
+    expect(attempts).toBe(4)
+    // Equal jitter with random() = 0 yields half of each exponential ceiling.
+    expect(sleeps).toEqual([5, 10, 20])
+  })
+
+  it('writeFileAtomic creates parent dirs, retries transient rename, and leaves no temp file', async () => {
+    const target = join(dir, 'nested', 'state.json')
+    let attempts = 0
+    await writeFileAtomic(target, '{"ok":true}', {
+      retry: {
+        sleep: async () => {},
+        rename: async (src, dst) => {
+          attempts++
+          if (attempts === 1)
+            throw Object.assign(new Error('EPERM: locked'), { code: 'EPERM' })
+          await rename(src, dst)
+        },
+      },
+    })
+
+    expect(attempts).toBe(2)
+    expect(await readFile(target, 'utf8')).toBe('{"ok":true}')
+    expect(await readdir(join(dir, 'nested'))).toEqual(['state.json'])
+  })
+
+  it('writeFileAtomic cleans up the temp file and preserves the prior target when rename fails', async () => {
+    const target = join(dir, 'state.json')
+    await writeFileAtomic(target, '{"v":1}')
+
+    await expect(writeFileAtomic(target, '{"v":2}', {
+      retry: {
+        maxAttempts: 2,
+        sleep: async () => {},
+        rename: async () => {
+          throw Object.assign(new Error('EPERM: still locked'), { code: 'EPERM' })
+        },
+      },
+    })).rejects.toThrow('EPERM: still locked')
+
+    expect(await readFile(target, 'utf8')).toBe('{"v":1}')
+    expect(await readdir(dir)).toEqual(['state.json'])
   })
 })
 
