@@ -13,6 +13,7 @@ export type {
 } from './entities/indexing-metadata'
 export * from './entities/inspection'
 export * from './entities/query-dim'
+export * from './entities/query-embeddings'
 export { createSitemapReadStore } from './entities/sitemap'
 export { createSitemapListStore } from './entities/sitemap-list'
 export type {

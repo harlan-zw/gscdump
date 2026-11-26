@@ -224,3 +224,15 @@ export function queryDimParquetKey(ctx: TenantCtx): string {
 export function queryDimMetaKey(ctx: TenantCtx): string {
   return `${queryDimPrefix(ctx)}/index.json`
 }
+
+function queryEmbeddingsPrefix(ctx: TenantCtx): string {
+  return `${tenantEntityPrefix(ctx)}/query_embeddings`
+}
+
+export function queryEmbeddingsParquetKey(ctx: TenantCtx): string {
+  return `${queryEmbeddingsPrefix(ctx)}/index.parquet`
+}
+
+export function queryEmbeddingsMetaKey(ctx: TenantCtx): string {
+  return `${queryEmbeddingsPrefix(ctx)}/index.json`
+}

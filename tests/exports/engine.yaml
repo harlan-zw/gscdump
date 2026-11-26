@@ -47,13 +47,16 @@
 ./contracts: {}
 ./entities:
   buildQueryDimRecords: function
+  buildQueryEmbeddingRecords: function
   createEmptyTypesStore: function
   createIndexingMetadataStore: function
   createInspectionStore: function
   createQueryDimStore: function
+  createQueryEmbeddingsStore: function
   createSitemapListStore: function
   createSitemapReadStore: function
   createSitemapStore: function
+  dequantizeEmbeddingInt8: function
   emptyTypesKey: function
   hashUrl: function
   indexingMetadataIndexKey: function
@@ -71,8 +74,12 @@
   inspectionTransitionsMonthKey: function
   inspectionTransitionsPrefix: function
   parseSitemapFeedIdentity: function
+  quantizeEmbeddingInt8: function
+  QUERY_EMBEDDINGS_SCHEMA_VERSION: number
   queryDimMetaKey: function
   queryDimParquetKey: function
+  queryEmbeddingsMetaKey: function
+  queryEmbeddingsParquetKey: function
   resolveInspectionReadPlan: function
   sitemapImmutableBaseKey: function
   sitemapLegacyImportKey: function
@@ -104,6 +111,8 @@
   parseSitemapFeedIdentity: function
   queryDimMetaKey: function
   queryDimParquetKey: function
+  queryEmbeddingsMetaKey: function
+  queryEmbeddingsParquetKey: function
   sitemapImmutableBaseKey: function
   sitemapLegacyImportKey: function
   sitemapListKey: function

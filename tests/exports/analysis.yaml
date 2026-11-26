@@ -16,11 +16,13 @@
   analyzeZeroClick: function
   classifyQueryIntent: function
   classifySitemapCollapse: function
+  clusterQueryEmbeddings: function
   compareCurrentSitemapScope: function
   comparisonOf: function
   createAnalyzerRegistry: function
   createEngineQuerySource: function
   createSorter: function
+  DEFAULT_SEMANTIC_THRESHOLD: number
   defineAnalyzer: function
   diffSitemapHealth: function
   encodeIntent: function
@@ -37,6 +39,7 @@
   runAnalyzerFromSource: function
   runAnalyzerWithEngine: function
   SEARCH_INTENT_CODE: object
+  SEMANTIC_CLUSTERING_VERSION: number
   SITEMAP_SYNC_COLLAPSE_POLICY: object
   SITEMAP_TRUST_COLLAPSE_POLICY: object
   sitemapHistoryHasCollapse: function
@@ -48,11 +51,14 @@
   isAnalysisError: function
 ./query-dimension:
   classifyQueryIntent: function
+  clusterQueryEmbeddings: function
+  DEFAULT_SEMANTIC_THRESHOLD: number
   encodeIntent: function
   INTENT_CLASSIFIER_VERSION: number
   normalizeQuery: function
   NORMALIZER_VERSION: number
   SEARCH_INTENT_CODE: object
+  SEMANTIC_CLUSTERING_VERSION: number
 ./registry:
   defaultAnalyzerRegistry: object
   ROW_ANALYZERS: object

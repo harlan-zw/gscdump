@@ -1,16 +1,28 @@
 import type { AnalysisParams } from '@gscdump/engine/analysis-types'
 import type { CommandDef } from 'citty'
-import { MOVERS_SORT_METRICS, TRAJECTORY_DEFAULT_DAYS } from '@gscdump/analysis'
+import type { TableName } from '../local-store'
+import {
+  clusterQueryEmbeddings,
+  DEFAULT_SEMANTIC_THRESHOLD,
+  MOVERS_SORT_METRICS,
+  normalizeQuery,
+  TRAJECTORY_DEFAULT_DAYS,
+} from '@gscdump/analysis'
 import { defaultAnalyzerRegistry } from '@gscdump/analysis/registry'
-import { DEFAULT_FETCH_BUDGET, MAX_FETCH_BUDGET } from '@gscdump/engine/analysis-types'
+import { DEFAULT_FETCH_BUDGET, MAX_FETCH_BUDGET, num } from '@gscdump/engine/analysis-types'
+import { createQueryEmbeddingsStore, dequantizeEmbeddingInt8 } from '@gscdump/engine/entities'
+import { METRIC_EXPR } from '@gscdump/engine/sql-fragments'
 import { defineCommand } from 'citty'
+import { getLatestGscDate } from 'gscdump/dates'
 import { unwrapResult } from 'gscdump/result'
 import { analysisNeeds, analyzerTables, resolveAnalysisSource } from '../analysis-local'
 import { analyzeCommandMeta } from '../command-meta'
+import { createCommandContext } from '../context'
 import { ANALYZER_DISPLAY, coverageWarning, renderAnalysis } from '../render/analysis'
 import { terminalOutputOptions } from '../render/terminal'
+import { readSiteStates } from '../route'
 import { logger, parseFetchBudget, parseIntegerOption, setJsonOutput, toCSV } from '../utils'
-import { DEFAULT_WINDOW, parseWindowFlags, PERIOD_FLAGS, windowFlagErrorToException } from '../window'
+import { DEFAULT_WINDOW, newestDoneDate, parseWindowFlags, PERIOD_FLAGS, windowFlagErrorToException } from '../window'
 
 const ANALYSIS_TOOLS = defaultAnalyzerRegistry.listAnalyzerIds()
 
@@ -241,10 +253,149 @@ const listCommand = defineCommand({
   },
 })
 
+const semanticClustersCommand = defineCommand({
+  meta: {
+    name: 'semantic-clusters',
+    description: ANALYZER_DISPLAY['semantic-clusters']?.description ?? 'Cluster queries with deterministic UPGMA over stored query_embeddings',
+  },
+  args: {
+    'site': { type: 'string', alias: 's', description: 'Site URL' },
+    'period': { type: 'string', description: `Window: ${PERIOD_FLAGS.join('|')} (default: 28d, ending on the newest synced day)` },
+    'start': { type: 'string', description: 'Start date (YYYY-MM-DD). Implies --period custom' },
+    'end': { type: 'string', description: 'End date (YYYY-MM-DD). Implies --period custom' },
+    'min-impressions': { type: 'string', default: '10', description: 'Minimum impressions floor per query (default: 10)' },
+    'min-cluster-size': { type: 'string', default: '2', description: 'Minimum queries per cluster (default: 2)' },
+    'threshold': { type: 'string', default: String(DEFAULT_SEMANTIC_THRESHOLD), description: `Average-linkage cosine similarity threshold in 0.5..0.99 (default: ${DEFAULT_SEMANTIC_THRESHOLD})` },
+    'limit': { type: 'string', alias: 'l', default: '100', description: 'Max clusters to return' },
+    'format': { type: 'string', alias: 'f', default: 'table', description: 'Output: table, json, csv' },
+    'json': { type: 'boolean', default: false, description: 'Output as JSON' },
+    'live': { type: 'boolean', default: false, description: 'Unsupported (semantic-clusters requires a local Store)' },
+  },
+  async run({ args }) {
+    if (args.live)
+      throw new Error('semantic-clusters requires a local Store with a query_embeddings sidecar; --live is not supported.')
+    if (!args.json && !['table', 'json', 'csv'].includes(args.format ?? 'table'))
+      throw new Error('Invalid --format. Use table, json, or csv.')
+    const minImpressions = parseIntegerOption(args['min-impressions'], '--min-impressions', 0) ?? 10
+    const minClusterSize = parseIntegerOption(args['min-cluster-size'], '--min-cluster-size', 1) ?? 2
+    if (minClusterSize < 2)
+      throw new Error(`Invalid --min-cluster-size "${String(args['min-cluster-size'])}". Use an integer >= 2.`)
+    const limit = parseIntegerOption(args.limit, '--limit', 1) ?? 100
+    const threshold = Number(args.threshold ?? DEFAULT_SEMANTIC_THRESHOLD)
+    if (!Number.isFinite(threshold) || threshold < 0.5 || threshold > 0.99)
+      throw new Error(`Invalid --threshold "${String(args.threshold)}". Use a number between 0.5 and 0.99.`)
+
+    const format = args.json ? 'json' : String(args.format ?? 'table')
+    setJsonOutput(format === 'json')
+
+    const ctx = await createCommandContext({ needsStore: true })
+    const store = ctx.store!
+    const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined, { scope: 'store' })
+    const siteId = store.siteIdFor(siteUrl)
+    const tenantCtx = { userId: store.userId, siteId }
+
+    const embeddingsStore = createQueryEmbeddingsStore({ dataSource: store.dataSource })
+    const embMeta = await embeddingsStore.loadMeta(tenantCtx)
+    if (!embMeta || embMeta.rowCount === 0)
+      throw new Error(`No query_embeddings sidecar found for ${siteUrl}. Run: gscdump entities embeddings build --site ${siteUrl}`)
+
+    const entries = await store.engine.listLive({ userId: store.userId, siteId, table: 'queries' as TableName })
+    if (entries.length === 0)
+      throw new Error(`No local queries data for ${siteUrl}. Run: gscdump sync --site ${siteUrl}`)
+
+    const states = await readSiteStates(store, siteUrl)
+    const anchor = newestDoneDate(states, ['queries']) ?? getLatestGscDate()
+    const optional = (key: string): string | undefined => args[key] ? String(args[key]) : undefined
+    const window = unwrapResult(parseWindowFlags({
+      period: optional('period'),
+      start: optional('start'),
+      end: optional('end'),
+    }, { ...DEFAULT_WINDOW, comparison: 'none' }, anchor), windowFlagErrorToException)
+
+    const { rows } = await store.engine.runSQL({
+      ctx: tenantCtx,
+      table: 'queries' as TableName,
+      fileSets: { FILES: { table: 'queries' as TableName, partitions: entries.map(e => e.partition) } },
+      sql: `
+        SELECT
+          query,
+          ${METRIC_EXPR.clicks} AS clicks,
+          ${METRIC_EXPR.impressions} AS impressions,
+          ${METRIC_EXPR.position} AS position
+        FROM read_parquet({{FILES}}, union_by_name = true)
+        WHERE date >= ? AND date <= ?
+          AND query IS NOT NULL AND query <> ''
+        GROUP BY query
+        HAVING SUM(impressions) >= ?
+      `,
+      params: [window.start, window.end, minImpressions],
+    })
+
+    const embRecords = await embeddingsStore.loadRecords(tenantCtx)
+    const vectorsByCanonical = new Map<string, Float32Array>()
+    for (const rec of embRecords)
+      vectorsByCanonical.set(rec.query_canonical, dequantizeEmbeddingInt8(rec.vec_i8_b64, rec.scale, rec.dims))
+
+    const clusterInputs: Array<{ query: string, canonical: string, impressions: number, clicks: number, position: number, vector: Float32Array }> = []
+    let missingEmbeddings = 0
+    for (const r of rows) {
+      const query = String(r.query)
+      const canonical = normalizeQuery(query) || query.trim()
+      const vector = vectorsByCanonical.get(canonical)
+      if (!vector) {
+        missingEmbeddings++
+        continue
+      }
+      clusterInputs.push({
+        query,
+        canonical,
+        impressions: num(r.impressions),
+        clicks: num(r.clicks),
+        position: num(r.position),
+        vector,
+      })
+    }
+
+    const clustered = clusterQueryEmbeddings(clusterInputs, {
+      threshold,
+      minClusterSize,
+      limit,
+      model: embMeta.model,
+    })
+
+    const result = {
+      results: clustered.results as unknown as Record<string, unknown>[],
+      meta: {
+        ...clustered.meta,
+        startDate: window.start,
+        endDate: window.end,
+        embeddedQueries: clusterInputs.length,
+        missingEmbeddings,
+      },
+    }
+
+    if (format === 'json') {
+      console.log(JSON.stringify(result, null, 2))
+      return
+    }
+    if (format === 'csv') {
+      console.log(toCSV(result.results, Object.keys(result.results[0] ?? {})))
+      return
+    }
+    console.log(renderAnalysis(result, {
+      id: 'semantic-clusters',
+      site: siteUrl,
+      start: window.start,
+      end: window.end,
+    }, terminalOutputOptions()))
+  },
+})
+
 export const analyzeCommand = defineCommand({
   meta: analyzeCommandMeta,
   subCommands: {
-    list: listCommand,
+    'list': listCommand,
+    'semantic-clusters': semanticClustersCommand,
     ...Object.fromEntries(
       ANALYSIS_TOOLS.map((tool: string) => [tool, makeToolCommand(tool)]),
     ),
