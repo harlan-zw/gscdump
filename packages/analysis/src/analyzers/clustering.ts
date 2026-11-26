@@ -19,6 +19,7 @@ import { queriesQueryState } from '../analyzer/adapt-rows'
 import { paginateInMemory } from '../analyzer/paginate'
 import { parseJsonRows as parseJsonList, rowString as str } from '../analyzer/row-values'
 import { normalizeQuery } from '../query/normalize'
+import { foldCanonicalTypos } from '../query/typo-fold'
 
 export type ClusterType = 'prefix' | 'intent' | 'both'
 
@@ -29,8 +30,10 @@ export interface ClusteringOptions {
   minImpressions?: number
   /** Clustering method. Default: 'both' */
   clusterBy?: ClusterType
-  /** Fold near-duplicate query variants via `normalizeQuery()` before prefix clustering. Default: false */
+  /** Fold near-duplicate query variants via `normalizeQuery()` before intent and prefix clustering. Default: false */
   canonical?: boolean
+  /** Fold typo and spacing variants via `foldCanonicalTypos()` after canonical normalization (implies `canonical: true`). Default: false */
+  fuzzy?: boolean
 }
 
 export interface KeywordCluster {
@@ -103,6 +106,7 @@ export function analyzeClustering(
     minImpressions = 10,
     clusterBy = 'both',
     canonical = false,
+    fuzzy = false,
   } = options
 
   const filtered = keywords.filter(k => num(k.impressions) >= minImpressions)
@@ -110,12 +114,27 @@ export function analyzeClustering(
   const clusterMap = new Map<string, { name: string, type: 'prefix' | 'intent' | 'canonical', keywords: QueriesRow[] }>()
   const clusteredKeywords = new Set<string>()
 
-  if (canonical) {
+  if (canonical || fuzzy) {
+    const baseCanonicals = filtered.map(kw => normalizeQuery(kw.query))
+    const fuzzyMap = fuzzy
+      ? foldCanonicalTypos(
+          filtered
+            .map((kw, idx) => ({
+              canonical: baseCanonicals[idx]!,
+              impressions: num(kw.impressions),
+              clicks: num(kw.clicks),
+            }))
+            .filter(entry => entry.canonical.length > 0),
+        )
+      : null
+
     const canonMap = new Map<string, QueriesRow[]>()
-    for (const kw of filtered) {
-      const canon = normalizeQuery(kw.query)
-      if (!canon)
+    for (let i = 0; i < filtered.length; i++) {
+      const kw = filtered[i]!
+      const base = baseCanonicals[i]!
+      if (!base)
         continue
+      const canon = fuzzyMap ? (fuzzyMap.get(base) ?? base) : base
       const existing = canonMap.get(canon)
       if (existing)
         existing.push(kw)
@@ -239,7 +258,7 @@ export const clusteringAnalyzer = defineAnalyzer<AnalysisParams, Row, KeywordClu
     const minClusterSize = params.minClusterSize ?? 2
     const clusterBy = params.clusterBy ?? 'both'
 
-    if (params.canonical) {
+    if (params.canonical || params.fuzzy) {
       const sql = `
         SELECT
           query,
@@ -327,7 +346,7 @@ export const clusteringAnalyzer = defineAnalyzer<AnalysisParams, Row, KeywordClu
 
   reduceSql(rows, params) {
     const arr = Array.isArray(rows) ? rows : []
-    if (params.canonical) {
+    if (params.canonical || params.fuzzy) {
       const keywords = arr.map(r => ({
         query: str(r.query),
         clicks: num(r.clicks),
@@ -340,6 +359,7 @@ export const clusteringAnalyzer = defineAnalyzer<AnalysisParams, Row, KeywordClu
         minClusterSize: params.minClusterSize,
         minImpressions: params.minImpressions,
         canonical: true,
+        fuzzy: params.fuzzy,
       })
       const paged = paginateInMemory(result.clusters, { limit: params.limit, offset: params.offset })
       return {
@@ -376,12 +396,38 @@ export const clusteringAnalyzer = defineAnalyzer<AnalysisParams, Row, KeywordClu
   },
 
   reduceRows(rows, params) {
-    const keywords = (Array.isArray(rows) ? rows : []) as unknown as QueriesRow[]
+    const raw = (Array.isArray(rows) ? rows : []) as unknown as QueriesRow[]
+    // Live GSC query+page rows can repeat the same query across multiple pages;
+    // roll up by query first so SQL and live paths share one row per query.
+    const byQuery = new Map<string, { clicks: number, impressions: number, weightedPos: number, posSum: number, count: number }>()
+    for (const r of raw) {
+      const q = str(r.query)
+      if (!q)
+        continue
+      const imp = num(r.impressions)
+      const clicks = num(r.clicks)
+      const pos = num(r.position)
+      const agg = byQuery.get(q) ?? { clicks: 0, impressions: 0, weightedPos: 0, posSum: 0, count: 0 }
+      agg.clicks += clicks
+      agg.impressions += imp
+      agg.weightedPos += (pos - 1) * imp
+      agg.posSum += pos
+      agg.count += 1
+      byQuery.set(q, agg)
+    }
+    const keywords: QueriesRow[] = [...byQuery.entries()].map(([query, agg]) => ({
+      query,
+      clicks: agg.clicks,
+      impressions: agg.impressions,
+      ctr: agg.impressions > 0 ? agg.clicks / agg.impressions : 0,
+      position: agg.impressions > 0 ? agg.weightedPos / agg.impressions + 1 : agg.posSum / agg.count,
+    }))
     const result = analyzeClustering(keywords, {
       clusterBy: params.clusterBy,
       minClusterSize: params.minClusterSize,
       minImpressions: params.minImpressions,
       canonical: params.canonical,
+      fuzzy: params.fuzzy,
     })
     const paged = paginateInMemory(result.clusters, { limit: params.limit, offset: params.offset })
     return {

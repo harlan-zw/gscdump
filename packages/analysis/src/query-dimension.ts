@@ -14,3 +14,10 @@ export type {
   SemanticClusterMember,
   SemanticClusterOptions,
 } from './query/semantic-clusters'
+export {
+  damerauLevenshteinBounded,
+  foldCanonicalTypos,
+  resolveCanonicalTypoFolds,
+  TYPO_FOLD_VERSION,
+} from './query/typo-fold'
+export type { TypoFoldInput, TypoFoldMatch, TypoFoldOptions, TypoFoldResult } from './query/typo-fold'

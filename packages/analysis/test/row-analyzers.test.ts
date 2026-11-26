@@ -160,6 +160,27 @@ describe('row analyzer reductions', () => {
     expect(result.unclustered).toEqual([])
   })
 
+  it('folds typo and spacing variants into canonical clusters when fuzzy is enabled', () => {
+    const rows: QueriesRow[] = [
+      { query: 'ninajirachi', clicks: 40, impressions: 1000, ctr: 0.04, position: 1 },
+      { query: 'nina jirachi', clicks: 10, impressions: 200, ctr: 0.05, position: 2 },
+      { query: 'ninajarachi', clicks: 5, impressions: 100, ctr: 0.05, position: 3 },
+      { query: 'nuxt 3', clicks: 20, impressions: 500, ctr: 0.04, position: 2 },
+      { query: 'nuxt 4', clicks: 15, impressions: 400, ctr: 0.0375, position: 2 },
+    ]
+    const result = analyzeClustering(rows, { fuzzy: true })
+
+    expect(result.clusters).toHaveLength(1)
+    expect(result.clusters[0]).toMatchObject({
+      clusterName: 'ninajirachi',
+      clusterType: 'canonical',
+      keywordCount: 3,
+      totalImpressions: 1300,
+    })
+    // Version numbers must never collapse under fuzzy folding.
+    expect(result.unclustered.map(k => k.query).sort()).toEqual(['nuxt 3', 'nuxt 4'])
+  })
+
   it('computes cannibalization totals and spread before sorting qualifying pages', () => {
     const rows: QueryPageRow[] = [
       { query: 'shared', page: '/a', clicks: 2, impressions: 20, ctr: 0.1, position: 5 },
@@ -213,6 +234,23 @@ describe('row analyzer reductions', () => {
       query: 'schema validator',
       canonicalKey: 'schema validator',
       variants: ['schema validator'],
+    })
+  })
+
+  it('folds typo variants before detecting cannibalization when fuzzy is enabled', () => {
+    const rows: QueryPageRow[] = [
+      { query: 'schema validator', page: '/tools/schema', clicks: 10, impressions: 200, ctr: 0.05, position: 2 },
+      { query: 'schmea validator', page: '/docs/schema', clicks: 4, impressions: 80, ctr: 0.05, position: 4 },
+    ]
+    expect(analyzeCannibalization(rows, { canonical: true })).toEqual([])
+
+    const fuzzy = analyzeCannibalization(rows, { fuzzy: true })
+    expect(fuzzy).toHaveLength(1)
+    expect(fuzzy[0]).toMatchObject({
+      query: 'schema validator',
+      canonicalKey: 'schema validator',
+      variants: ['schema validator', 'schmea validator'],
+      totalImpressions: 280,
     })
   })
 

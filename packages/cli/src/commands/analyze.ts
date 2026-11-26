@@ -110,6 +110,12 @@ function buildParams(tool: AnalysisTool, args: Record<string, unknown>): Analysi
     params.canonical = true
   }
 
+  if (args.fuzzy) {
+    if (!CANONICAL_TOOLS.has(tool))
+      throw new Error(`--fuzzy is not supported by ${tool}.`)
+    params.fuzzy = true
+  }
+
   if (args['brand-terms'])
     params.brandTerms = String(args['brand-terms']).split(',').map(t => t.trim()).filter(Boolean)
 
@@ -167,7 +173,10 @@ function makeToolCommand(tool: AnalysisTool): CommandDef<any> {
       ? { 'min-impressions': { type: 'string', description: 'Minimum impressions floor (analyzer default when omitted)' } }
       : {}),
     ...(CANONICAL_TOOLS.has(tool)
-      ? { canonical: { type: 'boolean', default: false, description: 'Fold near-duplicate query variants via normalizeQuery before grouping' } }
+      ? {
+          canonical: { type: 'boolean', default: false, description: 'Fold near-duplicate query variants via normalizeQuery before grouping' },
+          fuzzy: { type: 'boolean', default: false, description: 'Fold typo and spacing variants after canonical normalization (implies --canonical)' },
+        }
       : {}),
     ...(TOOL_EXTRA_ARGS[tool] || {}),
   }
