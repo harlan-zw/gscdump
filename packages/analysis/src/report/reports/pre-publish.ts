@@ -41,7 +41,7 @@ export const prePublishReport = defineReport<PrePublishReportParams>({
     // `reduce` filters by topic after the step runs, so a top-N page would
     // hide matches ranked below it. Ask for the analyzer's maximum output.
     return [
-      { key: 'cannibalization', type: 'cannibalization', params: { ...dates, limit: FULL_OUTPUT }, feeds: ['cannibalization-risk'] },
+      { key: 'cannibalization', type: 'cannibalization', params: { ...dates, limit: FULL_OUTPUT, fuzzy: true }, feeds: ['cannibalization-risk'] },
       { key: 'striking', type: 'striking-distance', params: { ...dates, limit: FULL_OUTPUT }, feeds: ['striking-peers'] },
     ]
   },
@@ -61,6 +61,7 @@ export const prePublishReport = defineReport<PrePublishReportParams>({
 
 interface CannibalizationRow {
   keyword: string
+  variants?: string[]
   totalClicks: number
   totalImpressions: number
   competitorCount: number
@@ -73,7 +74,11 @@ function buildCannibalizationSection(
   max: number,
 ): ReportSection {
   const rows = reportRows<CannibalizationRow>(res)
-    .filter(r => matches(r.keyword) || (r.competitors ?? []).some(p => matches(p.url)))
+    .filter(r =>
+      matches(r.keyword)
+      || (r.variants ?? []).some(v => matches(v))
+      || (r.competitors ?? []).some(p => matches(p.url)),
+    )
     .sort((a, b) => b.totalClicks - a.totalClicks)
   const kept = rows.slice(0, max)
   const findings: ReportFinding[] = kept.map((r) => {

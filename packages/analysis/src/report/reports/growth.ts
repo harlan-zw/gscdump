@@ -36,7 +36,7 @@ export const growthReport = defineReport<GrowthReportParams>({
     return [
       { key: 'content-velocity', type: 'content-velocity', params: { ...dates, days: window.days, limit: 200 } },
       { key: 'keyword-breadth', type: 'keyword-breadth', params: { ...dates, limit: 50 } },
-      { key: 'intent-atlas', type: 'intent-atlas', params: { ...dates, limit: 50 } },
+      { key: 'intent-atlas', type: 'intent-atlas', params: { ...dates, limit: 50, fuzzy: true } },
       { key: 'long-tail', type: 'long-tail', params: { ...dates, limit: 100 } },
     ]
   },
