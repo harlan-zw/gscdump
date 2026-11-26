@@ -46,6 +46,12 @@ const QUERY_DIM_COLUMNS: readonly ColumnDef[] = [
   { name: 'intent_version', type: 'INTEGER', nullable: false },
 ]
 
+export interface QueryDimInput {
+  query: string
+  impressions?: number
+  clicks?: number
+}
+
 /**
  * Injected derivation. `engine` never imports `@gscdump/analysis`; the host
  * passes `normalizeQuery` / `classifyIntentCode` (e.g. `encodeIntent ∘
@@ -57,30 +63,60 @@ export interface QueryDimDeps {
   /** Returns the packed intent code for a raw query. */
   classifyIntentCode: (query: string) => number
   intentVersion: number
+  /**
+   * Optional second-pass canonical folding (e.g. `foldCanonicalTypos`). Receives
+   * impression-weighted base canonicals and returns a `canonical -> anchor` map.
+   */
+  foldCanonicals?: (entries: readonly { canonical: string, impressions: number, clicks?: number }[]) => ReadonlyMap<string, string>
 }
 
 /**
  * Pure: distinct raw queries → dimension records. De-dupes, drops empties, and
  * folds an empty/whitespace canonical back to the raw query so the dimension
- * is total for read-time joins.
+ * is total for read-time joins. When `deps.foldCanonicals` is supplied, runs a
+ * second pass over the base canonicals weighted by impressions/clicks.
  */
-export function buildQueryDimRecords(queries: Iterable<string>, deps: QueryDimDeps): QueryDimRecord[] {
-  const seen = new Set<string>()
+export function buildQueryDimRecords(queries: Iterable<string | QueryDimInput>, deps: QueryDimDeps): QueryDimRecord[] {
+  const seen = new Map<string, { record: QueryDimRecord, impressions: number, clicks: number }>()
   const out: QueryDimRecord[] = []
   for (const raw of queries) {
-    const query = String(raw)
-    if (query.trim() === '' || seen.has(query))
+    const query = typeof raw === 'string' ? raw : String(raw.query)
+    if (query.trim() === '')
       continue
-    seen.add(query)
+    const impressions = typeof raw === 'string' ? 0 : Math.max(0, Number(raw.impressions ?? 0) || 0)
+    const clicks = typeof raw === 'string' ? 0 : Math.max(0, Number(raw.clicks ?? 0) || 0)
+    const existing = seen.get(query)
+    if (existing) {
+      existing.impressions += impressions
+      existing.clicks += clicks
+      continue
+    }
     const canonical = deps.normalizeQuery(query)
-    out.push({
+    const record: QueryDimRecord = {
       query,
       query_canonical: canonical === '' ? query : canonical,
       intent_code: deps.classifyIntentCode(query),
       normalizer_version: deps.normalizerVersion,
       intent_version: deps.intentVersion,
-    })
+    }
+    seen.set(query, { record, impressions, clicks })
+    out.push(record)
   }
+
+  if (deps.foldCanonicals && out.length > 0) {
+    const foldInputs = [...seen.values()].map(({ record, impressions, clicks }) => ({
+      canonical: record.query_canonical,
+      impressions,
+      clicks,
+    }))
+    const folded = deps.foldCanonicals(foldInputs)
+    for (const record of out) {
+      const target = folded.get(record.query_canonical)
+      if (target && target.trim() !== '')
+        record.query_canonical = target
+    }
+  }
+
   return out
 }
 

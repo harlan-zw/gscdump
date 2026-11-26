@@ -167,4 +167,22 @@ describe('foldCanonicalTypos', () => {
     expect(map.get('html to markdown')).toBe('html to markdown')
     expect(map.get('jpgto png')).toBe('jpgto png')
   })
+
+  it('bounds edit-index memory via maxEditAnchors while keeping head edit folds and all spaceless folds', () => {
+    const map = foldCanonicalTypos([
+      { canonical: 'nuxt schema', impressions: 5000 },
+      { canonical: 'tail topic alpha', impressions: 50 },
+      { canonical: 'tail topic beta', impressions: 20 },
+      { canonical: 'nuxt schmea', impressions: 10 },
+      { canonical: 'tail topic btea', impressions: 5 },
+      { canonical: 'tailtopicalpha', impressions: 5 },
+    ], { maxEditAnchors: 1 })
+
+    // Top anchor (`nuxt schema`) is edit-indexed, so tail typo folds into it.
+    expect(map.get('nuxt schmea')).toBe('nuxt schema')
+    // Exact spaceless folding still works beyond maxEditAnchors.
+    expect(map.get('tailtopicalpha')).toBe('tail topic alpha')
+    // Lower-ranked anchor (`tail topic beta`) is not edit-indexed when maxEditAnchors = 1.
+    expect(map.get('tail topic btea')).toBe('tail topic btea')
+  })
 })

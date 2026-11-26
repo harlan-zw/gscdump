@@ -53,6 +53,32 @@ describe('buildQueryDimRecords', () => {
     expect(recs.find(r => r.query === 'buy domain')!.intent_code).toBe(3)
     expect(recs.find(r => r.query === 'Nuxt SEO')!.query_canonical).toBe('nuxt seo')
   })
+
+  it('supports impression-weighted inputs and second-pass canonical folding', () => {
+    const received: Array<{ canonical: string, impressions: number, clicks?: number }> = []
+    const recs = buildQueryDimRecords([
+      { query: 'nuxt schema', impressions: 500, clicks: 40 },
+      { query: 'nuxt schmea', impressions: 12, clicks: 1 },
+      { query: 'nuxt schema', impressions: 100, clicks: 10 },
+    ], {
+      ...deps,
+      foldCanonicals: (entries) => {
+        received.push(...entries)
+        return new Map([
+          ['nuxt schema', 'nuxt schema'],
+          ['nuxt schmea', 'nuxt schema'],
+        ])
+      },
+    })
+
+    expect(recs).toHaveLength(2)
+    expect(recs.find(r => r.query === 'nuxt schmea')!.query_canonical).toBe('nuxt schema')
+    expect(received.find(e => e.canonical === 'nuxt schema')).toEqual({
+      canonical: 'nuxt schema',
+      impressions: 600,
+      clicks: 50,
+    })
+  })
 })
 
 describe('createQueryDimStore', () => {
