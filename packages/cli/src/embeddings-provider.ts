@@ -41,7 +41,9 @@ export function createEmbeddingProvider(config: EmbeddingProviderConfig): Embedd
   const model = config.model?.trim() || DEFAULT_EMBEDDING_MODELS[config.provider]
 
   if (config.provider === 'ollama') {
-    const baseUrl = (config.ollamaUrl || 'http://127.0.0.1:11434').replace(/\/+$/, '')
+    const rawHost = config.ollamaUrl?.trim() || 'http://127.0.0.1:11434'
+    const withScheme = /^https?:\/\//i.test(rawHost) ? rawHost : `http://${rawHost}`
+    const baseUrl = withScheme.replace(/\/+$/, '')
     const batchSize = config.batchSize ?? 64
     return {
       provider: 'ollama',

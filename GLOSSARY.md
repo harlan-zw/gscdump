@@ -95,6 +95,7 @@ flowchart LR
 | Entity | per-site entity stores | `engine/entities` | Site 1—N Entity | "saved URL inspections" or "Indexing API metadata" in `entities` help |
 | Canonical Query | `query_canonical` | `analysis` (`normalizeQuery`) | Query N—1 Canonical Query | not surfaced |
 | Query Dimension | `query_dim` | `engine/entities` | Site 1—1 Query Dimension | not surfaced |
+| Query Embeddings | `query_embeddings` | `engine/entities` | Site 1—1 Query Embeddings | "embeddings" (`entities embeddings build\|status`) |
 | Manifest authority | `ManifestStore` / R2 HEAD pointer | `engine` | (siteId, table, searchType) 1—1 Manifest | not surfaced |
 | Sitemap generation manifest | hosted entity store | `contracts` (ADR-0022) | Site 1—1 current generation | "sitemap" |
 | Store | configured Parquet directory | `@gscdump/cli` | Site 1—1 Store | "store" (`gscdump store *`) |
@@ -420,8 +421,12 @@ The grouping key for near-duplicate search queries — unicode-folded, lowercase
 _Avoid_: slug, hash. Don't bake brand into it (brand is per-tenant + mutable).
 
 **Query Dimension** (`query_dim`; `createQueryDimStore`):
-Per-site **Entity** mapping each distinct `query → { canonical, intent_code, normalizer_version, intent_version }`, built offline. The versioned home for everything derived from a query string; rollups/reads JOIN it, so re-canonicalizing is a dimension rebuild, not a fact re-ingest. The natural home for a future per-canonical embedding. See ADR-0017/0020.
+Per-site **Entity** mapping each distinct `query → { canonical, intent_code, normalizer_version, intent_version }`, built offline. The versioned home for everything derived from a query string; rollups/reads JOIN it, so re-canonicalizing is a dimension rebuild, not a fact re-ingest. See ADR-0017/0020.
 _Avoid_: lookup table, cache.
+
+**Query Embeddings** (`query_embeddings`; `createQueryEmbeddingsStore`):
+Opt-in per-site **Entity** beside **Query Dimension** mapping each distinct `query_canonical → { model, dims, scale, vec_i8_b64, normalizer_version }`, built offline with a user-selected provider (local Ollama or Cloudflare Workers AI). Stored as symmetric Int8 vectors in Parquet with a JSON freshness sidecar, consumed only by `semantic-clusters` while core SQL Analyzers remain zero-ML.
+_Avoid_: vector database, embedding cache, index.
 
 **Search Intent** (`classifyQueryIntent`):
 Lexical, versioned (`INTENT_CLASSIFIER_VERSION`) class of a raw query — informational / commercial / transactional / unknown, plus a `howTo` flag, packed to a small int (`encodeIntent`). Query-pure → materialized in the dimension or computed at query time. Brand intent is deliberately excluded (per-tenant + mutable). See ADR-0020.

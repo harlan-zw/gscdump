@@ -154,4 +154,17 @@ describe('foldCanonicalTypos', () => {
     expect(map.get(typo)).toBe(entries[0]!.canonical)
     expect(elapsedMs).toBeLessThan(1500)
   })
+
+  it('folds directional typos and compound spacing only into the matching direction', () => {
+    const map = foldCanonicalTypos([
+      { canonical: 'markdown to html', impressions: 1000 },
+      { canonical: 'html to markdown', impressions: 800 },
+      { canonical: 'html to markdwon', impressions: 50 },
+      { canonical: 'png to jpg', impressions: 1000 },
+      { canonical: 'jpgto png', impressions: 50 },
+    ])
+    expect(map.get('html to markdwon')).toBe('html to markdown')
+    expect(map.get('html to markdown')).toBe('html to markdown')
+    expect(map.get('jpgto png')).toBe('jpgto png')
+  })
 })

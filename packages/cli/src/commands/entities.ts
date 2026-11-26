@@ -284,8 +284,9 @@ const embeddingsBuildSubCommand = defineCommand({
     }
 
     const embeddingsStore = createQueryEmbeddingsStore({ dataSource: store.dataSource })
-    const existingMeta = args.force ? null : await embeddingsStore.loadMeta(tenantCtx)
-    const canReuse = existingMeta !== null
+    const existingMeta = await embeddingsStore.loadMeta(tenantCtx)
+    const canReuse = !args.force
+      && existingMeta !== null
       && existingMeta.model === provider.model
       && existingMeta.normalizerVersion === NORMALIZER_VERSION
     const existingCanonicals = new Set<string>()
@@ -312,6 +313,12 @@ const embeddingsBuildSubCommand = defineCommand({
       model: provider.model,
       normalizerVersion: NORMALIZER_VERSION,
     })
+
+    if (canReuse && newRecords.length > 0 && existingMeta!.dims > 0 && newRecords[0]!.dims !== existingMeta!.dims) {
+      throw new Error(
+        `Model "${provider.model}" returned ${newRecords[0]!.dims}d vectors, but existing query_embeddings sidecar stores ${existingMeta!.dims}d. Re-run with --force to rebuild all embeddings.`,
+      )
+    }
 
     const builtAt = Date.now()
     let writeResult: { parquetKey: string, rowCount: number, bytes: number, replaced: boolean }
@@ -341,7 +348,7 @@ const embeddingsBuildSubCommand = defineCommand({
       normalizerVersion: NORMALIZER_VERSION,
       canonicalQueries: uniqueCanonicals.size,
       newlyEmbedded: newRecords.length,
-      reused: uniqueCanonicals.size - newRecords.length,
+      reused: writeResult.replaced ? 0 : uniqueCanonicals.size - newRecords.length,
       totalStored: writeResult.rowCount,
       bytes: writeResult.bytes,
       parquetKey: writeResult.parquetKey,

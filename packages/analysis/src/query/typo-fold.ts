@@ -67,6 +67,30 @@ const POLARITY_TOKENS = new Set([
   'alternative',
 ])
 
+const DIRECTIONAL_CONNECTORS = new Set(['to', 'into', '>', '→'])
+const NON_DIRECTIONAL_BEFORE = new Set([
+  'how',
+  'what',
+  'why',
+  'when',
+  'where',
+  'who',
+  'which',
+  'guide',
+  'way',
+  'tip',
+  'intro',
+  'introduction',
+  'learn',
+  'tutorial',
+  'step',
+  'reason',
+  'idea',
+  'example',
+  'benefit',
+  'need',
+])
+
 const MIN_SPACELESS_LEN = 5
 const MIN_DIST1_LEN = 6
 const MIN_DIST2_LEN = 10
@@ -245,10 +269,29 @@ function spacelessForms(tokens: readonly string[], spaceless: string): string[] 
   return [spaceless]
 }
 
+/**
+ * True when `tokens` reflects an order-preserved directional query (either
+ * non-sorted order or an infix directional connector like `X to Y`).
+ */
+function isOrderPreservedTokens(tokens: readonly string[]): boolean {
+  for (let i = 1; i < tokens.length; i++) {
+    if (tokens[i - 1]! > tokens[i]!)
+      return true
+  }
+  for (let i = 1; i < tokens.length - 1; i++) {
+    if (DIRECTIONAL_CONNECTORS.has(tokens[i]!) && !NON_DIRECTIONAL_BEFORE.has(tokens[i - 1]!))
+      return true
+  }
+  return false
+}
+
 function isSpacelessCompoundMatch(anchor: Anchor, tokens: readonly string[], spaceless: string): boolean {
   if (anchor.spaceless === spaceless)
     return true
   if (anchor.tokens.length === tokens.length)
+    return false
+  // Directional queries preserve word order; never tile arbitrary permutations (e.g. `jpgto png` vs `png to jpg`).
+  if (isOrderPreservedTokens(anchor.tokens) || isOrderPreservedTokens(tokens))
     return false
   if (anchor.tokens.length > tokens.length)
     return canTileExact(spaceless, anchor.tokens)
@@ -272,6 +315,20 @@ function leaveOneTokenEntries(tokens: readonly string[]): Array<{ restKey: strin
     out.push({ restKey, omitted })
   }
   return out
+}
+
+function positionalSingleTokenDiff(a: readonly string[], b: readonly string[]): [string, string] | null {
+  let diffIdx = -1
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) {
+      if (diffIdx !== -1)
+        return null
+      diffIdx = i
+    }
+  }
+  if (diffIdx === -1)
+    return null
+  return [a[diffIdx]!, b[diffIdx]!]
 }
 
 function multisetSingleTokenDiff(a: readonly string[], b: readonly string[]): [string, string] | null {
@@ -349,9 +406,12 @@ function matchAnchorEdit(
       const dist = damerauLevenshteinBounded(anchor.canonical, canonical, limit)
       return dist <= limit ? dist : null
     }
-    // Multi-word same token count: allow at most one differing token (order-agnostic
-    // for bag-of-words canonicals whose typo shifts sort position), and guard short tokens.
-    const diff = multisetSingleTokenDiff(anchor.tokens, tokens)
+    // Multi-word same token count: require positional diff for directional queries
+    // so `html to markdwon` never folds into `markdown to html`; use multiset diff
+    // for bag-of-words canonicals whose typo shifts sort position.
+    const diff = (isOrderPreservedTokens(anchor.tokens) || isOrderPreservedTokens(tokens))
+      ? positionalSingleTokenDiff(anchor.tokens, tokens)
+      : multisetSingleTokenDiff(anchor.tokens, tokens)
     if (!diff)
       return null
     const [aTok, bTok] = diff
