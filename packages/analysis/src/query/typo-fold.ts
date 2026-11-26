@@ -31,6 +31,15 @@ export interface TypoFoldInput {
 export interface TypoFoldOptions {
   /** Maximum Damerau-Levenshtein edit distance (default 2; automatically capped to 1 for lengths 6..9 and 0 below 6). */
   maxEditDistance?: 1 | 2
+  /**
+   * Maximum number of highest-impression head anchors indexed for edit-distance
+   * lookups (Pass 2). Defaults to `Infinity` (index every anchor). Spaceless
+   * exact matching (Pass 1) still indexes every anchor, and every input query is
+   * still checked against the indexed edit anchors. Set a bound (e.g. `4_000`)
+   * in memory-constrained runtimes such as Cloudflare Workers when folding 50k+
+   * distinct queries.
+   */
+  maxEditAnchors?: number
 }
 
 export interface TypoFoldMatch {
@@ -496,8 +505,10 @@ export function resolveCanonicalTypoFolds(
       || (a.canonical < b.canonical ? -1 : a.canonical > b.canonical ? 1 : 0),
   )
 
+  const maxEditAnchors = options.maxEditAnchors ?? Number.POSITIVE_INFINITY
   const mapping = new Map<string, string>()
   const matches: TypoFoldMatch[] = []
+  let editAnchorsIndexed = 0
 
   const compoundSigIndex = new Map<string, Anchor[]>()
   const singleWordDelete1Index = new Map<string, Anchor[]>()
@@ -688,6 +699,9 @@ export function resolveCanonicalTypoFolds(
 
     if (compoundSig)
       addToIndex(compoundSigIndex, compoundSig, anchor)
+    if (editAnchorsIndexed >= maxEditAnchors)
+      continue
+    editAnchorsIndexed += 1
     if (isSingleWord) {
       if (spaceless.length >= MIN_DIST1_LEN) {
         for (const dk of delete1Keys(spaceless))

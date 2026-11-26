@@ -2,6 +2,7 @@ import type { TableName } from '../local-store'
 import {
   classifyQueryIntent,
   encodeIntent,
+  foldCanonicalTypos,
   INTENT_CLASSIFIER_VERSION,
   normalizeQuery,
   NORMALIZER_VERSION,
@@ -28,14 +29,22 @@ async function buildSiteQueryDim(
     ctx,
     table: 'queries' as TableName,
     fileSets: { FILES: { table: 'queries' as TableName, partitions: entries.map(e => e.partition) } },
-    sql: `SELECT DISTINCT query FROM read_parquet({{FILES}}, union_by_name = true) WHERE query IS NOT NULL`,
+    sql: `SELECT query, SUM(COALESCE(impressions, 0))::DOUBLE AS impressions, SUM(COALESCE(clicks, 0))::DOUBLE AS clicks FROM read_parquet({{FILES}}, union_by_name = true) WHERE query IS NOT NULL GROUP BY query`,
   })
-  const records = buildQueryDimRecords(rows.map(r => String(r.query)), {
-    normalizeQuery,
-    normalizerVersion: NORMALIZER_VERSION,
-    classifyIntentCode: q => encodeIntent(classifyQueryIntent(q)),
-    intentVersion: INTENT_CLASSIFIER_VERSION,
-  })
+  const records = buildQueryDimRecords(
+    rows.map(r => ({
+      query: String(r.query),
+      impressions: Number(r.impressions ?? 0),
+      clicks: Number(r.clicks ?? 0),
+    })),
+    {
+      normalizeQuery,
+      normalizerVersion: NORMALIZER_VERSION,
+      classifyIntentCode: q => encodeIntent(classifyQueryIntent(q)),
+      intentVersion: INTENT_CLASSIFIER_VERSION,
+      foldCanonicals: foldCanonicalTypos,
+    },
+  )
   await createQueryDimStore({ dataSource: store.dataSource }).write(ctx, records, Date.now())
   return records.length
 }
