@@ -2,14 +2,15 @@
  * `growth` report — long-window strategic view (default 90d vs YoY).
  * Composes content-velocity (new keywords over time), keyword-breadth
  * (histogram of pages by query count), intent-atlas (cluster overview),
+ * url-clusters (page-keyed zero-ML URL co-occurrence topic clusters),
  * and long-tail (page query-distribution shape).
  *
  * v1 entity-model limitation: content-velocity / keyword-breadth /
  * intent-atlas are NOT page-or-query keyed (they're week / bucket / cluster
  * keyed). Their sections leave `findings: []` and surface aggregates via
  * `summary.magnitudeLabel`; consumers wanting the raw shape should follow
- * `artifact.analyzer`. Long-tail is page-keyed, so its section has
- * findings.
+ * `artifact.analyzer`. `url-clusters` and `long-tail` are page-keyed, so
+ * their sections carry findings.
  */
 
 import type { AnalysisResult } from '@gscdump/engine/analysis-types'
@@ -25,11 +26,11 @@ const DEFAULT_MAX = 5
 
 export const growthReport = defineReport<GrowthReportParams>({
   id: 'growth',
-  description: 'Newly observed search queries, queries per page, shared-word groups, and long-tail shape (default 90d / YoY).',
+  description: 'Newly observed search queries, queries per page, shared-word groups, URL topic clusters, and long-tail shape (default 90d / YoY).',
   defaultPeriod: 'last-90d',
   defaultComparison: 'yoy',
   argsSpec: {
-    'max-findings': { type: 'number', description: 'Cap findings per section (long-tail only)', default: DEFAULT_MAX },
+    'max-findings': { type: 'number', description: 'Cap findings per section (url-clusters and long-tail)', default: DEFAULT_MAX },
   },
   plan: (_params, window) => {
     const dates = { startDate: window.start, endDate: window.end }
@@ -37,6 +38,7 @@ export const growthReport = defineReport<GrowthReportParams>({
       { key: 'content-velocity', type: 'content-velocity', params: { ...dates, days: window.days, limit: 200 } },
       { key: 'keyword-breadth', type: 'keyword-breadth', params: { ...dates, limit: 50 } },
       { key: 'intent-atlas', type: 'intent-atlas', params: { ...dates, limit: 50, fuzzy: true } },
+      { key: 'url-clusters', type: 'url-clusters', params: { ...dates, limit: 50 } },
       { key: 'long-tail', type: 'long-tail', params: { ...dates, limit: 100 } },
     ]
   },
@@ -47,6 +49,7 @@ export const growthReport = defineReport<GrowthReportParams>({
         buildNewlyObservedQueriesSection(results['content-velocity']),
         buildKeywordBreadth(results['keyword-breadth']),
         buildSharedWordQueryGroupsSection(results['intent-atlas']),
+        buildUrlClustersSection(results['url-clusters'], max),
         buildLongTail(results['long-tail'], max),
       ],
     }
@@ -115,6 +118,50 @@ function buildSharedWordQueryGroupsSection(res: AnalysisResult | undefined): Rep
     findings: [],
     coverage: sectionCoverage(res),
     artifact: sectionArtifact(res, 'intent-atlas'),
+  }
+}
+
+interface UrlClusterRow {
+  url: string
+  leadQuery: string
+  keywordCount: number
+  totalImpressions: number
+  totalClicks: number
+  meanDominanceShare: number
+}
+
+function buildUrlClustersSection(res: AnalysisResult | undefined, max: number): ReportSection {
+  const rows = reportRows<UrlClusterRow>(res)
+  const kept = rows.slice(0, max)
+  const findings: ReportFinding[] = kept.map((r) => {
+    const others = Math.max(0, r.keywordCount - 1)
+    return {
+      entity: { kind: 'page', value: r.url },
+      metrics: {
+        keywordCount: r.keywordCount,
+        impressions: r.totalImpressions,
+        clicks: r.totalClicks,
+        meanDominanceShare: r.meanDominanceShare,
+      },
+      why: `"${r.leadQuery}" + ${others} related ${others === 1 ? 'query' : 'queries'} (${Math.round(r.meanDominanceShare * 100)}% dominant URL share)`,
+    }
+  })
+  const totalQueries = rows.reduce((s, r) => s + r.keywordCount, 0)
+  const synonymCount = Array.isArray(res?.meta?.synonymPairs) ? res.meta.synonymPairs.length : 0
+  const synonymSuffix = synonymCount > 0 ? `; ${synonymCount} cross-lexical synonym ${synonymCount === 1 ? 'pair' : 'pairs'}` : ''
+  return {
+    id: 'url-clusters',
+    title: 'URL co-occurrence query clusters',
+    severity: 'info',
+    summary: {
+      magnitudeLabel: rows.length > 0
+        ? `${rows.length} URL topic clusters covering ${totalQueries} search queries${synonymSuffix}`
+        : 'no URL topic clusters',
+    },
+    findings,
+    truncated: truncation(rows.length, kept.length),
+    coverage: sectionCoverage(res),
+    artifact: sectionArtifact(res, 'url-clusters'),
   }
 }
 
