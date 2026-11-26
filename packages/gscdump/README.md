@@ -4,7 +4,7 @@
 [![npm downloads](https://img.shields.io/npm/dm/gscdump?color=yellow)](https://npm.chart.dev/gscdump)
 [![license](https://img.shields.io/github/license/harlan-zw/gscdump?color=yellow)](https://github.com/harlan-zw/gscdump/blob/main/LICENSE)
 
-Direct Google Search Console and Bing Webmaster clients with typed queries and Indexing Evidence.
+Direct Google Search Console and Bing Webmaster clients with typed queries and Indexing Evidence. See [gscdump.com/gscdump-sdk](https://gscdump.com/gscdump-sdk) for SDK documentation and [gscdump.com/mcp](https://gscdump.com/mcp) for the hosted MCP server.
 
 ## Install
 
