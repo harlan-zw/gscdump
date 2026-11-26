@@ -23,7 +23,7 @@ import { fleetCommandMeta } from '../command-meta'
 import { createCommandContext } from '../context'
 import { resolveCliEnvironment } from '../environment'
 import { hostedRequestContext } from '../hosted-context'
-import { matchHostedSite, siteMatchStop } from '../hosted-site'
+import { matchHostedSite, noSitesStop, siteMatchStop } from '../hosted-site'
 import { renderTable, textLines } from '../render/layout'
 import { formatChange, formatMetric } from '../render/metrics'
 import { terminalOutputOptions } from '../render/terminal'
@@ -209,6 +209,11 @@ async function runHostedFleet(args: Record<string, unknown>): Promise<FleetSumma
   })
   const body = buildHostedFleetRequest(args, resolvedSiteIds)
   const response = await client.queryFleetSummary({ body })
+  if (!rawSites && response.data.sites.length === 0) {
+    const account = await getHostedAccount(authentication)
+    if (account.sites.length === 0)
+      throw stopError(noSitesStop(siteManagerOf(authentication, account.issuer)))
+  }
   return {
     ...response.data,
     source: 'hosted',

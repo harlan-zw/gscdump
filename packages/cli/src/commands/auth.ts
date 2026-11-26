@@ -1,20 +1,23 @@
-import type { HostedAuthentication, KeyIssuer } from '../auth-state'
+import type { AccessMode, HostedAuthentication, KeyIssuer } from '../auth-state'
 import type { TokenInfo } from '../token-info'
+import os from 'node:os'
 import path from 'node:path'
 import process from 'node:process'
 import { setTimeout as waitForPoll } from 'node:timers/promises'
+import { isCancel, select } from '@clack/prompts'
 import { defineCommand } from 'citty'
 import open from 'open'
 import { ACCESS_NOT_SET_UP, clearTokens, formatAuthProvenance, getAuth, isStaleServiceAccountPointer, loadServiceAccount, loadTokens, resolveBYOK, resolveServiceAccount, saveTokens } from '../auth'
 import { missingRequiredScopes } from '../auth-scopes'
-import { clearAuthentication, formatHostedSync, getHostedAccount, noSitesNextStep, parseAuthentication, parseAuthMode, resolveAuthentication, revokeHostedSession, saveAuthentication, siteManagerOf } from '../auth-state'
+import { clearAuthentication, formatHostedSync, getHostedAccount, hostedAccountWarnings, noSitesNextStep, parseAuthentication, parseAuthMode, resolveAuthentication, revokeHostedSession, saveAuthentication, siteManagerOf } from '../auth-state'
 import { clearBingCredentials, getBingClient, inspectBingCredentials } from '../bing-auth'
 import { authCommandMeta } from '../command-meta'
 import { loadConfig, saveConfig } from '../config'
+import { resolveCliEnvironment } from '../environment'
 import { loginWithHostedSession } from '../hosted-auth'
 import { useCliRuntime } from '../runtime'
 import { currentAccessToken, fetchTokenInfo, redactTokens } from '../token-info'
-import { applyOutputMode, logger, OUTPUT_ARGS } from '../utils'
+import { applyOutputMode, logger, OUTPUT_ARGS, VERSION } from '../utils'
 import { runSmokeTest } from './init'
 import { adoptCurrentConfigAsProfile, profileNameFromEmail, resolveActiveProfile } from './profile'
 
@@ -44,6 +47,8 @@ function loginNextStep(state: HostedAuthentication, siteCount: number, issuer: K
 /** What Hosted mode can run. Every other Google command needs Local mode. */
 export const HOSTED_COMMANDS = [
   'sites',
+  'sites available',
+  'sites connect',
   'sites coverage',
   'fleet',
   'annotations',
@@ -75,10 +80,36 @@ export const HOSTED_COMMANDS = [
   'bing verify',
 ] as const
 
-export async function loginHosted(args: Record<string, unknown>): Promise<void> {
-  const env = useCliRuntime().environment
+function cliSessionUserAgent(): string {
+  return `gscdump-cli/${VERSION} (${os.platform()} ${os.arch()})`.slice(0, 120)
+}
+
+/** True when a human can answer interactive prompts. Pipes, CI, and agents cannot. */
+export function isInteractiveTty(runtime = useCliRuntime()): boolean {
+  return process.stdin.isTTY === true && process.stdout.isTTY === true && !runtime.environment.CI
+}
+
+export async function promptAccessMode(): Promise<AccessMode> {
+  const answer = await select({
+    message: 'Choose an access mode',
+    options: [
+      { value: 'hosted' as const, label: 'Hosted (gscdump.com)', hint: 'Free during beta; no Google Cloud setup needed' },
+      { value: 'local' as const, label: 'Local (your own Google credentials)', hint: 'Service account or Desktop OAuth client' },
+    ],
+  })
+  if (isCancel(answer))
+    // eslint-disable-next-line no-restricted-syntax -- the user cancelled the prompt, so there is nothing to report
+    process.exit(1)
+  return answer
+}
+
+export async function loginHosted(args: Record<string, unknown>): Promise<{ siteCount: number, email: string }> {
+  const runtime = useCliRuntime()
+  const env = runtime.environment
+  const json = Boolean(args.json)
   const apiKey = String(args['api-key'] ?? env.GSCDUMP_API_KEY ?? '')
   const apiRoot = String(args['api-root'] ?? env.GSCDUMP_API_ROOT ?? 'https://gscdump.com/api')
+  let state: HostedAuthentication
   if (!apiKey) {
     if (apiRoot.replace(/\/+$/, '') !== 'https://gscdump.com/api')
       throw new Error('Browser login uses gscdump.com. Supply --api-key for a custom API root.')
@@ -86,34 +117,64 @@ export async function loginHosted(args: Record<string, unknown>): Promise<void> 
       request: fetch,
       now: Date.now,
       wait: waitForPoll,
+      userAgent: cliSessionUserAgent(),
       authorize: async (url) => {
-        logger.info(`Open this URL to link the CLI to gscdump.com:\n${url}`)
+        const prompt = `Open this URL to link the CLI to gscdump.com:\n${url}\nWaiting for browser approval...`
+        if (json)
+          console.error(prompt)
+        else
+          logger.info(prompt)
         if (args.browser !== false)
           await open(url).catch((error: Error) => logger.warn(`Browser could not open: ${error.message}. Open the URL above.`))
       },
     })
-    const state = parseAuthentication({ _tag: 'Hosted', apiRoot, sessionId })
-    if (state._tag !== 'Hosted')
+    const parsed = parseAuthentication({ _tag: 'Hosted', apiRoot, sessionId })
+    if (parsed._tag !== 'Hosted')
       throw new Error('Hosted login did not return a CLI session.')
-    const account = await getHostedAccount(state)
-    await saveAuthentication(state)
-    logger.success(`Hosted mode saved for ${account.user.email}`)
-    logger.info(HOSTED_MODE_NOTE)
-    logger.info(loginNextStep(state, account.sites.length, account.issuer))
-    return
+    state = parsed
   }
-  const state = parseAuthentication({
-    _tag: 'Hosted',
-    apiKey,
-    apiRoot,
-  })
-  if (state._tag !== 'Hosted')
-    throw new Error('Hosted login needs a gscdump user API key.')
+  else {
+    const parsed = parseAuthentication({
+      _tag: 'Hosted',
+      apiKey,
+      apiRoot,
+    })
+    if (parsed._tag !== 'Hosted')
+      throw new Error('Hosted login needs a gscdump user API key.')
+    state = parsed
+  }
   const account = await getHostedAccount(state)
   await saveAuthentication(state)
-  logger.success(`Hosted mode saved for ${account.user.email}`)
-  logger.info(HOSTED_MODE_NOTE)
-  logger.info(loginNextStep(state, account.sites.length, account.issuer))
+  const manager = siteManagerOf(state, account.issuer)
+  const nextStep = loginNextStep(state, account.sites.length, account.issuer)
+  const warnings = hostedAccountWarnings(account, manager)
+  if (json) {
+    console.log(JSON.stringify({
+      authenticated: true,
+      mode: 'hosted',
+      account: account.user.email,
+      apiRoot: state.apiRoot,
+      ...(account.hostedAccess !== undefined ? { hostedAccess: account.hostedAccess } : {}),
+      ...(account.accountStatus ? { accountStatus: account.accountStatus } : {}),
+      sites: account.sites.map(site => ({
+        siteId: site.siteId,
+        siteUrl: site.siteUrl,
+        ...(site.hold ? { hold: site.hold, holdMessage: site.holdMessage ?? null } : {}),
+      })),
+      ...(warnings.length > 0 ? { warnings } : {}),
+      nextStep,
+    }, null, 2))
+  }
+  else {
+    logger.success(`Hosted mode saved for ${account.user.email}`)
+    for (const warning of warnings)
+      logger.warn(warning)
+    logger.info(HOSTED_MODE_NOTE)
+    logger.info(nextStep)
+    if (account.sites.length === 0 && siteManagerOf(state, account.issuer)._tag === 'gscdump')
+      logger.info('Or connect a Site from the terminal: `gscdump sites available` then `gscdump sites connect <property>`.')
+  }
+  return { siteCount: account.sites.length, email: account.user.email }
 }
 
 /**
@@ -175,24 +236,39 @@ async function runStatus(args: Record<string, unknown>): Promise<void> {
       else {
         logger.warn(`Hosted status check failed: ${account.detail}`)
         logger.info(`API: ${authentication.apiRoot}`)
-        logger.info('Fix connectivity or the API key, then run `gscdump auth status` again.')
+        logger.info('sessionId' in authentication
+          ? 'Fix connectivity or run `gscdump auth login --mode hosted` again.'
+          : 'Fix connectivity or the API key, then run `gscdump auth status` again.')
       }
       return
     }
     const sites = account.value.sites
+    const warnings = hostedAccountWarnings(account.value, siteManagerOf(authentication, account.value.issuer))
     if (json) {
       console.log(JSON.stringify({
         authenticated: true,
         mode: 'hosted',
         account: account.value.user.email,
         apiRoot: authentication.apiRoot,
+        ...(account.value.hostedAccess !== undefined ? { hostedAccess: account.value.hostedAccess } : {}),
+        ...(account.value.accountStatus ? { accountStatus: account.value.accountStatus } : {}),
         sites: sites.map(site => ({ siteId: site.siteId, siteUrl: site.siteUrl })),
-        hostedSync: sites.map(site => ({ siteUrl: site.siteUrl, syncStatus: site.syncStatus ?? null, syncProgress: site.syncProgress ?? null, oldestDateSynced: site.oldestDateSynced ?? null, newestDateSynced: site.newestDateSynced ?? null })),
+        hostedSync: sites.map(site => ({
+          siteUrl: site.siteUrl,
+          syncStatus: site.syncStatus ?? null,
+          syncProgress: site.syncProgress ?? null,
+          oldestDateSynced: site.oldestDateSynced ?? null,
+          newestDateSynced: site.newestDateSynced ?? null,
+          ...(site.hold ? { hold: site.hold, holdMessage: site.holdMessage ?? null } : {}),
+        })),
+        ...(warnings.length > 0 ? { warnings } : {}),
         commands: HOSTED_COMMANDS,
       }, null, 2))
     }
     else {
       logger.success(`Hosted mode: ${account.value.user.email}`)
+      for (const warning of warnings)
+        logger.warn(warning)
       console.log(`  API: ${authentication.apiRoot}`)
       console.log(`  Sites: ${sites.length}`)
       for (const site of sites)
@@ -377,6 +453,18 @@ const loginCommand = defineCommand({
       return
     }
     const byok = resolveBYOK()
+    const cliEnv = resolveCliEnvironment()
+    if (!requestedMode && !args['service-account'] && !args.force && !args.json && !byok && !cliEnv.clientId && !cliEnv.clientSecret && !cliEnv.serviceAccountPath && isInteractiveTty(runtime)) {
+      const existingConfig = await loadConfig()
+      const existingTokens = await loadTokens()
+      if (!existingConfig.clientId && !existingConfig.clientSecret && !existingConfig.serviceAccountPath && !existingTokens) {
+        const chosen = await promptAccessMode()
+        if (chosen === 'hosted') {
+          await loginHosted(args)
+          return
+        }
+      }
+    }
     if (byok && !args.force) {
       await saveAuthentication({ _tag: 'Local' })
       logger.info('Google credentials found in the environment. No login is needed. Pass --force to log in again.')

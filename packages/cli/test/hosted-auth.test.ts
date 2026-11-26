@@ -39,4 +39,89 @@ describe('hosted login', () => {
     expect(error).toBeInstanceOf(Error)
     expect(error!.message).toContain('`gscdump auth login --mode hosted`')
   })
+
+  it('retries transient poll errors with backoff and sends userAgent on poll', async () => {
+    const sessionId = 'b'.repeat(64)
+    const waits: number[] = []
+    const request = vi.fn()
+      .mockResolvedValueOnce(response({ code: `S-${'B'.repeat(20)}`, expiresIn: 600 }))
+      .mockRejectedValueOnce(new TypeError('network blip'))
+      .mockResolvedValueOnce(new Response('unavailable', { status: 503 }))
+      .mockResolvedValueOnce(response({ status: 'complete', sessionId }))
+    const result = await loginWithHostedSession({
+      request,
+      authorize: async () => {},
+      wait: async ms => void waits.push(ms),
+      now: () => 0,
+      userAgent: 'gscdump-cli/7.23.2 (linux devbox)',
+    })
+    expect(result).toBe(sessionId)
+    expect(waits).toEqual([4000, 6000])
+    const pollUrl = new URL(request.mock.calls[3]![0] as string)
+    expect(pollUrl.searchParams.get('userAgent')).toBe('gscdump-cli/7.23.2 (linux devbox)')
+  })
+
+  it('stops after repeated transient poll failures', async () => {
+    const request = vi.fn()
+      .mockResolvedValueOnce(response({ code: `S-${'C'.repeat(20)}`, expiresIn: 600 }))
+      .mockResolvedValue(new Response('busy', { status: 503 }))
+    await expect(loginWithHostedSession({
+      request,
+      authorize: async () => {},
+      wait: async () => {},
+      now: () => 0,
+    })).rejects.toThrow('temporarily unavailable')
+    expect(request).toHaveBeenCalledTimes(6)
+  })
+
+  it('never retries 403 login_cancelled responses', async () => {
+    const request = vi.fn()
+      .mockResolvedValueOnce(response({ code: `S-${'D'.repeat(20)}`, expiresIn: 600 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: { details: { reason: 'login_cancelled' } } }), { status: 403 }))
+    await expect(loginWithHostedSession({
+      request,
+      authorize: async () => {},
+      wait: async () => {},
+      now: () => 0,
+    })).rejects.toThrow('cancelled')
+    expect(request).toHaveBeenCalledTimes(2)
+  })
+
+  it('retries 429 and malformed 200 JSON responses without overshooting the deadline', async () => {
+    const sessionId = 'e'.repeat(64)
+    let now = 0
+    const waits: number[] = []
+    const request = vi.fn()
+      .mockResolvedValueOnce(response({ code: `S-${'E'.repeat(20)}`, expiresIn: 20 }))
+      .mockResolvedValueOnce(new Response('rate limited', { status: 429 }))
+      .mockResolvedValueOnce(new Response('<html>gateway</html>', { status: 200 }))
+      .mockResolvedValueOnce(response({ status: 'complete', sessionId }))
+    const result = await loginWithHostedSession({
+      request,
+      authorize: async () => {},
+      wait: async (ms) => {
+        waits.push(ms)
+        now += ms
+      },
+      now: () => now,
+    })
+    expect(result).toBe(sessionId)
+    expect(waits).toEqual([4000, 6000])
+
+    let capNow = 0
+    const capWaits: number[] = []
+    const capRequest = vi.fn()
+      .mockResolvedValueOnce(response({ code: `S-${'F'.repeat(20)}`, expiresIn: 5 }))
+      .mockResolvedValue(new Response('rate limited', { status: 429 }))
+    await expect(loginWithHostedSession({
+      request: capRequest,
+      authorize: async () => {},
+      wait: async (ms) => {
+        capWaits.push(ms)
+        capNow += ms
+      },
+      now: () => capNow,
+    })).rejects.toThrow('expired')
+    expect(capWaits).toEqual([4000, 1000])
+  })
 })

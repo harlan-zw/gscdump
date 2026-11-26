@@ -4,21 +4,17 @@ import { isCancel, text } from '@clack/prompts'
 import { defineCommand } from 'citty'
 import { googleSearchConsole } from 'gscdump/client'
 import { ACCESS_NOT_SET_UP, getAuth, loadTokens, resolveBYOK, resolveServiceAccount } from '../auth'
-import { saveAuthentication } from '../auth-state'
+import { parseAuthMode, saveAuthentication } from '../auth-state'
 import { initCommandMeta } from '../command-meta'
 import { defaultDataDir, loadConfig, saveConfig } from '../config'
+import { resolveCliEnvironment } from '../environment'
 import { useCliRuntime } from '../runtime'
 import { applyOutputMode, logger, OUTPUT_ARGS } from '../utils'
-import { loginHosted } from './auth'
-
-/** True when a person can answer prompts. Pipes, cron, and agents cannot. */
-function canPrompt(): boolean {
-  return process.stdin.isTTY === true
-}
+import { isInteractiveTty, loginHosted, promptAccessMode } from './auth'
 
 async function promptDataDir(existing?: string): Promise<string> {
   const fallback = existing ?? defaultDataDir()
-  if (!canPrompt())
+  if (!isInteractiveTty())
     return fallback
   const answer = await text({
     message: 'Where should Parquet data be stored?',
@@ -57,16 +53,24 @@ export const initCommand = defineCommand({
       type: 'string',
       description: 'Hosted API root for --mode hosted; defaults to GSCDUMP_API_ROOT or https://gscdump.com/api',
     },
+    'browser': {
+      type: 'boolean',
+      default: true,
+      description: 'Open the authorization URL automatically for --mode hosted. Pass --no-browser to open it yourself.',
+    },
     ...OUTPUT_ARGS,
   },
   async run({ args }) {
     applyOutputMode(args)
     const config = await loadConfig()
-    const mode = useCliRuntime().authModeOverride
+    const runtime = useCliRuntime()
+    const cliEnv = resolveCliEnvironment()
+    const mode = parseAuthMode(args.mode) ?? runtime.authModeOverride ?? parseAuthMode(runtime.environment.GSCDUMP_AUTH_MODE)
 
-    if (mode === 'hosted') {
-      await loginHosted(args)
-      printHostedNextSteps()
+    if (mode === 'hosted' || (!mode && (args['api-key'] || runtime.environment.GSCDUMP_API_KEY))) {
+      const result = await loginHosted(args)
+      if (!args.json && result.siteCount > 0)
+        printHostedNextSteps()
       return
     }
 
@@ -114,7 +118,7 @@ export const initCommand = defineCommand({
       return
     }
 
-    if (!canPrompt()) {
+    if (!isInteractiveTty(runtime)) {
       // No terminal: never prompt. Finish with saved tokens, or say which command to run.
       const tokens = await loadTokens()
       if (!tokens)
@@ -130,6 +134,17 @@ export const initCommand = defineCommand({
     console.log('  \x1B[1mWelcome to gscdump\x1B[0m')
     console.log('  \x1B[90mGoogle Search Console data extraction CLI\x1B[0m')
     console.log()
+
+    const existingTokens = await loadTokens()
+    if (!mode && !args.json && !args.force && !existingTokens && !cliEnv.clientId && !cliEnv.clientSecret) {
+      const chosen = await promptAccessMode()
+      if (chosen === 'hosted') {
+        const result = await loginHosted(args)
+        if (result.siteCount > 0)
+          printHostedNextSteps()
+        return
+      }
+    }
 
     const dataDir = args.store ? await promptDataDir(config.dataDir) : undefined
     await saveConfig({

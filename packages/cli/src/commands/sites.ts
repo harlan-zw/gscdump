@@ -1,5 +1,5 @@
 import type { VerificationMethod } from 'gscdump/sites'
-import type { HostedAuthentication } from '../auth-state'
+import type { HostedAuthentication, HostedAvailableProperty } from '../auth-state'
 import process from 'node:process'
 import { confirm, isCancel } from '@clack/prompts'
 import { defineCommand } from 'citty'
@@ -7,11 +7,12 @@ import { resolveSiteInput } from 'gscdump'
 import { getLatestGscDate } from 'gscdump/dates'
 import { unwrapResult } from 'gscdump/result'
 import { addSite, deleteSite, fetchSitesWithSitemaps, getVerificationToken, getVerifiedSite, listVerifiedSites, siteUrlToVerificationSite, unverifySite, verificationMethodsFor, verifySite } from 'gscdump/sites'
-import { connectSiteStep, formatHostedSync, getHostedAccount, localModeRequired, resolveAuthentication, siteManagerOf } from '../auth-state'
+import { connectHostedSite, connectSiteStep, formatHostedSync, getHostedAccount, listHostedAvailableProperties, localModeRequired, parseAuthentication, resolveAuthentication, siteManagerOf } from '../auth-state'
 import { sitesCommandMeta } from '../command-meta'
 import { createCommandContext, formatSiteResolution } from '../context'
+import { resolveCliEnvironment } from '../environment'
 import { HOSTED_ARGS, resolveHostedSiteWithTarget } from '../hosted-site'
-import { commandLineError } from '../stop'
+import { commandLineError, stopError } from '../stop'
 import { ALL_SEARCH_TYPES, applyOutputMode, logger, OUTPUT_ARGS, parseSearchType, plural } from '../utils'
 import { COMPARISON_FLAGS, DEFAULT_WINDOW, parseWindowFlags, PERIOD_FLAGS, windowFlagErrorToException } from '../window'
 
@@ -91,6 +92,12 @@ const addCommand = defineCommand({
   },
   async run({ args }) {
     applyOutputMode(args)
+    const auth = await resolveAuthentication()
+    if (auth._tag === 'Hosted') {
+      throw localModeRequired('sessionId' in auth
+        ? 'To connect a Site to gscdump.com in Hosted mode, run `gscdump sites available` and `gscdump sites connect <property>`.'
+        : undefined)
+    }
     const ctx = await createCommandContext({ needsAuth: true })
     await addSite(ctx.client!, args.url)
 
@@ -389,7 +396,13 @@ async function runListHostedSites(args: Record<string, unknown>, authentication:
     console.log(JSON.stringify(sites.map(site => ({
       siteId: site.siteId,
       siteUrl: site.siteUrl,
-      hostedSync: { syncStatus: site.syncStatus ?? null, syncProgress: site.syncProgress ?? null, oldestDateSynced: site.oldestDateSynced ?? null, newestDateSynced: site.newestDateSynced ?? null },
+      hostedSync: {
+        syncStatus: site.syncStatus ?? null,
+        syncProgress: site.syncProgress ?? null,
+        oldestDateSynced: site.oldestDateSynced ?? null,
+        newestDateSynced: site.newestDateSynced ?? null,
+        ...(site.hold ? { hold: site.hold, holdMessage: site.holdMessage ?? null } : {}),
+      },
     })), null, 2))
     return
   }
@@ -522,6 +535,168 @@ const coverageCommand = defineCommand({
   },
 })
 
+async function resolveHostedOnlyAuth(args: Record<string, unknown>, commandName: string): Promise<HostedAuthentication> {
+  const environment = resolveCliEnvironment().values
+  const authentication = args['api-key']
+    ? parseAuthentication({ _tag: 'Hosted', apiKey: args['api-key'], apiRoot: String(args['api-root'] || environment.GSCDUMP_API_ROOT || 'https://gscdump.com/api') })
+    : await resolveAuthentication()
+  if (authentication._tag !== 'Hosted') {
+    throw stopError({
+      code: 'HOSTED_MODE_REQUIRED',
+      message: `\`gscdump ${commandName}\` manages Sites on gscdump.com, so it needs Hosted mode. Run \`gscdump auth login --mode hosted\`, or pass --api-key.`,
+      nextCommand: 'gscdump auth login --mode hosted',
+    })
+  }
+  if (args['api-root'] && String(args['api-root']).replace(/\/+$/, '') !== authentication.apiRoot)
+    throw new Error('The API root changed. Pass --api-key for the new API root.')
+  return authentication
+}
+
+const availableCommand = defineCommand({
+  meta: {
+    name: 'available',
+    description: 'List Search Console properties available to connect in Hosted mode (hosted)',
+  },
+  args: {
+    'api-root': HOSTED_ARGS['api-root'],
+    'api-key': HOSTED_ARGS['api-key'],
+    ...OUTPUT_ARGS,
+  },
+  async run({ args }) {
+    const { json } = applyOutputMode(args)
+    const authentication = await resolveHostedOnlyAuth(args as Record<string, unknown>, 'sites available')
+    const result = await listHostedAvailableProperties(authentication)
+    if (json) {
+      console.log(JSON.stringify(result, null, 2))
+      return
+    }
+    if (result.properties.length === 0) {
+      logger.warn(result.note ?? 'No Search Console properties found for this Google account.')
+      return
+    }
+    logger.success(`${plural(result.properties.length, 'Search Console property', 'Search Console properties')} (${result.sites.used} of ${result.sites.allowance} Hosted Sites used):`)
+    console.log()
+    for (const prop of result.properties) {
+      const state = prop.connected
+        ? 'connected'
+        : !prop.canConnect
+            ? `unverified (${prop.permissionLevel})`
+            : prop.estimate
+              ? prop.estimate.status
+              : 'available'
+      console.log(`  ${prop.propertyUrl}  [${prop.propertyType}, ${state}]`)
+      if (!prop.connected && prop.canConnect) {
+        const hostHint = prop.hostScope === 'domain' ? ` --host ${prop.host}` : ''
+        console.log(`    \x1B[90m└─ connect:\x1B[0m gscdump sites connect ${prop.propertyUrl}${hostHint}`)
+      }
+      if (prop.estimate?.lines.length) {
+        for (const line of prop.estimate.lines)
+          console.log(`    \x1B[90m└─\x1B[0m ${line}`)
+      }
+    }
+  },
+})
+
+function normalizeBareHost(value: string): string | null {
+  const normalized = value.trim().toLowerCase().replace(/^\/+|\/+$/g, '').replace(/\.+$/, '')
+  if (!normalized || normalized.includes('/'))
+    return null
+  return URL.parse(`https://${normalized}`)?.hostname === normalized ? normalized : null
+}
+
+function isRootProperty(prop: HostedAvailableProperty): boolean {
+  if (prop.propertyType !== 'url-prefix')
+    return true
+  return URL.parse(prop.propertyUrl)?.pathname === '/'
+}
+
+const connectCommand = defineCommand({
+  meta: {
+    name: 'connect',
+    description: 'Connect a Search Console property to your hosted gscdump.com record (hosted)',
+  },
+  args: {
+    'property': { type: 'positional', required: true, description: 'Property URL (sc-domain:example.com or https://example.com/) or host (example.com)' },
+    'host': { type: 'string', description: 'Exact host to register for a Domain property (defaults to the property host)' },
+    'inspect': { type: 'boolean', description: 'Enable or disable automatic URL Inspection (pass --no-inspect to turn off)' },
+    'api-root': HOSTED_ARGS['api-root'],
+    'api-key': HOSTED_ARGS['api-key'],
+    ...OUTPUT_ARGS,
+  },
+  async run({ args }) {
+    const { json } = applyOutputMode(args)
+    const authentication = await resolveHostedOnlyAuth(args as Record<string, unknown>, 'sites connect')
+    const rawTarget = String(args.property ?? '').trim()
+    if (!rawTarget)
+      throw commandLineError('Pass a Search Console property URL (sc-domain:example.com or https://example.com/) or host (example.com).')
+
+    let host: string | undefined
+    if (args.host !== undefined && String(args.host).trim() !== '') {
+      const normalizedFlagHost = normalizeBareHost(String(args.host))
+      if (!normalizedFlagHost)
+        throw commandLineError(`Invalid --host "${String(args.host)}". Pass a bare hostname such as www.example.com.`)
+      host = normalizedFlagHost
+    }
+
+    let propertyUrl = rawTarget
+    if (/^sc-domain:/i.test(rawTarget)) {
+      propertyUrl = `sc-domain:${rawTarget.slice('sc-domain:'.length)}`
+    }
+    else if (/^https?:\/\//i.test(rawTarget)) {
+      if (host)
+        throw commandLineError('--host applies only to Domain properties (sc-domain:...), not URL-prefix properties.')
+    }
+    else {
+      // Allow passing a bare host like `example.com`: resolve unambiguously from available properties.
+      const normalized = normalizeBareHost(rawTarget)
+      if (!normalized)
+        throw commandLineError(`Invalid property or host "${rawTarget}". Pass a property URL (sc-domain:example.com or https://example.com/) or a bare host (example.com).`)
+      const available = await listHostedAvailableProperties(authentication)
+      const matches = available.properties.filter(prop =>
+        prop.canConnect
+        && isRootProperty(prop)
+        && (prop.host.toLowerCase() === normalized
+          || (prop.hostScope === 'domain' && normalized.endsWith(`.${prop.host.toLowerCase()}`))),
+      )
+      if (matches.length === 1) {
+        const matched = matches[0]!
+        propertyUrl = matched.propertyUrl
+        if (matched.hostScope === 'exact') {
+          if (host)
+            throw commandLineError(`--host applies only to Domain properties, not "${propertyUrl}".`)
+        }
+        else {
+          const matchedHost = matched.host.toLowerCase()
+          if (host && host !== matchedHost && !host.endsWith(`.${matchedHost}`))
+            throw commandLineError(`--host "${host}" is outside Domain property "${propertyUrl}".`)
+          if (!host)
+            host = normalized
+        }
+      }
+      else if (matches.length > 1) {
+        throw commandLineError(`Multiple Search Console properties match "${rawTarget}": ${matches.map(m => m.propertyUrl).join(', ')}. Pass the exact propertyUrl.`)
+      }
+      else {
+        throw commandLineError(`No connectable Search Console property matches "${rawTarget}". Run \`gscdump sites available\` to list your properties.`)
+      }
+    }
+
+    const inspectionEnabled = typeof args.inspect === 'boolean' ? args.inspect : undefined
+    const result = await connectHostedSite(authentication, {
+      propertyUrl,
+      ...(host ? { host } : {}),
+      ...(inspectionEnabled !== undefined ? { inspectionEnabled } : {}),
+    })
+    if (json) {
+      console.log(JSON.stringify(result, null, 2))
+      return
+    }
+    logger.success(result.message)
+    if (result.site.siteId)
+      logger.info(`Next: run \`gscdump sites\` to check sync progress for ${result.site.siteId}.`)
+  },
+})
+
 const listCommand = defineCommand({
   meta: { name: 'list', description: 'List GSC sites (alias of bare `sites`)' },
   args: LIST_ARGS,
@@ -535,6 +710,8 @@ export const sitesCommand = defineCommand({
   args: LIST_ARGS,
   subCommands: {
     'list': listCommand,
+    'available': availableCommand,
+    'connect': connectCommand,
     'add': addCommand,
     'delete': deleteCommand,
     'get': getCommand,
