@@ -376,4 +376,74 @@ describe('hosted CLI signup & Site setup UX', () => {
     await expect(run(['fleet', '--json'])).resolves.toBe(0)
     expect(JSON.parse(stdout.join('\n')).sites).toEqual([])
   })
+
+  it('classifies Hosted v1 401 and 403 errors without leaking Google hints or Local Auth config sources', async () => {
+    await writeHostedSession()
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json(
+      {
+        error: { code: 'unauthorized', message: 'Invalid CLI session', requestId: 'req_401', retryable: false, details: {} },
+      },
+      { status: 401 },
+    )))
+
+    await expect(run(['fleet', '--json'])).resolves.toBe(1)
+    expect(JSON.parse(stdout.join('\n')).error).toEqual({
+      code: 'HOSTED_CREDENTIALS_REJECTED',
+      message: 'gscdump.com rejected the CLI session. Run `gscdump auth login --mode hosted` again.',
+      nextCommand: 'gscdump auth login --mode hosted',
+    })
+    expect(stderr).not.toContain('Auth config sources')
+
+    stdout = []
+    stderr = ''
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json(
+      {
+        error: { code: 'forbidden', message: 'Hosted access is required.', requestId: 'req_403', retryable: false, details: {} },
+      },
+      { status: 403 },
+    )))
+
+    await expect(run(['fleet', '--json'])).resolves.toBe(1)
+    const err403 = JSON.parse(stdout.join('\n')).error
+    expect(err403.message).toBe('Hosted access is required.')
+    expect(err403.message).not.toContain('full user or owner')
+    expect(stderr).not.toContain('Auth config sources')
+
+    // v1 401 "Invalid Bearer credential" maps to rejected API key (nextCommand: null)
+    stdout = []
+    stderr = ''
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json(
+      { error: { code: 'unauthorized', message: 'Invalid Bearer credential', requestId: 'req_401_key', retryable: false, details: {} } },
+      { status: 401 },
+    )))
+    await expect(run(['fleet', '--json'])).resolves.toBe(1)
+    expect(JSON.parse(stdout.join('\n')).error).toEqual({
+      code: 'HOSTED_CREDENTIALS_REJECTED',
+      message: 'gscdump.com rejected the API key. Run `gscdump auth login --mode hosted --api-key KEY` with a valid key.',
+      nextCommand: null,
+    })
+    expect(stderr).not.toContain('Auth config sources')
+
+    // v1 401 with generic unauthorized message preserves server message
+    stdout = []
+    stderr = ''
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json(
+      { error: { code: 'unauthorized', message: 'This account is being deleted.', requestId: 'req_401_del', retryable: false, details: {} } },
+      { status: 401 },
+    )))
+    await expect(run(['fleet', '--json'])).resolves.toBe(1)
+    expect(JSON.parse(stdout.join('\n')).error).toEqual({
+      code: 'HOSTED_CREDENTIALS_REJECTED',
+      message: 'This account is being deleted.',
+      nextCommand: null,
+    })
+
+    // Non-contract 401 body (response_validation) stays FAILED, not HOSTED_CREDENTIALS_REJECTED
+    stdout = []
+    stderr = ''
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('<html>proxy 401</html>', { status: 401 })))
+    await expect(run(['fleet', '--json'])).resolves.toBe(1)
+    expect(JSON.parse(stdout.join('\n')).error.code).toBe('FAILED')
+    expect(stderr).not.toContain('Auth config sources')
+  })
 })

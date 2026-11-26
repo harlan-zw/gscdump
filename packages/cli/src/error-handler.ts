@@ -11,7 +11,7 @@ import { classifyError } from 'gscdump/errors'
 import { isQueryError } from 'gscdump/query'
 import { isUsageError } from './command-registry'
 import { describeRecordReadRefusal } from './hosted-query'
-import { HOSTED_SESSION_EXPIRED, isSessionExpiredError } from './hosted-session'
+import { HOSTED_SESSION_EXPIRED, hostedV1UnauthorizedStop, isHostedV1Error, isSessionExpiredError } from './hosted-session'
 import { quotaStopOf } from './quota-ledger'
 import { isUserStop, stopDetailsOf } from './stop'
 
@@ -244,15 +244,20 @@ export function describeCliError(error: unknown): CliErrorReport {
       showAuthSources: false,
     }
   }
-  // A v1 call refused the CLI session. Without this, the Google sign-in hint
-  // and the Google credential sources print under a Hosted failure.
+  // A v1 call refused the CLI session or API key. Without this, the Google
+  // sign-in hint and Local credential sources print under a Hosted failure.
   if (isSessionExpiredError(error))
     return { kind: 'expected', message: HOSTED_SESSION_EXPIRED.message, hint: '', showAuthSources: false, stop: HOSTED_SESSION_EXPIRED }
+  const unauthorizedV1 = hostedV1UnauthorizedStop(error)
+  if (unauthorizedV1)
+    return { kind: 'expected', message: unauthorizedV1.message, hint: '', showAuthSources: false, stop: unauthorizedV1 }
   const refusal = recordReadRefusalOf(error)
   if (refusal) {
     const text = describeRecordReadRefusal(refusal)
     return { kind: 'expected', ...text, showAuthSources: false, stop: recordReadStop(refusal, text) }
   }
+  if (isHostedV1Error(error))
+    return { kind: 'expected', message: error.message, hint: '', showAuthSources: false }
   if (error instanceof Error && (error as { hostedRequestError?: unknown }).hostedRequestError === true)
     return { kind: 'expected', message: error.message, hint: '', showAuthSources: false }
   const classified = classifyError(error)

@@ -19,6 +19,21 @@ export const HOSTED_SESSION_EXPIRED: StopDetails = {
   nextCommand: 'gscdump auth login --mode hosted',
 }
 
+export const HOSTED_SESSION_REJECTED_MESSAGE = 'gscdump.com rejected the CLI session. Run `gscdump auth login --mode hosted` again.'
+export const HOSTED_KEY_REJECTED_MESSAGE = 'gscdump.com rejected the API key. Run `gscdump auth login --mode hosted --api-key KEY` with a valid key.'
+
+export const HOSTED_V1_SESSION_REJECTED: StopDetails = {
+  code: 'HOSTED_CREDENTIALS_REJECTED',
+  message: HOSTED_SESSION_REJECTED_MESSAGE,
+  nextCommand: 'gscdump auth login --mode hosted',
+}
+
+export const HOSTED_V1_KEY_REJECTED: StopDetails = {
+  code: 'HOSTED_CREDENTIALS_REJECTED',
+  message: HOSTED_KEY_REJECTED_MESSAGE,
+  nextCommand: null,
+}
+
 /** The 401 body of a `/api/cli/*` route or a v1 operation says the CLI session expired. */
 export function isSessionExpiredBody(body: unknown): boolean {
   return sessionExpiredBodySchema.safeParse(body).success
@@ -33,4 +48,30 @@ export function isSessionExpiredError(error: unknown): boolean {
     return false
   const { status, details } = error as { status?: unknown, details?: unknown }
   return status === 401 && sessionExpiredDetailsSchema.safeParse(details).success
+}
+
+/**
+ * Classify a non-expired `GscdumpV1Error` so Hosted v1 failures (such as a
+ * revoked CLI session on `fleet`) never fall through to Google's error
+ * classifier or print Local Google credential sources.
+ */
+export function hostedV1UnauthorizedStop(error: unknown): StopDetails | null {
+  if (!(error instanceof Error) || error.name !== 'GscdumpV1Error')
+    return null
+  const { status, code } = error as { status?: unknown, code?: unknown }
+  if (status !== 401 || code !== 'unauthorized')
+    return null
+  if (/\bcli session\b/i.test(error.message))
+    return HOSTED_V1_SESSION_REJECTED
+  if (/\b(?:api key|bearer credential)\b/i.test(error.message))
+    return HOSTED_V1_KEY_REJECTED
+  return {
+    code: 'HOSTED_CREDENTIALS_REJECTED',
+    message: error.message,
+    nextCommand: null,
+  }
+}
+
+export function isHostedV1Error(error: unknown): error is Error {
+  return error instanceof Error && error.name === 'GscdumpV1Error'
 }
