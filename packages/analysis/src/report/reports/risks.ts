@@ -32,7 +32,7 @@ export const risksReport = defineReport<RisksReportParams>({
     const prev = { prevStartDate: comparison.start, prevEndDate: comparison.end }
     return [
       { key: 'decay', type: 'decay', params: { ...dates, ...prev, limit: 100 }, required: true },
-      { key: 'cannibalization', type: 'cannibalization', params: { ...dates, limit: 50 } },
+      { key: 'cannibalization', type: 'cannibalization', params: { ...dates, limit: 50, fuzzy: true } },
       { key: 'dark-traffic', type: 'dark-traffic', params: { ...dates, limit: 50 } },
       { key: 'device-gap', type: 'device-gap', params: { ...dates, limit: 50 } },
     ]

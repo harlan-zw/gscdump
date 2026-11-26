@@ -293,7 +293,7 @@ A routing stop also has `siteUrl`. `STORE_RANGE_NOT_COVERED` adds `missingDates`
 | `gscdump bing verify` | Check and activate a Hosted Bing connection |
 | `gscdump sync` | Copy Search Console rows into the local Store |
 | `gscdump query` | Rows by page, query, date, country, or device, from the Store or the hosted record (`--questions`, `--long-queries`) |
-| `gscdump analyze <id>` | One Analyzer over the Store, live rows, or hosted record (`device-gap`, `position-distribution`, `ctr-curve`, `dark-traffic`, `content-velocity`, `keyword-breadth`) |
+| `gscdump analyze <id>` | One Analyzer over the Store (including `semantic-clusters`), live rows, or hosted record (`device-gap`, `position-distribution`, `ctr-curve`, `dark-traffic`, `content-velocity`, `keyword-breadth`) |
 | `gscdump report <id>` | A Report that composes several Analyzers |
 | `gscdump inspect <url...>` | URL Inspection with Indexing Evidence, saved to the Store |
 | `gscdump sitemaps` | List, submit, delete, probe sitemaps, and inspect hosted visibility (`sitemaps visibility`) |
@@ -303,7 +303,7 @@ A routing stop also has `siteUrl`. `STORE_RANGE_NOT_COVERED` adds `missingDates`
 | `gscdump indexing watch` | Hosted: list, add, and remove Watched URLs and read their Watched URL inspections |
 | `gscdump dump` | Export Store tables, inspections, sitemaps, and Bing data as Parquet, CSV, JSON, NDJSON, SQLite, or DuckDB |
 | `gscdump store` | Store stats, compaction, garbage collection, resets |
-| `gscdump entities` | Read saved inspections; snapshot Indexing API metadata |
+| `gscdump entities` | Read saved inspections; snapshot Indexing API metadata; build or check opt-in `query_embeddings` (`entities embeddings build\|status`) |
 | `gscdump config` | Defaults such as `defaultSite`, `dataDir`, `defaultLimit` |
 | `gscdump profile` | Separate credential and config directories |
 | `gscdump auth` | `status`, `login`, `logout`, `refresh` |
@@ -390,6 +390,14 @@ gscdump analyze striking-distance --site example.com --json
   `--prev-end` together to override it. `--vs` belongs to `report`.
 - `--limit` caps the rows returned. It never caps the rows read.
   `--fetch-budget` caps each live fetch (default 25000, max 100000).
+- The 18 Analyzers with an impression floor accept `--min-impressions N`.
+  `cannibalization`, `clustering`, and `intent-atlas` accept `--canonical` to
+  fold near-duplicate variants via `normalizeQuery`, and `--fuzzy` to also fold
+  typo and compound-spacing variants.
+- To group cross-lexical synonyms in a local Store, build the opt-in
+  `query_embeddings` sidecar with `gscdump entities embeddings build --site example.com`
+  (`--provider ollama` or `workers-ai`), then run
+  `gscdump analyze semantic-clusters --site example.com --json`.
 - A `! Partial data` warning, or `meta.coverage.kind: "truncated"` in JSON,
   means a live fetch hit its budget. Say the result is partial, or rerun
   with a larger `--fetch-budget`.

@@ -255,6 +255,7 @@ describe('risks report', () => {
       ]),
     ])
     const { risksReport } = await import('../src/report/reports/risks')
+    expect(risksReport.plan({}, window, ctx.comparison).find(s => s.key === 'cannibalization')?.params.fuzzy).toBe(true)
     const out = await runReport(risksReport, { source, analyzers, ctx })
     expect(out.sections.map(s => s.id)).toEqual(['decay', 'cannibalization', 'dark-traffic', 'device-gap'])
     expect(out.sections[0]!.severity).toBe('high')
@@ -333,6 +334,7 @@ describe('pre-publish report', () => {
     const analyzers = stubRegistry([
       stubAnalyzer('cannibalization', [
         { keyword: 'best widget guide', totalClicks: 30, totalImpressions: 1500, competitorCount: 2, competitors: [{ url: '/a' }, { url: '/b' }] },
+        { keyword: 'schema validator', variants: ['schema validator', 'widget schema checker'], totalClicks: 10, totalImpressions: 400, competitorCount: 2, competitors: [{ url: '/d' }, { url: '/e' }] },
         { keyword: 'unrelated', totalClicks: 90, totalImpressions: 6000, competitorCount: 1, competitors: [{ url: '/c' }] },
       ]),
       stubAnalyzer('striking-distance', [
@@ -341,10 +343,11 @@ describe('pre-publish report', () => {
       ]),
     ])
     const { prePublishReport } = await import('../src/report/reports/pre-publish')
+    expect(prePublishReport.plan({ topic: 'widget' }, window).find(s => s.key === 'cannibalization')?.params.fuzzy).toBe(true)
     const out = await runReport(prePublishReport, { source, analyzers, ctx })
     expect(out.sections.map(s => s.id)).toEqual(['cannibalization-risk', 'striking-peers'])
-    expect(out.sections[0]!.findings).toHaveLength(1)
-    expect(out.sections[0]!.findings[0]!.entity.value).toBe('best widget guide')
+    expect(out.sections[0]!.findings).toHaveLength(2)
+    expect(out.sections[0]!.findings.map(f => f.entity.value)).toEqual(['best widget guide', 'schema validator'])
     expect(out.sections[1]!.findings).toHaveLength(1)
     expect(out.sections[1]!.findings[0]!.entity.value).toBe('cheap widgets')
   })
@@ -384,6 +387,7 @@ describe('growth report', () => {
       ]),
     ])
     const { growthReport } = await import('../src/report/reports/growth')
+    expect(growthReport.plan({}, window).find(s => s.key === 'intent-atlas')?.params.fuzzy).toBe(true)
     const out = await runReport(growthReport, { source, analyzers, ctx })
     expect(out.sections.map(s => s.id)).toEqual(['content-velocity', 'keyword-breadth', 'intent-atlas', 'long-tail'])
     expect(out.sections[0]!.summary.magnitudeLabel).toContain('55 search queries first observed within this window')
