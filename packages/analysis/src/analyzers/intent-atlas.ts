@@ -19,6 +19,7 @@ import { METRIC_EXPR } from '@gscdump/engine/sql-fragments'
 import { daysAgoUtc as daysAgo } from 'gscdump/dates'
 import { parseJsonRows as parseJsonList, rowString as str } from '../analyzer/row-values'
 import { normalizeQuery } from '../query/normalize'
+import { foldCanonicalTypos } from '../query/typo-fold'
 
 const INTENT_ATLAS_STOP_WORDS = [
   'the',
@@ -90,9 +91,9 @@ function resolveMinTokenImpressions(params: AnalysisParams, minQueryImpressions:
 
 function reduceCanonicalIntentAtlas(
   rows: Row[],
-  options: { minClusterSize: number, minTokenImpressions: number, limit: number },
+  options: { minClusterSize: number, minTokenImpressions: number, limit: number, fuzzy?: boolean },
 ): IntentAtlasResult[] {
-  const { minClusterSize, minTokenImpressions, limit } = options
+  const { minClusterSize, minTokenImpressions, limit, fuzzy = false } = options
   const queries = rows.map(r => ({
     query: str(r.query),
     impressions: num(r.impressions),
@@ -103,14 +104,56 @@ function reduceCanonicalIntentAtlas(
   if (totalQueries === 0)
     return []
 
-  const queryTokens: string[][] = []
-  const tokenStats = new Map<string, { impressions: number, queryCount: number }>()
+  const baseCanonicals = queries.map(q => normalizeQuery(q.query) || q.query.toLowerCase())
+  const queryFuzzyMap = fuzzy
+    ? foldCanonicalTypos(queries.map((q, idx) => ({
+        canonical: baseCanonicals[idx]!,
+        impressions: q.impressions,
+        clicks: q.clicks,
+      })))
+    : null
 
-  for (const q of queries) {
-    const normalized = normalizeQuery(q.query) || q.query.toLowerCase()
+  const rawQueryTokens: string[][] = []
+  const rawTokenTotals = new Map<string, { impressions: number, clicks: number }>()
+
+  for (let i = 0; i < queries.length; i++) {
+    const q = queries[i]!
+    const base = baseCanonicals[i]!
+    const normalized = queryFuzzyMap ? (queryFuzzyMap.get(base) ?? base) : base
     const seen = new Set<string>()
     for (const token of normalized.split(WHITESPACE_RE)) {
       if (token.length < 3 || INTENT_ATLAS_STOP_WORD_SET.has(token) || seen.has(token))
+        continue
+      seen.add(token)
+      if (fuzzy) {
+        const totals = rawTokenTotals.get(token) ?? { impressions: 0, clicks: 0 }
+        totals.impressions += q.impressions
+        totals.clicks += q.clicks
+        rawTokenTotals.set(token, totals)
+      }
+    }
+    rawQueryTokens.push([...seen])
+  }
+
+  const tokenFuzzyMap = fuzzy
+    ? foldCanonicalTypos(
+        [...rawTokenTotals.entries()].map(([canonical, totals]) => ({
+          canonical,
+          impressions: totals.impressions,
+          clicks: totals.clicks,
+        })),
+      )
+    : null
+
+  const queryTokens: string[][] = []
+  const tokenStats = new Map<string, { impressions: number, queryCount: number }>()
+
+  for (let i = 0; i < queries.length; i++) {
+    const q = queries[i]!
+    const seen = new Set<string>()
+    for (const rawToken of rawQueryTokens[i]!) {
+      const token = tokenFuzzyMap ? (tokenFuzzyMap.get(rawToken) ?? rawToken) : rawToken
+      if (seen.has(token))
         continue
       seen.add(token)
       const stat = tokenStats.get(token) ?? { impressions: 0, queryCount: 0 }
@@ -187,7 +230,7 @@ export const intentAtlasAnalyzer = defineAnalyzer<AnalysisParams, Row, IntentAtl
     const minTokenImpressions = resolveMinTokenImpressions(params, minQueryImpressions, minClusterSize)
     const limit = params.limit ?? 200
 
-    if (params.canonical) {
+    if (params.canonical || params.fuzzy) {
       const sql = `
         SELECT
           query,
@@ -295,12 +338,12 @@ export const intentAtlasAnalyzer = defineAnalyzer<AnalysisParams, Row, IntentAtl
 
   reduceSql(rows, params) {
     const arr = Array.isArray(rows) ? rows : []
-    if (params.canonical) {
+    if (params.canonical || params.fuzzy) {
       const minQueryImpressions = params.minImpressions ?? 20
       const minClusterSize = params.minClusterSize ?? 3
       const minTokenImpressions = resolveMinTokenImpressions(params, minQueryImpressions, minClusterSize)
       const limit = params.limit ?? 200
-      const clusters = reduceCanonicalIntentAtlas(arr, { minClusterSize, minTokenImpressions, limit })
+      const clusters = reduceCanonicalIntentAtlas(arr, { minClusterSize, minTokenImpressions, limit, fuzzy: params.fuzzy })
       const totalImpressions = clusters.reduce((s, c) => s + c.totalImpressions, 0)
       const totalKeywords = clusters.reduce((s, c) => s + c.keywordCount, 0)
       return {

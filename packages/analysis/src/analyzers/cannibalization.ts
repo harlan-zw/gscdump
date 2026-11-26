@@ -19,6 +19,7 @@ import { queriesQueryState } from '../analyzer/adapt-rows'
 import { paginateInMemory, TOTAL_COUNT_SELECT, totalCountOf } from '../analyzer/paginate'
 import { parseJsonRows as parseJsonList, rowString as str } from '../analyzer/row-values'
 import { normalizeQuery } from '../query/normalize'
+import { foldCanonicalTypos } from '../query/typo-fold'
 import { createSorter } from '../types'
 
 export type CannibalizationSortMetric = 'clicks' | 'impressions' | 'positionSpread' | 'pageCount'
@@ -36,6 +37,8 @@ export interface CannibalizationOptions {
   sortOrder?: SortOrder
   /** Fold near-duplicate query variants via `normalizeQuery()` before detecting overlap. Default: false */
   canonical?: boolean
+  /** Fold typo and spacing variants via `foldCanonicalTypos()` after canonical normalization (implies `canonical: true`). Default: false */
+  fuzzy?: boolean
 }
 
 export interface CannibalizationPage {
@@ -111,9 +114,19 @@ export function analyzeCannibalization(
     sortBy = 'clicks',
     sortOrder = 'desc',
     canonical = false,
+    fuzzy = false,
   } = options
 
-  if (canonical) {
+  if (canonical || fuzzy) {
+    const baseCanonicals = rows.map(row => normalizeQuery(row.query) || row.query)
+    const fuzzyMap = fuzzy
+      ? foldCanonicalTypos(rows.map((row, idx) => ({
+          canonical: baseCanonicals[idx]!,
+          impressions: row.impressions,
+          clicks: row.clicks,
+        })))
+      : null
+
     const groups = new Map<string, Map<string, {
       clicks: number
       impressions: number
@@ -123,8 +136,10 @@ export function analyzeCannibalization(
       variants: Map<string, number>
     }>>()
 
-    for (const row of rows) {
-      const ck = normalizeQuery(row.query) || row.query
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i]!
+      const base = baseCanonicals[i]!
+      const ck = fuzzyMap ? (fuzzyMap.get(base) ?? base) : base
       let pagesByUrl = groups.get(ck)
       if (!pagesByUrl) {
         pagesByUrl = new Map()
@@ -287,9 +302,34 @@ function buildCompetitorGraph(events: CannibalizationEvent[]): CompetitorGraph {
 
 function reduceCanonicalCannibalization(
   rows: Row[],
-  options: { minImpressions: number, minQueryImpressions: number, limit: number },
+  options: { minImpressions: number, minQueryImpressions: number, limit: number, fuzzy?: boolean },
 ): { results: CannibalizationEvent[], meta: Record<string, unknown> } {
-  const { minImpressions, minQueryImpressions, limit } = options
+  const { minImpressions, minQueryImpressions, limit, fuzzy = false } = options
+  const parsed: Array<{ query: string, url: string, impressions: number, clicks: number, position: number, baseCanonical: string }> = []
+
+  for (const r of rows) {
+    const query = str(r.query)
+    const url = str(r.url)
+    if (!query || !url)
+      continue
+    parsed.push({
+      query,
+      url,
+      impressions: num(r.impressions),
+      clicks: num(r.clicks),
+      position: num(r.position),
+      baseCanonical: normalizeQuery(query) || query,
+    })
+  }
+
+  const fuzzyMap = fuzzy
+    ? foldCanonicalTypos(parsed.map(r => ({
+        canonical: r.baseCanonical,
+        impressions: r.impressions,
+        clicks: r.clicks,
+      })))
+    : null
+
   const groups = new Map<string, Map<string, {
     clicks: number
     impressions: number
@@ -299,28 +339,21 @@ function reduceCanonicalCannibalization(
     variants: Map<string, number>
   }>>()
 
-  for (const r of rows) {
-    const query = str(r.query)
-    const url = str(r.url)
-    if (!query || !url)
-      continue
-    const impressions = num(r.impressions)
-    const clicks = num(r.clicks)
-    const position = num(r.position)
-    const ck = normalizeQuery(query) || query
+  for (const r of parsed) {
+    const ck = fuzzyMap ? (fuzzyMap.get(r.baseCanonical) ?? r.baseCanonical) : r.baseCanonical
     let urlsByKey = groups.get(ck)
     if (!urlsByKey) {
       urlsByKey = new Map()
       groups.set(ck, urlsByKey)
     }
-    const u = urlsByKey.get(url) ?? { clicks: 0, impressions: 0, weightedPos: 0, posSum: 0, count: 0, variants: new Map<string, number>() }
-    u.clicks += clicks
-    u.impressions += impressions
-    u.weightedPos += (position - 1) * impressions
-    u.posSum += position
+    const u = urlsByKey.get(r.url) ?? { clicks: 0, impressions: 0, weightedPos: 0, posSum: 0, count: 0, variants: new Map<string, number>() }
+    u.clicks += r.clicks
+    u.impressions += r.impressions
+    u.weightedPos += (r.position - 1) * r.impressions
+    u.posSum += r.position
     u.count += 1
-    u.variants.set(query, (u.variants.get(query) ?? 0) + impressions)
-    urlsByKey.set(url, u)
+    u.variants.set(r.query, (u.variants.get(r.query) ?? 0) + r.impressions)
+    urlsByKey.set(r.url, u)
   }
 
   const allEvents: CannibalizationEvent[] = []
@@ -418,7 +451,7 @@ export const cannibalizationAnalyzer = defineAnalyzer<AnalysisParams, Row, Canni
     const minQueryImpressions = minImpressions * 2
     const limit = params.limit ?? 200
 
-    if (params.canonical) {
+    if (params.canonical || params.fuzzy) {
       const sql = `
         SELECT
           query,
@@ -432,11 +465,11 @@ export const cannibalizationAnalyzer = defineAnalyzer<AnalysisParams, Row, Canni
           AND query IS NOT NULL AND query <> ''
           AND url IS NOT NULL AND url <> ''
         GROUP BY query, url
-        HAVING SUM(impressions) >= 1
+        HAVING SUM(impressions) >= ?
       `
       return {
         sql,
-        params: [startDate, endDate],
+        params: [startDate, endDate, minImpressions > 0 ? 1 : 0],
         current: { table: 'page_queries', partitions: enumeratePartitions(startDate, endDate) },
       }
     }
@@ -550,12 +583,13 @@ export const cannibalizationAnalyzer = defineAnalyzer<AnalysisParams, Row, Canni
 
   reduceSql(rows, params) {
     const arr = Array.isArray(rows) ? rows : []
-    if (params.canonical) {
+    if (params.canonical || params.fuzzy) {
       const minImpressions = params.minImpressions ?? 10
       return reduceCanonicalCannibalization(arr, {
         minImpressions,
         minQueryImpressions: minImpressions * 2,
         limit: params.limit ?? 200,
+        fuzzy: params.fuzzy,
       })
     }
     const events: CannibalizationEvent[] = arr.map(r => ({
@@ -644,6 +678,7 @@ export const cannibalizationAnalyzer = defineAnalyzer<AnalysisParams, Row, Canni
       maxPositionSpread: params.maxPositionSpread,
       minPages: params.minPages,
       canonical: params.canonical,
+      fuzzy: params.fuzzy,
     })
     const paged = paginateInMemory(results, { limit: params.limit, offset: params.offset })
     return { results: paged, meta: { total: results.length, returned: paged.length } }
