@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseFilterArgs, toLiveFilter, toLocalFilter } from '../src/filters'
+import { LONG_QUERY_REGEX, parseFilterArgs, QUESTION_REGEX, toLiveFilter, toLocalFilter } from '../src/filters'
 import { parseWindowFlags } from '../src/window'
 
 function leaves(filter: ReturnType<typeof toLiveFilter>) {
@@ -51,5 +51,29 @@ describe('window flags', () => {
   it('resolves a quarter-to-date window on the anchor', () => {
     const result = parseWindowFlags({ period: 'qtd' }, defaults, '2026-05-10')
     expect(result).toMatchObject({ ok: true, value: { start: '2026-04-01', end: '2026-05-10', days: 40 } })
+  })
+})
+
+describe('--questions and --long-queries flags', () => {
+  it.each([
+    [true, 'includingRegex'],
+    ['', 'includingRegex'],
+    ['questions', 'includingRegex'],
+    ['nonquestions', 'excludingRegex'],
+  ])('parses --questions=%j into %s query regex', (value, operator) => {
+    const filters = parseFilterArgs({ questions: value })
+    expect(leaves(toLocalFilter(filters))).toEqual([{ dimension: 'query', operator, expression: QUESTION_REGEX }])
+  })
+
+  it('rejects unknown --questions values', () => {
+    expect(() => parseFilterArgs({ questions: 'maybe' })).toThrow(/Invalid --questions/)
+  })
+
+  it('parses --long-queries into the 8+ word query regex', () => {
+    const filters = parseFilterArgs({ 'long-queries': true })
+    expect(leaves(toLocalFilter(filters))).toEqual([{ dimension: 'query', operator: 'includingRegex', expression: LONG_QUERY_REGEX }])
+    const re = new RegExp(LONG_QUERY_REGEX)
+    expect(re.test('one two three four five six seven')).toBe(false)
+    expect(re.test('one two three four five six seven eight')).toBe(true)
   })
 })

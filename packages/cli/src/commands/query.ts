@@ -154,6 +154,15 @@ export const queryCommand = defineCommand({
       type: 'string',
       description: 'Filter by query (prefix: ~contains, !exclude, re:regex, !re:not-regex)',
     },
+    'questions': {
+      type: 'string',
+      description: 'Filter by question queries: questions (default when bare) or nonquestions',
+    },
+    'long-queries': {
+      type: 'boolean',
+      default: false,
+      description: 'Filter to long queries with 8 or more words',
+    },
     'page': {
       type: 'string',
       description: 'Filter by page (same prefix syntax as --query)',

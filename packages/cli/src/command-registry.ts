@@ -1,6 +1,7 @@
 import type { ArgsDef, CommandDef, CommandMeta, Resolvable, SubCommandsDef } from 'citty'
 import {
   analyzeCommandMeta,
+  annotationsCommandMeta,
   authCommandMeta,
   bingCommandMeta,
   configCommandMeta,
@@ -169,6 +170,10 @@ export const CLI_SUBCOMMANDS = {
   bing: shallowCommand(
     bingCommandMeta,
     () => import('./commands/bing').then(module => module.bingCommand),
+  ),
+  annotations: shallowCommand(
+    annotationsCommandMeta,
+    () => import('./commands/annotations').then(module => module.annotationsCommand),
   ),
   init: shallowCommand(
     initCommandMeta,

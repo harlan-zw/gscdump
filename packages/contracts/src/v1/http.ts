@@ -1,6 +1,7 @@
 export { AGENT_REQUEST_HEADERS, agentRequestContextSchema } from '../agent-feedback'
 export * from './agent-usage'
 export * from './analytics-coverage'
+export * from './annotations'
 export { bingCnameVerificationV1Schema, bingConnectionV1Schema } from './bing'
 export type { BingCnameVerificationV1, BingConnectionV1 } from './bing'
 export { bingDataQueryV1Schema, bingDataTotalsQueryV1Schema, bingDataTotalsV1Schemas, bingDataV1Schemas } from './bing-data'

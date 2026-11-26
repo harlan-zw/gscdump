@@ -77,9 +77,12 @@ gscdump sites --json
 gscdump query --site example.com -d page -f json
 ```
 
-Hosted mode can run these commands: `sites`, `query`, `report`, `sitemaps current`, `sitemaps history`, `sitemaps membership`,
-`sitemaps lastmod`, `sitemaps export`, `sitemaps inspect`, `indexing urls`, `indexing inspect --yes`, `indexing summary`, `indexing watch list|add|remove`,
-and the `bing` commands `login --site`, `sites`, `status`, `dump`, `inspect`, and `verify`.
+Hosted mode can run these commands: `sites`, `sites coverage`, `annotations list|create|update|delete`, `query`, `report`,
+`analyze` (`device-gap`, `position-distribution`, `ctr-curve`, `dark-traffic`, `content-velocity`, `keyword-breadth`),
+`sitemaps current`, `sitemaps history`, `sitemaps membership`, `sitemaps lastmod`, `sitemaps export`, `sitemaps inspect`, `sitemaps visibility`,
+`indexing urls`, `indexing inspect --yes`, `indexing summary`, `indexing watch list|add|remove`,
+`indexing canonical-mismatches`, `indexing diagnostics`, `indexing transitions`, `indexing indexnow status|submit|receipts|verify`,
+and the `bing` commands `login --site`, `sites`, `status`, `dump`, `query`, `totals`, `sitemaps submit`, `inspect`, and `verify`.
 Direct Google commands need Local mode: `sync`, `inspect`, `query --live`, `analyze --live`, `report --live`,
 `sites add|get|delete|verify*`, `sitemaps list|get|submit|delete`, `indexing submit|remove|status|batch`, `entities`, and `mcp`.
 In Hosted mode these commands stop with this error: `This command calls Google, so it needs Local mode.`
@@ -132,7 +135,7 @@ Its `meta.requestId` correlates successful reads with feedback. `meta.source` is
 A section with `dataUnavailable: true` is unavailable evidence, not an empty finding.
 `--force` regenerates the Hosted report. `--prev-start`, `--prev-end`, and `--fetch-budget` need Local mode.
 Hosted reports preserve `--max-findings` from 1 to 1000. Movers also preserves `--min-clicks-change`.
-`analyze` reads the Store only in Hosted mode. When the Store cannot answer, it stops with the Local mode command.
+`analyze` runs `device-gap`, `position-distribution`, `ctr-curve`, `dark-traffic`, `content-velocity`, and `keyword-breadth` against the hosted record in Hosted mode. Other Analyzers read the Store in Hosted mode, and stop with the Local mode command when the Store cannot answer.
 
 `query`, `analyze`, and `report` choose one source for each run. One run never
 mixes Store rows and live rows.
@@ -278,19 +281,22 @@ A routing stop also has `siteUrl`. `STORE_RANGE_NOT_COVERED` adds `missingDates`
 
 | Command | Use it for |
 | --- | --- |
-| `gscdump sites` | Local mode: list Google Sites and permission levels. Hosted mode: list hosted Sites and sync state |
+| `gscdump sites` | Local mode: list Google Sites and permission levels. Hosted mode: list hosted Sites and sync state (`sites coverage` checks recorded window coverage) |
+| `gscdump annotations` | Hosted: list chart annotations (custom + Google Search updates), create, update, and delete custom annotations |
 | `gscdump bing login`, `status`, `logout` | Manage Bing authentication and check connections |
 | `gscdump bing sites` | List Bing Sites and connection details |
 | `gscdump bing dump` | Export Bing traffic, pages, keywords, and crawl data |
+| `gscdump bing query`, `totals` | Hosted: read Bing traffic, pages, keywords, crawl rows, or summed totals to stdout |
+| `gscdump bing sitemaps submit` | Hosted: submit a sitemap URL to Bing Webmaster Tools |
 | `gscdump bing inspect` | Read Bing Indexing Evidence for one URL |
 | `gscdump bing verify` | Check and activate a Hosted Bing connection |
 | `gscdump sync` | Copy Search Console rows into the local Store |
-| `gscdump query` | Rows by page, query, date, country, or device, from the Store or the hosted record |
-| `gscdump analyze <id>` | One Analyzer over the Store or live rows |
+| `gscdump query` | Rows by page, query, date, country, or device, from the Store or the hosted record (`--questions`, `--long-queries`) |
+| `gscdump analyze <id>` | One Analyzer over the Store, live rows, or hosted record (`device-gap`, `position-distribution`, `ctr-curve`, `dark-traffic`, `content-velocity`, `keyword-breadth`) |
 | `gscdump report <id>` | A Report that composes several Analyzers |
 | `gscdump inspect <url...>` | URL Inspection with Indexing Evidence, saved to the Store |
-| `gscdump sitemaps` | List, submit, delete, and probe sitemaps |
-| `gscdump indexing` | Indexing API notifications and quota; hosted URL Inspection results |
+| `gscdump sitemaps` | List, submit, delete, probe sitemaps, and inspect hosted visibility (`sitemaps visibility`) |
+| `gscdump indexing` | Indexing API notifications and quota; hosted URL Inspection results, diagnostics, transitions, canonical mismatches, and IndexNow |
 | `gscdump indexing inspect <url...> --yes` | Hosted: refresh up to 10 URLs through the platform, spending shared URL Inspections. Never retry automatically |
 | `gscdump indexing summary` | Hosted: the coverage ladder per day, with the time gscdump counted the verdicts |
 | `gscdump indexing watch` | Hosted: list, add, and remove Watched URLs and read their Watched URL inspections |

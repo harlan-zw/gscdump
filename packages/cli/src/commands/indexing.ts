@@ -5,8 +5,12 @@ import { createCommandContext } from '../context'
 import { loadSitemapUrls } from '../sitemap'
 import { commandLineError } from '../stop'
 import { applyOutputMode, logger, OUTPUT_ARGS, parseIntegerOption, readUrlList } from '../utils'
+import { indexingCanonicalMismatchesCommand } from './indexing-canonical-mismatches'
+import { indexingDiagnosticsCommand } from './indexing-diagnostics'
+import { indexingIndexNowCommand } from './indexing-indexnow'
 import { indexingInspectCommand } from './indexing-inspect'
 import { indexingSummaryCommand } from './indexing-summary'
+import { indexingTransitionsCommand } from './indexing-transitions'
 import { indexingUrlsCommand } from './indexing-urls'
 import { indexingWatchCommand } from './indexing-watch'
 
@@ -259,5 +263,9 @@ export const indexingCommand = defineCommand({
     'summary': indexingSummaryCommand,
     'inspect': indexingInspectCommand,
     'watch': indexingWatchCommand,
+    'canonical-mismatches': indexingCanonicalMismatchesCommand,
+    'diagnostics': indexingDiagnosticsCommand,
+    'transitions': indexingTransitionsCommand,
+    'indexnow': indexingIndexNowCommand,
   },
 })
