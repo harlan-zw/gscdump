@@ -147,6 +147,8 @@ const hostedSiteSchema = z.object({
   siteUrl: z.string(),
   syncStatus: z.string().nullable().optional(),
   syncProgress: z.object({ completed: z.number(), total: z.number(), percent: z.number() }).passthrough().nullable().optional(),
+  hold: z.string().nullable().optional(),
+  holdMessage: z.string().nullable().optional(),
   lastSyncAt: z.number().nullable().optional(),
   newestDateSynced: z.string().nullable().optional(),
   oldestDateSynced: z.string().nullable().optional(),
@@ -160,17 +162,94 @@ const keyIssuerSchema = z.discriminatedUnion('_tag', [
 /** Who issued the Hosted credential, as `/cli/me` reports it. */
 export type KeyIssuer = z.infer<typeof keyIssuerSchema>
 
+const hostedAccountStatusSchema = z.object({
+  hostedAccess: z.boolean(),
+  needsReauth: z.boolean(),
+  searchConsoleScopeGranted: z.boolean().nullable(),
+}).passthrough()
+
 const accountSchema = z.object({
   user: z.object({ publicId: z.string(), email: z.string() }),
   sites: z.array(hostedSiteSchema),
+  hostedAccess: z.boolean().optional(),
+  accountStatus: hostedAccountStatusSchema.optional().catch(undefined),
   // An older gscdump.com omits `issuer`. An issuer this CLI cannot read, such
   // as a later issuer kind, is unknown in the same way. Neither one fails the
   // account: the stops then use wording that names no product.
   issuer: keyIssuerSchema.optional().catch(undefined),
 })
 
+export type HostedAccount = z.infer<typeof accountSchema>
+
+const hostedEstimateSchema = z.object({
+  status: z.enum(['fits', 'unmeasured', 'held', 'refused', 'exempt']),
+  lines: z.array(z.string()),
+  inspectionDefault: z.boolean(),
+}).passthrough()
+
+const hostedAvailablePropertySchema = z.object({
+  propertyUrl: z.string(),
+  propertyType: z.enum(['domain', 'url-prefix']),
+  permissionLevel: z.string(),
+  canConnect: z.boolean(),
+  hostScope: z.enum(['exact', 'domain']),
+  host: z.string(),
+  connected: z.boolean(),
+  connectedSites: z.array(z.object({
+    siteId: z.string().nullable(),
+    siteUrl: z.string(),
+  }).passthrough()),
+  estimate: hostedEstimateSchema.nullable(),
+  estimateNote: z.string().optional(),
+}).passthrough()
+
+const hostedAvailablePropertiesSchema = z.object({
+  properties: z.array(hostedAvailablePropertySchema),
+  sites: z.object({
+    used: z.number(),
+    allowance: z.number(),
+    remaining: z.number(),
+  }).passthrough(),
+  note: z.string().optional(),
+}).passthrough()
+
+export type HostedAvailableProperty = z.infer<typeof hostedAvailablePropertySchema>
+export type HostedAvailableProperties = z.infer<typeof hostedAvailablePropertiesSchema>
+
+const hostedSiteConnectionSchema = z.object({
+  status: z.enum(['connected', 'already_connected']),
+  message: z.string(),
+  site: z.object({
+    siteId: z.string().nullable(),
+    siteUrl: z.string(),
+    propertyUrl: z.string(),
+    syncStatus: z.string().nullable(),
+  }).passthrough(),
+  estimate: hostedEstimateSchema.nullable().optional(),
+  inspectionEnabled: z.boolean().optional(),
+}).passthrough()
+
+export type HostedSiteConnection = z.infer<typeof hostedSiteConnectionSchema>
+
 /** One Site in the hosted record, with its hosted sync state. */
 export type HostedSite = z.infer<typeof hostedSiteSchema>
+
+function extractHostedErrorDetails(body: unknown): { message: string | null, reason: string | null } {
+  if (!body || typeof body !== 'object')
+    return { message: null, reason: null }
+  const record = body as Record<string, unknown>
+  const nested = record.data && typeof record.data === 'object' ? record.data as Record<string, unknown> : null
+  const errorObj = record.error && typeof record.error === 'object' ? record.error as Record<string, unknown> : null
+  const message = (typeof nested?.message === 'string' && nested.message.trim())
+    || (typeof errorObj?.message === 'string' && errorObj.message.trim())
+    || (typeof record.message === 'string' && record.message.trim())
+    || null
+  const detailsObj = (nested?.details && typeof nested.details === 'object' ? nested.details as Record<string, unknown> : null)
+    ?? (errorObj?.details && typeof errorObj.details === 'object' ? errorObj.details as Record<string, unknown> : null)
+    ?? (record.details && typeof record.details === 'object' ? record.details as Record<string, unknown> : null)
+  const reason = typeof detailsObj?.reason === 'string' && detailsObj.reason.trim() ? detailsObj.reason : null
+  return { message, reason }
+}
 
 export async function hostedRequest(state: HostedAuthentication, route: string, options: RequestInit = {}): Promise<unknown> {
   const response = await fetch(`${state.apiRoot}${route}`, {
@@ -194,7 +273,14 @@ export async function hostedRequest(state: HostedAuthentication, route: string, 
             nextCommand: session ? 'gscdump auth login --mode hosted' : null,
           }), details)
     }
-    throw Object.assign(new Error(`Hosted request failed (${response.status}) for ${route.split('?')[0]}. Check \`gscdump auth status\`.`), details)
+    const parsed = response.status < 500
+      ? extractHostedErrorDetails(await response.json().catch(() => null))
+      : { message: null, reason: null }
+    const suffix = parsed.message ? ` ${parsed.message}` : ' Check `gscdump auth status`.'
+    throw Object.assign(new Error(`Hosted request failed (${response.status}) for ${route.split('?')[0]}.${suffix}`), {
+      ...details,
+      ...(parsed.reason ? { reason: parsed.reason } : {}),
+    })
   }
   return response.status === 204 ? undefined : response.json()
 }
@@ -254,15 +340,54 @@ export function siteSettingsPlace(manager: SiteManager): string {
   }
 }
 
-export async function getHostedAccount(state: HostedAuthentication): Promise<z.infer<typeof accountSchema>> {
+export async function getHostedAccount(state: HostedAuthentication): Promise<HostedAccount> {
   const result = accountSchema.safeParse(await hostedRequest(state, '/cli/me'))
   if (!result.success)
     throw new Error('gscdump.com returned invalid account data.')
   return result.data
 }
 
+export async function listHostedAvailableProperties(state: HostedAuthentication): Promise<HostedAvailableProperties> {
+  const result = hostedAvailablePropertiesSchema.safeParse(await hostedRequest(state, '/cli/sites/available'))
+  if (!result.success)
+    throw new Error('gscdump.com returned invalid property data.')
+  return result.data
+}
+
+export async function connectHostedSite(
+  state: HostedAuthentication,
+  input: { propertyUrl: string, host?: string, inspectionEnabled?: boolean },
+): Promise<HostedSiteConnection> {
+  const result = hostedSiteConnectionSchema.safeParse(await hostedRequest(state, '/cli/sites/connect', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  }))
+  if (!result.success)
+    throw new Error('gscdump.com returned invalid Site connection data.')
+  return result.data
+}
+
+const HOSTED_GOOGLE_RECONNECT_URL = 'https://gscdump.com/auth/google?reauth=1&redirect=%2Fapp%2Fonboarding%3Fstep%3Dconnect-sites%26agent%3Dskip'
+
+/** Actionable account-level warnings returned by `/cli/me`, empty when healthy or unsupported by an older host. */
+export function hostedAccountWarnings(account: HostedAccount): string[] {
+  const warnings: string[] = []
+  const hostedAccess = account.hostedAccess ?? account.accountStatus?.hostedAccess
+  if (hostedAccess === false)
+    warnings.push('Hosted access is not active. Activate Hosted at https://gscdump.com/app/activate.')
+  if (account.accountStatus?.needsReauth)
+    warnings.push(`Google access expired. Reconnect Google at ${HOSTED_GOOGLE_RECONNECT_URL}.`)
+  else if (account.accountStatus?.searchConsoleScopeGranted === false)
+    warnings.push(`Search Console read access is missing. Reconnect Google at ${HOSTED_GOOGLE_RECONNECT_URL} and keep the Search Console box ticked.`)
+  return warnings
+}
+
 /** One line of hosted sync state, for example `syncing: 41 of 90 days (45%)`. */
 export function formatHostedSync(site: HostedSite): string {
+  if (site.hold === 'size_pending')
+    return 'measuring (pending size check)'
+  if (site.hold)
+    return site.holdMessage ? `held (${site.hold}): ${site.holdMessage}` : `held (${site.hold})`
   const status = site.syncStatus ?? 'pending'
   const progress = site.syncProgress && site.syncProgress.total > 0 && status !== 'synced'
     ? `: ${site.syncProgress.completed.toLocaleString('en-US')} of ${site.syncProgress.total.toLocaleString('en-US')} days (${Math.round(site.syncProgress.percent)}%)`

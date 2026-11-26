@@ -9,7 +9,7 @@ import { initCommandMeta } from '../command-meta'
 import { defaultDataDir, loadConfig, saveConfig } from '../config'
 import { useCliRuntime } from '../runtime'
 import { applyOutputMode, logger, OUTPUT_ARGS } from '../utils'
-import { loginHosted } from './auth'
+import { loginHosted, promptAccessMode } from './auth'
 
 /** True when a person can answer prompts. Pipes, cron, and agents cannot. */
 function canPrompt(): boolean {
@@ -57,6 +57,11 @@ export const initCommand = defineCommand({
       type: 'string',
       description: 'Hosted API root for --mode hosted; defaults to GSCDUMP_API_ROOT or https://gscdump.com/api',
     },
+    'browser': {
+      type: 'boolean',
+      default: true,
+      description: 'Open the authorization URL automatically for --mode hosted. Pass --no-browser to open it yourself.',
+    },
     ...OUTPUT_ARGS,
   },
   async run({ args }) {
@@ -64,9 +69,10 @@ export const initCommand = defineCommand({
     const config = await loadConfig()
     const mode = useCliRuntime().authModeOverride
 
-    if (mode === 'hosted') {
-      await loginHosted(args)
-      printHostedNextSteps()
+    if (mode === 'hosted' || (!mode && args['api-key'])) {
+      const result = await loginHosted(args)
+      if (!args.json && result.siteCount > 0)
+        printHostedNextSteps()
       return
     }
 
@@ -130,6 +136,16 @@ export const initCommand = defineCommand({
     console.log('  \x1B[1mWelcome to gscdump\x1B[0m')
     console.log('  \x1B[90mGoogle Search Console data extraction CLI\x1B[0m')
     console.log()
+
+    if (!mode && !args.json) {
+      const chosen = await promptAccessMode()
+      if (chosen === 'hosted') {
+        const result = await loginHosted(args)
+        if (result.siteCount > 0)
+          printHostedNextSteps()
+        return
+      }
+    }
 
     const dataDir = args.store ? await promptDataDir(config.dataDir) : undefined
     await saveConfig({

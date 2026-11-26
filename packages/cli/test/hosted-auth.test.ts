@@ -39,4 +39,38 @@ describe('hosted login', () => {
     expect(error).toBeInstanceOf(Error)
     expect(error!.message).toContain('`gscdump auth login --mode hosted`')
   })
+
+  it('retries transient poll errors with backoff and sends userAgent on poll', async () => {
+    const sessionId = 'b'.repeat(64)
+    const waits: number[] = []
+    const request = vi.fn()
+      .mockResolvedValueOnce(response({ code: `S-${'B'.repeat(20)}`, expiresIn: 600 }))
+      .mockRejectedValueOnce(new TypeError('network blip'))
+      .mockResolvedValueOnce(new Response('unavailable', { status: 503 }))
+      .mockResolvedValueOnce(response({ status: 'complete', sessionId }))
+    const result = await loginWithHostedSession({
+      request,
+      authorize: async () => {},
+      wait: async ms => void waits.push(ms),
+      now: () => 0,
+      userAgent: 'gscdump-cli/7.23.2 (linux devbox)',
+    })
+    expect(result).toBe(sessionId)
+    expect(waits).toEqual([4000, 6000])
+    const pollUrl = new URL(request.mock.calls[3]![0] as string)
+    expect(pollUrl.searchParams.get('userAgent')).toBe('gscdump-cli/7.23.2 (linux devbox)')
+  })
+
+  it('stops after repeated transient poll failures', async () => {
+    const request = vi.fn()
+      .mockResolvedValueOnce(response({ code: `S-${'C'.repeat(20)}`, expiresIn: 600 }))
+      .mockResolvedValue(new Response('busy', { status: 503 }))
+    await expect(loginWithHostedSession({
+      request,
+      authorize: async () => {},
+      wait: async () => {},
+      now: () => 0,
+    })).rejects.toThrow('temporarily unavailable')
+    expect(request).toHaveBeenCalledTimes(6)
+  })
 })

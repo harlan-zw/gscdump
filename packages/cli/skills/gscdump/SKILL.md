@@ -77,7 +77,7 @@ gscdump sites --json
 gscdump query --site example.com -d page -f json
 ```
 
-Hosted mode can run these commands: `sites`, `sites coverage`, `fleet`, `annotations list|create|update|delete`, `query`, `report`,
+Hosted mode can run these commands: `sites`, `sites available`, `sites connect`, `sites coverage`, `fleet`, `annotations list|create|update|delete`, `query`, `report`,
 `analyze` (`device-gap`, `position-distribution`, `ctr-curve`, `dark-traffic`, `content-velocity`, `keyword-breadth`),
 `sitemaps current`, `sitemaps history`, `sitemaps membership`, `sitemaps lastmod`, `sitemaps export`, `sitemaps inspect`, `sitemaps visibility`,
 `indexing urls`, `indexing inspect --yes`, `indexing summary`, `indexing watch list|add|remove`,
