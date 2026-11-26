@@ -63,6 +63,12 @@ export interface AnalysisParams {
    * variants through `normalizeQuery()` before grouping. Defaults to false.
    */
   canonical?: boolean
+  /**
+   * cannibalization, clustering, intent-atlas: fold typo and spacing variants
+   * via `foldCanonicalTypos()` after canonical normalization (implies
+   * `canonical: true`). Defaults to false.
+   */
+  fuzzy?: boolean
   dimension?: 'pages' | 'keywords'
   topN?: number
   metric?: 'clicks' | 'impressions'

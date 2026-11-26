@@ -995,6 +995,69 @@ describe('runAnalyzerWithEngine', () => {
     expect(meta.graph.edges).toHaveLength(1)
   }, 30_000)
 
+  it('fuzzy mode folds typo and spacing variants across clustering, intent-atlas, and cannibalization', async () => {
+    const env = await setup(dir)
+    const d = '2026-04-10'
+    await seed(env.engine, USER, SITE, [
+      {
+        table: 'queries',
+        date: d,
+        rows: [
+          { query: 'wall street hotel', date: d, clicks: 40, impressions: 1000, sum_position: 2000 },
+          { query: 'wallstreethotel', date: d, clicks: 10, impressions: 300, sum_position: 600 },
+          { query: 'wall streeet hotel', date: d, clicks: 2, impressions: 80, sum_position: 240 },
+          { query: 'ninajirachi tour', date: d, clicks: 20, impressions: 500, sum_position: 1000 },
+          { query: 'ninajarachi tour', date: d, clicks: 5, impressions: 120, sum_position: 360 },
+          { query: 'ninajirachi tour dates', date: d, clicks: 10, impressions: 200, sum_position: 600 },
+          { query: 'nuxt 3 guide', date: d, clicks: 15, impressions: 400, sum_position: 800 },
+          { query: 'nuxt 4 guide', date: d, clicks: 15, impressions: 400, sum_position: 800 },
+        ],
+      },
+      {
+        table: 'page_queries',
+        date: d,
+        rows: [
+          { url: '/hotel', query: 'wall street hotel', date: d, clicks: 40, impressions: 1000, sum_position: 2000 },
+          { url: '/stay', query: 'wallstreethotel', date: d, clicks: 5, impressions: 200, sum_position: 1000 },
+        ],
+      },
+    ])
+
+    const clusterOut = await runAnalyzerWithEngine(
+      { engine: env.engine },
+      { userId: USER, siteId: SITE },
+      { type: 'clustering', startDate: d, endDate: d, minImpressions: 10, minClusterSize: 2, fuzzy: true },
+    )
+    const clusters = clusterOut.results as Array<{ clusterName: string, clusterType: string, keywordCount: number }>
+    expect(clusters.find(c => c.clusterName === 'wall street hotel')).toMatchObject({
+      clusterType: 'canonical',
+      keywordCount: 3,
+    })
+    // Version numbers (`nuxt 3 guide` vs `nuxt 4 guide`) must not collapse into a canonical cluster.
+    expect(clusters.find(c => c.clusterName === 'nuxt 3 guide' || c.clusterName === 'nuxt 4 guide')).toBeUndefined()
+
+    const atlasOut = await runAnalyzerWithEngine(
+      { engine: env.engine },
+      { userId: USER, siteId: SITE },
+      { type: 'intent-atlas', startDate: d, endDate: d, minImpressions: 20, minClusterSize: 3, fuzzy: true },
+    )
+    const atlas = atlasOut.results as Array<{ clusterKey: string, keywordCount: number }>
+    expect(atlas.find(c => c.clusterKey === 'ninajirachi + tour')).toMatchObject({ keywordCount: 3 })
+
+    const cannibOut = await runAnalyzerWithEngine(
+      { engine: env.engine },
+      { userId: USER, siteId: SITE },
+      { type: 'cannibalization', startDate: d, endDate: d, minImpressions: 50, fuzzy: true },
+    )
+    const events = cannibOut.results as Array<{ keyword: string, variants: string[], competitorCount: number }>
+    expect(events).toHaveLength(1)
+    expect(events[0]).toMatchObject({
+      keyword: 'wall street hotel',
+      variants: ['wall street hotel', 'wallstreethotel'],
+      competitorCount: 2,
+    })
+  }, 30_000)
+
   it('bayesian-ctr flags outliers via empirical-Bayes shrinkage', async () => {
     const env = await setup(dir)
 

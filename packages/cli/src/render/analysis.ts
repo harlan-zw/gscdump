@@ -12,6 +12,7 @@ export const ANALYZER_DISPLAY: Record<string, { title: string, description: stri
   'intent-atlas': { title: 'Shared-word query groups', description: 'Group search queries by shared words, without classifying Search Intent' },
   'dark-traffic': { title: 'Clicks without reported queries', description: 'Compare page clicks with clicks attributed to reported search queries' },
   'keyword-breadth': { title: 'Search queries per page', description: 'Count distinct reported search queries with impressions per page' },
+  'semantic-clusters': { title: 'Semantic query clusters', description: 'Cluster queries with deterministic UPGMA over stored query_embeddings' },
 }
 
 export interface AnalysisDisplayContext {

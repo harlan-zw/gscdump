@@ -1,15 +1,21 @@
 import type { TenantCtx } from '@gscdump/engine/contracts'
 import type { IndexingMetadataRecord, InspectionRecord, InspectionStore } from '@gscdump/engine/entities'
+import type { EmbeddingProviderKind } from '../embeddings-provider'
+import type { TableName } from '../local-store'
 import { Buffer } from 'node:buffer'
 import { readFile } from 'node:fs/promises'
 import process from 'node:process'
+import { normalizeQuery, NORMALIZER_VERSION } from '@gscdump/analysis/query-dimension'
 import {
+  buildQueryEmbeddingRecords,
   createIndexingMetadataStore,
   createInspectionStore,
+  createQueryEmbeddingsStore,
 } from '@gscdump/engine/entities'
 import { defineCommand } from 'citty'
 import { entitiesCommandMeta } from '../command-meta'
 import { createCommandContext } from '../context'
+import { createEmbeddingProvider, DEFAULT_EMBEDDING_MODELS } from '../embeddings-provider'
 import { formatSiteIdCollision, recordStoreSite } from '../store-sites'
 import { applyOutputMode, logger, OUTPUT_ARGS, parseIntegerOption, progressBar, runWithConcurrency } from '../utils'
 
@@ -210,10 +216,203 @@ const indexingSubCommand = defineCommand({
   },
 })
 
+const embeddingsBuildSubCommand = defineCommand({
+  meta: {
+    name: 'build',
+    description: 'Build or incrementally update the opt-in query_embeddings Parquet sidecar using Ollama or Workers AI',
+  },
+  args: {
+    ...OUTPUT_ARGS,
+    'site': { type: 'string', alias: 's', description: 'Site, for example example.com; defaults to config.defaultSite or a prompt' },
+    'provider': { type: 'string', default: 'ollama', description: 'Embedding provider: ollama (default) or workers-ai' },
+    'model': { type: 'string', description: `Embedding model (defaults: ollama=${DEFAULT_EMBEDDING_MODELS.ollama}, workers-ai=${DEFAULT_EMBEDDING_MODELS['workers-ai']})` },
+    'ollama-url': { type: 'string', description: 'Ollama base URL (default: OLLAMA_HOST or http://127.0.0.1:11434)' },
+    'account-id': { type: 'string', description: 'Cloudflare account ID for workers-ai (default: CLOUDFLARE_ACCOUNT_ID)' },
+    'api-token': { type: 'string', description: 'Cloudflare API token for workers-ai (default: CLOUDFLARE_API_TOKEN)' },
+    'min-impressions': { type: 'string', default: '10', description: 'Minimum total impressions for a query to be embedded (default: 10)' },
+    'batch-size': { type: 'string', description: 'Canonical queries per embedding API request' },
+    'force': { type: 'boolean', default: false, description: 'Re-embed every canonical query instead of incremental update' },
+  },
+  async run({ args }) {
+    const { json, quiet } = applyOutputMode(args)
+    const providerRaw = String(args.provider ?? 'ollama')
+    if (providerRaw !== 'ollama' && providerRaw !== 'workers-ai')
+      throw new Error(`Invalid --provider "${providerRaw}". Use ollama or workers-ai.`)
+    const providerKind: EmbeddingProviderKind = providerRaw
+    const minImpressions = parseIntegerOption(args['min-impressions'], '--min-impressions', 0) ?? 10
+    const batchSize = parseIntegerOption(args['batch-size'], '--batch-size', 1)
+
+    const provider = createEmbeddingProvider({
+      provider: providerKind,
+      model: args.model ? String(args.model) : undefined,
+      ollamaUrl: args['ollama-url'] ? String(args['ollama-url']) : process.env.OLLAMA_HOST,
+      cloudflareAccountId: args['account-id'] ? String(args['account-id']) : process.env.CLOUDFLARE_ACCOUNT_ID,
+      cloudflareApiToken: args['api-token'] ? String(args['api-token']) : process.env.CLOUDFLARE_API_TOKEN,
+      batchSize,
+    })
+
+    const ctx = await createCommandContext({ needsStore: true })
+    const store = ctx.store!
+    const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined, { scope: 'store' })
+    const siteId = store.siteIdFor(siteUrl)
+    const tenantCtx: TenantCtx = { userId: store.userId, siteId }
+
+    const entries = await store.engine.listLive({ userId: store.userId, siteId, table: 'queries' as TableName })
+    if (entries.length === 0)
+      throw new Error(`No local queries data for ${siteUrl}. Run: gscdump sync --site ${siteUrl}`)
+
+    const { rows } = await store.engine.runSQL({
+      ctx: tenantCtx,
+      table: 'queries' as TableName,
+      fileSets: { FILES: { table: 'queries' as TableName, partitions: entries.map(e => e.partition) } },
+      sql: `
+        SELECT query, SUM(impressions) AS impressions
+        FROM read_parquet({{FILES}}, union_by_name = true)
+        WHERE query IS NOT NULL AND query <> ''
+        GROUP BY query
+        HAVING SUM(impressions) >= ?
+      `,
+      params: [minImpressions],
+    })
+
+    const uniqueCanonicals = new Set<string>()
+    for (const r of rows) {
+      const raw = String(r.query)
+      const canonical = normalizeQuery(raw) || raw.trim()
+      if (canonical)
+        uniqueCanonicals.add(canonical)
+    }
+
+    const embeddingsStore = createQueryEmbeddingsStore({ dataSource: store.dataSource })
+    const existingMeta = args.force ? null : await embeddingsStore.loadMeta(tenantCtx)
+    const canReuse = existingMeta !== null
+      && existingMeta.model === provider.model
+      && existingMeta.normalizerVersion === NORMALIZER_VERSION
+    const existingCanonicals = new Set<string>()
+    if (canReuse) {
+      for (const rec of await embeddingsStore.loadRecords(tenantCtx))
+        existingCanonicals.add(rec.query_canonical)
+    }
+
+    const missing = [...uniqueCanonicals].filter(c => !existingCanonicals.has(c)).sort()
+    const embeddedEntries: Array<{ queryCanonical: string, vector: number[] }> = []
+
+    for (let i = 0; i < missing.length; i += provider.batchSize) {
+      const batch = missing.slice(i, i + provider.batchSize)
+      const vectors = await provider.embedBatch(batch)
+      for (let j = 0; j < batch.length; j++)
+        embeddedEntries.push({ queryCanonical: batch[j]!, vector: vectors[j]! })
+      if (!quiet && !json)
+        process.stdout.write(`\r${progressBar(Math.min(i + batch.length, missing.length), missing.length, provider.model)}`)
+    }
+    if (!quiet && !json && missing.length > 0)
+      process.stdout.write('\n')
+
+    const newRecords = buildQueryEmbeddingRecords(embeddedEntries, {
+      model: provider.model,
+      normalizerVersion: NORMALIZER_VERSION,
+    })
+
+    const builtAt = Date.now()
+    let writeResult: { parquetKey: string, rowCount: number, bytes: number, replaced: boolean }
+    if (args.force || !canReuse) {
+      const res = await embeddingsStore.write(tenantCtx, newRecords, builtAt)
+      writeResult = { ...res, replaced: existingMeta !== null }
+    }
+    else if (newRecords.length > 0) {
+      writeResult = await embeddingsStore.mergeWrite(tenantCtx, newRecords, builtAt)
+    }
+    else {
+      writeResult = {
+        parquetKey: embeddingsStore.parquetKey(tenantCtx),
+        rowCount: existingMeta!.rowCount,
+        bytes: 0,
+        replaced: false,
+      }
+    }
+
+    const meta = await embeddingsStore.loadMeta(tenantCtx)
+    const summary = {
+      siteUrl,
+      provider: provider.provider,
+      model: provider.model,
+      dims: meta?.dims ?? 0,
+      quantization: meta?.quantization ?? 'int8-symmetric',
+      normalizerVersion: NORMALIZER_VERSION,
+      canonicalQueries: uniqueCanonicals.size,
+      newlyEmbedded: newRecords.length,
+      reused: uniqueCanonicals.size - newRecords.length,
+      totalStored: writeResult.rowCount,
+      bytes: writeResult.bytes,
+      parquetKey: writeResult.parquetKey,
+      replaced: writeResult.replaced,
+    }
+
+    if (json) {
+      console.log(JSON.stringify(summary, null, 2))
+      return
+    }
+    if (!quiet) {
+      logger.success(
+        `Embeddings ready for [${siteUrl}] (${summary.totalStored} canonical queries, +${summary.newlyEmbedded} embedded, model ${summary.model}, ${summary.dims}d Int8)`,
+      )
+    }
+  },
+})
+
+const embeddingsStatusSubCommand = defineCommand({
+  meta: {
+    name: 'status',
+    description: 'Inspect the stored query_embeddings sidecar metadata for a Site',
+  },
+  args: {
+    ...OUTPUT_ARGS,
+    site: { type: 'string', alias: 's', description: 'Site, for example example.com; defaults to config.defaultSite or a prompt' },
+  },
+  async run({ args }) {
+    const { json } = applyOutputMode(args)
+    const ctx = await createCommandContext({ needsStore: true })
+    const store = ctx.store!
+    const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined, { scope: 'store' })
+    const tenantCtx: TenantCtx = { userId: store.userId, siteId: store.siteIdFor(siteUrl) }
+    const embeddingsStore = createQueryEmbeddingsStore({ dataSource: store.dataSource })
+    const meta = await embeddingsStore.loadMeta(tenantCtx)
+
+    if (json) {
+      console.log(JSON.stringify({ siteUrl, exists: meta !== null, meta }, null, 2))
+      return
+    }
+    if (!meta) {
+      logger.info(`No query_embeddings sidecar for ${siteUrl}. Run: gscdump entities embeddings build --site ${siteUrl}`)
+      return
+    }
+    console.log()
+    console.log(`  \x1B[1m${siteUrl}\x1B[0m`)
+    console.log(`  Model:        ${meta.model}`)
+    console.log(`  Dimensions:   ${meta.dims} (${meta.quantization})`)
+    console.log(`  Queries:      ${meta.rowCount}`)
+    console.log(`  Normalizer:   v${meta.normalizerVersion}`)
+    console.log(`  Built at:     ${new Date(meta.builtAt).toISOString()}`)
+    console.log()
+  },
+})
+
+const embeddingsSubCommand = defineCommand({
+  meta: {
+    name: 'embeddings',
+    description: 'Build or inspect opt-in per-canonical query embeddings sidecars',
+  },
+  subCommands: {
+    build: embeddingsBuildSubCommand,
+    status: embeddingsStatusSubCommand,
+  },
+})
+
 export const entitiesCommand = defineCommand({
   meta: entitiesCommandMeta,
   subCommands: {
     show: showSubCommand,
     indexing: indexingSubCommand,
+    embeddings: embeddingsSubCommand,
   },
 })
