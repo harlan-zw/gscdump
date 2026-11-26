@@ -29,7 +29,7 @@ describe('createEmbeddingProvider', () => {
     const provider = createEmbeddingProvider({
       provider: 'ollama',
       model: 'bge-m3',
-      ollamaUrl: 'http://127.0.0.1:11434/',
+      ollamaUrl: '127.0.0.1:11434/',
       fetchFn: fetchFn as unknown as typeof globalThis.fetch,
     })
 
@@ -177,5 +177,26 @@ describe('entities embeddings + analyze semantic-clusters CLI', () => {
       missingEmbeddings: 0,
       unclusteredQueries: 2,
     })
+
+    // 5. Incremental build fails fast if the same model tag starts returning a different dimensionality.
+    await store.engine.writeDay(
+      { userId: store.userId, siteId, table: 'queries', date: '2026-04-11' },
+      [{ query: 'brand new query', date: '2026-04-11', clicks: 5, impressions: 100, sum_position: 300 }],
+    )
+    fetchSpy.mockImplementationOnce(async () => new Response(JSON.stringify({
+      embeddings: [[1, 0, 0, 0, 0, 0]],
+    }), { status: 200 }))
+    await expect(runSub(buildCmd, { 'site': siteUrl, 'provider': 'ollama', 'model': 'embeddinggemma:300m', 'min-impressions': '10', 'json': true }))
+      .rejects
+      .toThrow(/--force/)
+
+    // 6. `--force` rebuilds all canonicals cleanly and reports `replaced: true` and `reused: 0`.
+    fetchSpy.mockImplementationOnce(async (_url, init) => {
+      const body = JSON.parse(String(init?.body)) as { input: string[] }
+      return new Response(JSON.stringify({ embeddings: body.input.map(() => [1, 0, 0, 0, 0, 0]) }), { status: 200 })
+    })
+    await runSub(buildCmd, { 'site': siteUrl, 'provider': 'ollama', 'model': 'embeddinggemma:300m', 'min-impressions': '10', 'force': true, 'json': true })
+    const forced = JSON.parse(logs.at(-1)!)
+    expect(forced).toMatchObject({ dims: 6, newlyEmbedded: 5, reused: 0, totalStored: 5, replaced: true })
   }, 30_000)
 })

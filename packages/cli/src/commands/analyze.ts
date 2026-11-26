@@ -7,11 +7,13 @@ import {
   DEFAULT_SEMANTIC_THRESHOLD,
   MOVERS_SORT_METRICS,
   normalizeQuery,
+  NORMALIZER_VERSION,
   TRAJECTORY_DEFAULT_DAYS,
 } from '@gscdump/analysis'
 import { defaultAnalyzerRegistry } from '@gscdump/analysis/registry'
 import { DEFAULT_FETCH_BUDGET, MAX_FETCH_BUDGET, num } from '@gscdump/engine/analysis-types'
 import { createQueryEmbeddingsStore, dequantizeEmbeddingInt8 } from '@gscdump/engine/entities'
+import { enumeratePartitions } from '@gscdump/engine/planner'
 import { METRIC_EXPR } from '@gscdump/engine/sql-fragments'
 import { defineCommand } from 'citty'
 import { getLatestGscDate } from 'gscdump/dates'
@@ -413,6 +415,11 @@ const semanticClustersCommand = defineCommand({
     const embMeta = await embeddingsStore.loadMeta(tenantCtx)
     if (!embMeta || embMeta.rowCount === 0)
       throw new Error(`No query_embeddings sidecar found for ${siteUrl}. Run: gscdump entities embeddings build --site ${siteUrl}`)
+    if (embMeta.normalizerVersion !== NORMALIZER_VERSION) {
+      throw new Error(
+        `Stored query_embeddings sidecar for ${siteUrl} uses normalizer v${embMeta.normalizerVersion}, but current normalizer is v${NORMALIZER_VERSION}. Run: gscdump entities embeddings build --site ${siteUrl} --force`,
+      )
+    }
 
     const entries = await store.engine.listLive({ userId: store.userId, siteId, table: 'queries' as TableName })
     if (entries.length === 0)
@@ -430,7 +437,7 @@ const semanticClustersCommand = defineCommand({
     const { rows } = await store.engine.runSQL({
       ctx: tenantCtx,
       table: 'queries' as TableName,
-      fileSets: { FILES: { table: 'queries' as TableName, partitions: entries.map(e => e.partition) } },
+      fileSets: { FILES: { table: 'queries' as TableName, partitions: enumeratePartitions(window.start, window.end) } },
       sql: `
         SELECT
           query,
