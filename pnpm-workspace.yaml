@@ -130,7 +130,7 @@ catalogs:
   dev-test:
     '@nuxt/test-utils': ^4.3.2
     '@vitest/browser': ^5.0.1
-    vitest: ^5.0.1
+    vitest: 5.0.1
   devframe:
     '@types/chrome': ^0.3.4
     '@types/ws': ^8.18.2
