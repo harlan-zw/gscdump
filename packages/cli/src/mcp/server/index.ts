@@ -21,6 +21,7 @@ import {
 } from 'gscdump/sites'
 import { z } from 'zod'
 import { formatSiteResolution } from '../../context'
+import { LONG_QUERY_REGEX, QUESTION_REGEX } from '../../filters'
 import { discoverLiveSitemap } from '../../sitemap'
 import { toolErrorMessage } from '../errors'
 import { diagnostics } from '../handlers/diagnostics'
@@ -66,7 +67,35 @@ interface QueryToolArgs {
   type?: string
   dataState?: string
   aggregationType?: string
+  questions?: boolean | 'questions' | 'nonquestions'
+  longQueries?: boolean
   dimensionFilterGroups?: DimensionFilterGroup[]
+}
+
+function resolveMcpDimensionFilterGroups(args: Pick<QueryToolArgs, 'dimensionFilterGroups' | 'questions' | 'longQueries'>): DimensionFilterGroup[] | undefined {
+  const extraFilters: NonNullable<DimensionFilterGroup['filters']> = []
+  if (args.questions === true || args.questions === 'questions')
+    extraFilters.push({ dimension: 'query', operator: 'includingRegex', expression: QUESTION_REGEX })
+  else if (args.questions === 'nonquestions')
+    extraFilters.push({ dimension: 'query', operator: 'excludingRegex', expression: QUESTION_REGEX })
+  if (args.longQueries)
+    extraFilters.push({ dimension: 'query', operator: 'includingRegex', expression: LONG_QUERY_REGEX })
+
+  const baseGroups = (args.dimensionFilterGroups ?? []).map(g => ({
+    groupType: g.groupType ?? 'and',
+    ...(g.filters ? { filters: [...g.filters] } : {}),
+    ...(g.filterLists ? { filterLists: g.filterLists } : {}),
+  }))
+  if (extraFilters.length === 0)
+    return baseGroups.length > 0 ? baseGroups : undefined
+  if (baseGroups.length > 0) {
+    baseGroups[0] = {
+      ...baseGroups[0]!,
+      filters: [...(baseGroups[0]!.filters ?? []), ...extraFilters],
+    }
+    return baseGroups
+  }
+  return [{ groupType: 'and', filters: extraFilters }]
 }
 
 type SearchAnalyticsClient = Pick<ReturnType<typeof googleSearchConsole>, 'searchAnalytics'>
@@ -78,6 +107,7 @@ export async function runMcpSearchAnalyticsQuery(
   const totalLimit = Math.max(0, args.rowLimit ?? 25000)
   const pageSize = Math.min(totalLimit, 25000)
   const allRows: Record<string, unknown>[] = []
+  const dimensionFilterGroups = resolveMcpDimensionFilterGroups(args)
   let startRow = 0
 
   while (allRows.length < totalLimit) {
@@ -95,15 +125,7 @@ export async function runMcpSearchAnalyticsQuery(
       ...(args.type ? { type: args.type } : {}),
       ...(args.dataState ? { dataState: args.dataState } : {}),
       ...(args.aggregationType ? { aggregationType: args.aggregationType } : {}),
-      ...(args.dimensionFilterGroups
-        ? {
-            dimensionFilterGroups: args.dimensionFilterGroups.map(g => ({
-              groupType: g.groupType ?? 'and',
-              ...(g.filters ? { filters: g.filters } : {}),
-              ...(g.filterLists ? { filterLists: g.filterLists } : {}),
-            })),
-          }
-        : {}),
+      ...(dimensionFilterGroups ? { dimensionFilterGroups } : {}),
     } as any)
     const rows = (response.rows || []).map((row) => {
       const result: Record<string, unknown> = {
@@ -322,10 +344,12 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
         type: z.enum(SearchTypes).optional().describe('Use page, date, country, or device for Web Multimodal. Use Web, Image, Video, or News for brand classification.'),
         dataState: z.enum(['final', 'all']).optional().describe('Data state: final (settled) or all (includes fresh)'),
         aggregationType: z.enum(['byPage', 'byProperty']).optional().describe('Aggregation type'),
+        questions: z.union([z.boolean(), z.enum(['questions', 'nonquestions'])]).optional().describe('Filter to question queries (true or "questions") or exclude them ("nonquestions").'),
+        longQueries: z.boolean().optional().describe('Filter to long queries with 8 or more words.'),
         dimensionFilterGroups: z.array(filterGroupSchema).optional().describe('Filter groups use "and" internally. Multiple groups do not implement OR.'),
       }).shape,
     },
-    async ({ siteUrl: input, startDate, endDate, dimensions, rowLimit, type, dataState, aggregationType, dimensionFilterGroups }) => {
+    async ({ siteUrl: input, startDate, endDate, dimensions, rowLimit, type, dataState, aggregationType, questions, longQueries, dimensionFilterGroups }) => {
       const { siteUrl } = await withSite({ siteUrl: input as string })
       const client = await getClient()
       const result = await runMcpSearchAnalyticsQuery(client, {
@@ -337,6 +361,8 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
         type: type as string | undefined,
         dataState: dataState as string | undefined,
         aggregationType: aggregationType as string | undefined,
+        questions: questions as QueryToolArgs['questions'],
+        longQueries: longQueries as boolean | undefined,
         dimensionFilterGroups: dimensionFilterGroups as QueryToolArgs['dimensionFilterGroups'],
       })
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }

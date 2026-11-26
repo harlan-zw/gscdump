@@ -4,7 +4,9 @@ import { defineCommand } from 'citty'
 import { fetchSitemap } from 'gscdump/sites'
 import { sitemapsCommandMeta } from '../command-meta'
 import { createCommandContext } from '../context'
-import { HOSTED_ARGS, resolveHostedSite } from '../hosted-site'
+import { HOSTED_ARGS, resolveHostedSite, resolveHostedSiteWithTarget } from '../hosted-site'
+import { renderTable } from '../render/layout'
+import { terminalOutputOptions } from '../render/terminal'
 import { discoverLiveSitemap, loadSitemapUrls } from '../sitemap'
 import { applyOutputMode, logger, OUTPUT_ARGS, parseIntegerOption, plural } from '../utils'
 
@@ -407,6 +409,64 @@ const exportCommand = defineCommand({
   },
 })
 
+const visibilityCommand = defineCommand({
+  meta: {
+    name: 'visibility',
+    description: 'Read Sitemap Search Visibility percentage, invisible URLs, and orphan pages (hosted)',
+  },
+  args: {
+    'target': { type: 'positional', required: false, description: 'Site URL or Site ID (or pass --site)' },
+    ...OUTPUT_ARGS,
+    ...HOSTED_ARGS,
+    'invisible-limit': { type: 'string', description: 'Max invisible sitemap URLs to return (1 to 500)' },
+    'invisible-offset': { type: 'string', description: 'Offset for invisible sitemap URLs' },
+    'orphan-limit': { type: 'string', description: 'Max orphan pages to return (1 to 500)' },
+  },
+  async run({ args }) {
+    const { json } = applyOutputMode(args)
+    const invisibleLimit = parseIntegerOption(args['invisible-limit'], '--invisible-limit')
+    const invisibleOffset = parseIntegerOption(args['invisible-offset'], '--invisible-offset', 0)
+    const orphanLimit = parseIntegerOption(args['orphan-limit'], '--orphan-limit')
+    const { client, site } = await resolveHostedSiteWithTarget(
+      args as Record<string, unknown>,
+      { name: 'sitemaps visibility', localAlternative: HOSTED_SITEMAP_ALTERNATIVE },
+      args.target ? String(args.target) : undefined,
+    )
+    const { data } = await client.getIndexPercent({
+      params: { siteId: site.siteId },
+      query: {
+        ...(invisibleLimit !== undefined ? { invisibleLimit } : {}),
+        ...(invisibleOffset !== undefined ? { invisibleOffset } : {}),
+        ...(orphanLimit !== undefined ? { orphanLimit } : {}),
+      },
+    })
+    if (json) {
+      console.log(JSON.stringify(data, null, 2))
+      return
+    }
+    const formatDelta = (value: number | null): string => value === null ? 'n/a' : `${value >= 0 ? '+' : ''}${value.toFixed(1)}pp`
+    console.log(`${site.siteUrl} (${data.summary.dataDate})`)
+    console.log(`  Sitemap Search Visibility: ${data.summary.currentPercent.toFixed(1)}% (${data.summary.visibleUrls.toLocaleString('en-US')} / ${data.summary.totalSitemapUrls.toLocaleString('en-US')} URLs)`)
+    console.log(`  7d delta:  ${formatDelta(data.summary.change7d)}`)
+    console.log(`  28d delta: ${formatDelta(data.summary.change28d)}`)
+    console.log(`  Invisible: ${data.invisibleCount.toLocaleString('en-US')}  Orphans: ${data.orphanCount.toLocaleString('en-US')}`)
+    if (data.sitemaps.length > 0) {
+      console.log()
+      for (const line of renderTable(
+        data.sitemaps.map(sm => ({ path: sm.path, urlCount: sm.urlCount, type: sm.isIndex ? 'index' : 'feed' })),
+        [
+          { key: 'path', label: 'Sitemap' },
+          { key: 'type', label: 'Type' },
+          { key: 'urlCount', label: 'URLs', numeric: true },
+        ],
+        terminalOutputOptions(),
+      )) {
+        console.log(line)
+      }
+    }
+  },
+})
+
 export const sitemapsCommand = defineCommand({
   meta: sitemapsCommandMeta,
   subCommands: {
@@ -422,6 +482,7 @@ export const sitemapsCommand = defineCommand({
     membership: membershipCommand,
     lastmod: lastmodCommand,
     export: exportCommand,
+    visibility: visibilityCommand,
   },
   // No subcommand: list sitemaps (requires --site).
   async run({ args }) {

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { LONG_QUERY_REGEX, QUESTION_REGEX } from '../src/filters'
 import { runMcpSearchAnalyticsQuery } from '../src/mcp/server'
 
 function row(key: string) {
@@ -42,5 +43,32 @@ describe('runMcpSearchAnalyticsQuery', () => {
     expect(result.rowCount).toBe(1)
     expect(rawQuery).toHaveBeenCalledTimes(2)
     expect(rawQuery.mock.calls[1]![1]).toMatchObject({ rowLimit: 9, startRow: 1 })
+  })
+
+  it('applies questions and longQueries shortcuts alongside caller dimensionFilterGroups', async () => {
+    const rawQuery = vi.fn()
+      .mockResolvedValueOnce({ rows: [row('how do i fix nuxt seo canonical tags')] })
+      .mockResolvedValueOnce({ rows: [] })
+
+    await runMcpSearchAnalyticsQuery({ searchAnalytics: { query: rawQuery } }, {
+      siteUrl: 'sc-domain:example.com',
+      startDate: '2026-05-01',
+      endDate: '2026-05-07',
+      dimensions: ['query'],
+      questions: 'nonquestions',
+      longQueries: true,
+      dimensionFilterGroups: [{ filters: [{ dimension: 'country', operator: 'equals', expression: 'usa' }] }],
+    })
+
+    expect(rawQuery.mock.calls[0]![1]).toMatchObject({
+      dimensionFilterGroups: [{
+        groupType: 'and',
+        filters: [
+          { dimension: 'country', operator: 'equals', expression: 'usa' },
+          { dimension: 'query', operator: 'excludingRegex', expression: QUESTION_REGEX },
+          { dimension: 'query', operator: 'includingRegex', expression: LONG_QUERY_REGEX },
+        ],
+      }],
+    })
   })
 })

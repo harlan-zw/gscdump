@@ -1,4 +1,5 @@
-import type { AnalysisParams } from '@gscdump/engine/analysis-types'
+import type { AnalysisParams, AnalysisResult } from '@gscdump/engine/analysis-types'
+import type { GscdumpV1Client } from '@gscdump/sdk/v1'
 import type { CommandDef } from 'citty'
 import type { TableName } from '../local-store'
 import {
@@ -16,8 +17,10 @@ import { defineCommand } from 'citty'
 import { getLatestGscDate } from 'gscdump/dates'
 import { unwrapResult } from 'gscdump/result'
 import { analysisNeeds, analyzerTables, resolveAnalysisSource } from '../analysis-local'
+import { resolveAuthentication } from '../auth-state'
 import { analyzeCommandMeta } from '../command-meta'
 import { createCommandContext } from '../context'
+import { HOSTED_ARGS, resolveHostedSite } from '../hosted-site'
 import { ANALYZER_DISPLAY, coverageWarning, renderAnalysis } from '../render/analysis'
 import { terminalOutputOptions } from '../render/terminal'
 import { readSiteStates } from '../route'
@@ -27,6 +30,92 @@ import { DEFAULT_WINDOW, newestDoneDate, parseWindowFlags, PERIOD_FLAGS, windowF
 const ANALYSIS_TOOLS = defaultAnalyzerRegistry.listAnalyzerIds()
 
 type AnalysisTool = string
+type HostedAnalysisTool = 'device-gap' | 'position-distribution' | 'ctr-curve' | 'dark-traffic' | 'content-velocity' | 'keyword-breadth'
+
+const HOSTED_ANALYSIS_TOOLS = new Set<string>([
+  'device-gap',
+  'position-distribution',
+  'ctr-curve',
+  'dark-traffic',
+  'content-velocity',
+  'keyword-breadth',
+])
+
+function isHostedAnalysisTool(tool: string): tool is HostedAnalysisTool {
+  return HOSTED_ANALYSIS_TOOLS.has(tool)
+}
+
+async function runHostedAnalysis(
+  client: GscdumpV1Client,
+  siteId: string,
+  tool: HostedAnalysisTool,
+  params: AnalysisParams,
+  explicitWindow: boolean,
+): Promise<AnalysisResult> {
+  const startDate = params.startDate!
+  const endDate = params.endDate!
+  switch (tool) {
+    case 'device-gap': {
+      const { data, meta } = await client.getDeviceGap({ params: { siteId }, query: { startDate, endDate } })
+      return {
+        results: data.daily as unknown as Record<string, unknown>[],
+        meta: { summary: data.summary, startDate, endDate, source: 'hosted', requestId: meta.requestId },
+      }
+    }
+    case 'position-distribution': {
+      const { data, meta } = await client.getPositionDistribution({ params: { siteId }, query: { startDate, endDate } })
+      return {
+        results: data.distribution as unknown as Record<string, unknown>[],
+        meta: { total: data.distribution.length, startDate, endDate, source: 'hosted', requestId: meta.requestId },
+      }
+    }
+    case 'ctr-curve': {
+      const { data, meta } = await client.getCtrCurve({ params: { siteId }, query: { startDate, endDate } })
+      return {
+        results: data.curve as unknown as Record<string, unknown>[],
+        meta: {
+          overperforming: data.overperforming,
+          underperforming: data.underperforming,
+          startDate,
+          endDate,
+          source: 'hosted',
+          requestId: meta.requestId,
+        },
+      }
+    }
+    case 'dark-traffic': {
+      const { data, meta } = await client.getDarkTraffic({ params: { siteId }, query: { startDate, endDate } })
+      return {
+        results: data.pages as unknown as Record<string, unknown>[],
+        meta: { summary: data.summary, startDate, endDate, source: 'hosted', requestId: meta.requestId },
+      }
+    }
+    case 'content-velocity': {
+      const computedDays = Math.round((Date.parse(`${endDate}T00:00:00Z`) - Date.parse(`${startDate}T00:00:00Z`)) / 86_400_000) + 1
+      const days = explicitWindow ? Math.min(365, Math.max(1, computedDays)) : 90
+      const { data, meta } = await client.getContentVelocity({ params: { siteId }, query: { days } })
+      return {
+        results: data.weekly as unknown as Record<string, unknown>[],
+        meta: { summary: data.summary, days, startDate, endDate, source: 'hosted', requestId: meta.requestId },
+      }
+    }
+    case 'keyword-breadth': {
+      const { data, meta } = await client.getKeywordBreadth({ params: { siteId }, query: { startDate, endDate } })
+      return {
+        results: data.distribution as unknown as Record<string, unknown>[],
+        meta: {
+          fragilePages: data.fragilePages,
+          authorityPages: data.authorityPages,
+          summary: data.summary,
+          startDate,
+          endDate,
+          source: 'hosted',
+          requestId: meta.requestId,
+        },
+      }
+    }
+  }
+}
 
 // Tool-specific args and body builder
 const COMPARISON_ARGS = {
@@ -196,6 +285,7 @@ function makeToolCommand(tool: AnalysisTool): CommandDef<any> {
       'format': { type: 'string', alias: 'f', default: 'table', description: 'Output: table, json, csv' },
       'json': { type: 'boolean', default: false, description: 'Output as JSON' },
       'live': { type: 'boolean', default: false, description: 'Force live GSC API; bypass local Parquet store' },
+      ...(isHostedAnalysisTool(tool) ? { 'api-root': HOSTED_ARGS['api-root'], 'api-key': HOSTED_ARGS['api-key'] } : {}),
       ...extraArgs,
     },
     async run({ args }) {
@@ -204,19 +294,35 @@ function makeToolCommand(tool: AnalysisTool): CommandDef<any> {
       const baseParams = buildParams(tool, args)
       const format = args.json ? 'json' : String(args.format ?? 'table')
       setJsonOutput(format === 'json')
-      const { runAnalysis, siteUrl, anchor } = await resolveAnalysisSource({
-        site: args.site,
-        live: !!args.live,
-        label: `analyze ${tool}`,
-        types: [tool],
-        anchorTables: analyzerTables(baseParams),
-        needs: anchor => analysisNeeds(withWindow(tool, baseParams, args, anchor)),
-      })
-      const params = withWindow(tool, baseParams, args, anchor)
+      let result: AnalysisResult
+      let siteUrl: string
+      let params: AnalysisParams
 
-      logger.debug(`Running ${tool} analysis...`)
-
-      const result = await runAnalysis(params)
+      if (!args.live && isHostedAnalysisTool(tool) && (args['api-key'] || (await resolveAuthentication())._tag === 'Hosted')) {
+        const { client, site } = await resolveHostedSite(args as Record<string, unknown>, {
+          name: `analyze ${tool}`,
+          localAlternative: 'run `gscdump sync --site <site>` first',
+        })
+        siteUrl = site.siteUrl
+        params = withWindow(tool, baseParams, args, getLatestGscDate())
+        logger.debug(`Running hosted ${tool} analysis...`)
+        const explicitWindow = Boolean(args.period || args.start || args.end)
+        result = await runHostedAnalysis(client, site.siteId, tool, params, explicitWindow)
+      }
+      else {
+        const resolved = await resolveAnalysisSource({
+          site: args.site,
+          live: !!args.live,
+          label: `analyze ${tool}`,
+          types: [tool],
+          anchorTables: analyzerTables(baseParams),
+          needs: anchor => analysisNeeds(withWindow(tool, baseParams, args, anchor)),
+        })
+        siteUrl = resolved.siteUrl
+        params = withWindow(tool, baseParams, args, resolved.anchor)
+        logger.debug(`Running ${tool} analysis...`)
+        result = await resolved.runAnalysis(params)
+      }
 
       const warning = coverageWarning(result.meta.coverage)
       if (format === 'json') {

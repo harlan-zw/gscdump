@@ -1,5 +1,6 @@
 import process from 'node:process'
 import { isCancel, password } from '@clack/prompts'
+import { bingDataQueryV1Schema, bingDataTotalsQueryV1Schema, bingSitemapSubmitRequestV1Schema } from '@gscdump/contracts/v1'
 import { defineCommand } from 'citty'
 import { bingWebmaster } from 'gscdump/bing'
 import open from 'open'
@@ -8,11 +9,46 @@ import { BING_REDIRECT_URI, clearBingCredentials, getBingClient, loginBingOAuth,
 import { BING_DATASETS, dumpBingSite, parseBingDumpOptions, resolveBingSites, unwrapBing } from '../bing-data'
 import { dumpHostedBingSite, hostedBingClient, inspectHostedBingUrl, listHostedBingSites, resolveHostedBingSites } from '../bing-hosted'
 import { bingCommandMeta } from '../command-meta'
+import { columnsFor } from '../render/analysis'
+import { renderTable } from '../render/layout'
+import { terminalOutputOptions } from '../render/terminal'
 import { useCliRuntime } from '../runtime'
-import { stopError } from '../stop'
-import { applyOutputMode, logger, OUTPUT_ARGS, plural } from '../utils'
+import { commandLineError, stopError } from '../stop'
+import { applyOutputMode, logger, OUTPUT_ARGS, parseIntegerOption, plural, toCSV } from '../utils'
 
 const siteArg = { type: 'string', alias: 's', description: 'Site ID or URL from `gscdump bing sites`' } as const
+
+function resolveBingSiteArg(args: Record<string, unknown>, positionalTarget?: string): string {
+  if (positionalTarget && args.site)
+    throw commandLineError('Pass either a positional Site or --site, not both.')
+  const extra = ((args._ as string[] | undefined) ?? []).slice(positionalTarget ? 1 : 0)
+  if (extra.length > 0)
+    throw commandLineError(`Unexpected positional argument: ${extra[0]}.`)
+  const target = positionalTarget ?? (args.site ? String(args.site) : undefined)
+  if (!target)
+    throw commandLineError('Pass a Site ID or URL from `gscdump bing sites` as a positional argument or with --site.')
+  return target
+}
+
+function defaultBingDateRange(startArg?: unknown, endArg?: unknown): { startDate: string, endDate: string } {
+  const endDate = endArg ? String(endArg) : new Date().toISOString().slice(0, 10)
+  const endMs = Date.parse(`${endDate}T00:00:00Z`)
+  const startDate = startArg
+    ? String(startArg)
+    : Number.isFinite(endMs)
+      ? new Date(endMs - 27 * 86_400_000).toISOString().slice(0, 10)
+      : endDate
+  return { startDate, endDate }
+}
+
+function resolveBingOutputFormat(args: Record<string, unknown>): 'table' | 'json' | 'csv' {
+  if (args.json)
+    return 'json'
+  const format = String(args.format ?? 'table')
+  if (format !== 'table' && format !== 'json' && format !== 'csv')
+    throw commandLineError('Invalid --format. Use table, json, or csv.')
+  return format
+}
 
 export const bingCommand = defineCommand({
   meta: bingCommandMeta,
@@ -224,6 +260,169 @@ export const bingCommand = defineCommand({
         const [site] = await resolveHostedBingSites(authentication, { site: args.site, requireConnected: false })
         const result = await hostedBingClient(authentication).verifySiteBingConnection({ params: { siteId: site!.siteId } })
         console.log(JSON.stringify(result.data, null, 2))
+      },
+    }),
+    query: defineCommand({
+      meta: { name: 'query', description: 'Read hosted Bing traffic, pages, keywords, or crawl rows to stdout' },
+      args: {
+        target: { type: 'positional', required: false, description: 'Site ID or URL from `gscdump bing sites` (or pass --site)' },
+        site: siteArg,
+        dataset: { type: 'string', default: 'traffic', description: 'Dataset: traffic, pages, keywords, or crawl (default: traffic)' },
+        start: { type: 'string', description: 'Start date YYYY-MM-DD (default: 28 days ending on --end or today)' },
+        end: { type: 'string', description: 'End date YYYY-MM-DD (default: today UTC)' },
+        limit: { type: 'string', alias: 'l', description: 'Max rows (1 to 500, default: 100)' },
+        offset: { type: 'string', description: 'Pagination offset (default: 0)' },
+        format: { type: 'string', alias: 'f', default: 'table', description: 'Output format: table, json, or csv' },
+        ...OUTPUT_ARGS,
+      },
+      async run({ args }) {
+        const format = resolveBingOutputFormat(args as Record<string, unknown>)
+        applyOutputMode({ ...args, json: format === 'json' })
+        const siteTarget = resolveBingSiteArg(args as Record<string, unknown>, args.target ? String(args.target) : undefined)
+        const { startDate, endDate } = defaultBingDateRange(args.start, args.end)
+        const limit = parseIntegerOption(args.limit, '--limit')
+        const offset = parseIntegerOption(args.offset, '--offset', 0)
+        const parsedQuery = bingDataQueryV1Schema.safeParse({
+          dataset: String(args.dataset ?? 'traffic'),
+          startDate,
+          endDate,
+          ...(limit !== undefined ? { limit } : {}),
+          ...(offset !== undefined ? { offset } : {}),
+        })
+        if (!parsedQuery.success)
+          throw commandLineError(parsedQuery.error.issues[0]?.message ?? 'Invalid Bing query options.')
+
+        const authentication = await resolveAuthentication()
+        if (authentication._tag !== 'Hosted')
+          throw stopError({ code: 'HOSTED_MODE_REQUIRED', message: '`gscdump bing query` reads the hosted Bing record, so it needs Hosted mode. Pass --mode hosted, or use `gscdump bing dump` in Local mode.', nextCommand: 'gscdump auth login --mode hosted' })
+
+        const [site] = await resolveHostedBingSites(authentication, { site: siteTarget })
+        const { data } = await hostedBingClient(authentication).getSiteBingData({
+          params: { siteId: site!.siteId },
+          query: parsedQuery.data,
+        })
+
+        if (format === 'json') {
+          console.log(JSON.stringify(data, null, 2))
+          return
+        }
+        const rows = data.rows as unknown as Record<string, unknown>[]
+        if (format === 'csv') {
+          console.log(toCSV(rows, Object.keys(rows[0] ?? {})))
+          return
+        }
+        console.log(`${data.siteUrl} / bing ${data.dataset} (${startDate} to ${endDate}, sync: ${data.sync._tag})`)
+        if (rows.length === 0) {
+          console.log('No rows returned.')
+          return
+        }
+        for (const line of renderTable(rows, columnsFor(rows), terminalOutputOptions()))
+          console.log(line)
+        logger.info(`${rows.length} of ${data.pagination.total} rows (offset ${data.pagination.offset}).`)
+      },
+    }),
+    totals: defineCommand({
+      meta: { name: 'totals', description: 'Read summed hosted Bing page or keyword totals across a date range' },
+      args: {
+        target: { type: 'positional', required: false, description: 'Site ID or URL from `gscdump bing sites` (or pass --site)' },
+        site: siteArg,
+        dataset: { type: 'string', default: 'keywords', description: 'Dataset: pages or keywords (default: keywords)' },
+        start: { type: 'string', description: 'Start date YYYY-MM-DD (default: 28 days ending on --end or today)' },
+        end: { type: 'string', description: 'End date YYYY-MM-DD (default: today UTC)' },
+        limit: { type: 'string', alias: 'l', description: 'Max rows (1 to 500, default: 100)' },
+        offset: { type: 'string', description: 'Pagination offset (default: 0)' },
+        format: { type: 'string', alias: 'f', default: 'table', description: 'Output format: table, json, or csv' },
+        ...OUTPUT_ARGS,
+      },
+      async run({ args }) {
+        const format = resolveBingOutputFormat(args as Record<string, unknown>)
+        applyOutputMode({ ...args, json: format === 'json' })
+        const siteTarget = resolveBingSiteArg(args as Record<string, unknown>, args.target ? String(args.target) : undefined)
+        const { startDate, endDate } = defaultBingDateRange(args.start, args.end)
+        const limit = parseIntegerOption(args.limit, '--limit')
+        const offset = parseIntegerOption(args.offset, '--offset', 0)
+        const parsedQuery = bingDataTotalsQueryV1Schema.safeParse({
+          dataset: String(args.dataset ?? 'keywords'),
+          startDate,
+          endDate,
+          ...(limit !== undefined ? { limit } : {}),
+          ...(offset !== undefined ? { offset } : {}),
+        })
+        if (!parsedQuery.success)
+          throw commandLineError(parsedQuery.error.issues[0]?.message ?? 'Invalid Bing totals options.')
+
+        const authentication = await resolveAuthentication()
+        if (authentication._tag !== 'Hosted')
+          throw stopError({ code: 'HOSTED_MODE_REQUIRED', message: '`gscdump bing totals` reads the hosted Bing record, so it needs Hosted mode. Pass --mode hosted, or use `gscdump bing dump` in Local mode.', nextCommand: 'gscdump auth login --mode hosted' })
+
+        const [site] = await resolveHostedBingSites(authentication, { site: siteTarget })
+        const { data } = await hostedBingClient(authentication).getSiteBingDataTotals({
+          params: { siteId: site!.siteId },
+          query: parsedQuery.data,
+        })
+
+        if (format === 'json') {
+          console.log(JSON.stringify(data, null, 2))
+          return
+        }
+        const rows = data.rows as unknown as Record<string, unknown>[]
+        if (format === 'csv') {
+          console.log(toCSV(rows, Object.keys(rows[0] ?? {})))
+          return
+        }
+        console.log(`${data.siteUrl} / bing ${data.dataset} totals (${startDate} to ${endDate}, sync: ${data.sync._tag})`)
+        console.log(`  Ranked totals: ${data.totals.clicks.toLocaleString('en-US')} clicks, ${data.totals.impressions.toLocaleString('en-US')} impressions`)
+        if (rows.length === 0) {
+          console.log('No rows returned.')
+          return
+        }
+        for (const line of renderTable(rows, columnsFor(rows), terminalOutputOptions()))
+          console.log(line)
+        logger.info(`${rows.length} of ${data.pagination.total} distinct ${data.dataset} (offset ${data.pagination.offset}).`)
+      },
+    }),
+    sitemaps: defineCommand({
+      meta: { name: 'sitemaps', description: 'Manage hosted Bing sitemaps' },
+      subCommands: {
+        submit: defineCommand({
+          meta: { name: 'submit', description: 'Submit a sitemap URL to Bing Webmaster Tools (hosted)' },
+          args: {
+            target: { type: 'positional', required: false, description: 'Site ID or URL from `gscdump bing sites` (or pass --site)' },
+            site: siteArg,
+            sitemap: { type: 'string', description: 'Sitemap URL to submit (omit to let gscdump pick the Site\'s sitemap)' },
+            ...OUTPUT_ARGS,
+          },
+          async run({ args }) {
+            const { json } = applyOutputMode(args)
+            const siteTarget = resolveBingSiteArg(args as Record<string, unknown>, args.target ? String(args.target) : undefined)
+            const parsedBody = bingSitemapSubmitRequestV1Schema.safeParse({
+              ...(args.sitemap ? { url: String(args.sitemap) } : {}),
+            })
+            if (!parsedBody.success)
+              throw commandLineError(parsedBody.error.issues[0]?.message ?? 'Use a valid http or https sitemap URL.')
+
+            const authentication = await resolveAuthentication()
+            if (authentication._tag !== 'Hosted')
+              throw stopError({ code: 'HOSTED_MODE_REQUIRED', message: '`gscdump bing sitemaps submit` needs Hosted mode. Pass --mode hosted.', nextCommand: 'gscdump auth login --mode hosted' })
+
+            const [site] = await resolveHostedBingSites(authentication, { site: siteTarget })
+            const { data } = await hostedBingClient(authentication).submitSiteBingSitemap({
+              params: { siteId: site!.siteId },
+              body: parsedBody.data,
+            })
+
+            if (data._tag === 'failed')
+              process.exitCode = 1
+            if (json) {
+              console.log(JSON.stringify(data, null, 2))
+              return
+            }
+            if (data._tag === 'submitted')
+              logger.success(`Submitted sitemap to Bing: ${data.sitemapUrl} (${data.sitemap._tag}).`)
+            else
+              logger.error(`Bing sitemap submission failed: ${data.reason}${data.retryable ? ' (retryable)' : ''}.`)
+          },
+        }),
       },
     }),
   },

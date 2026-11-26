@@ -6,7 +6,7 @@ import { connectSiteStep, getHostedAccount, hostedCredential, parseAuthenticatio
 import { loadConfig } from './config'
 import { resolveCliEnvironment } from './environment'
 import { hostedRequestContext } from './hosted-context'
-import { stopError } from './stop'
+import { commandLineError, stopError } from './stop'
 
 export const HOSTED_ARGS = {
   'site': { type: 'string' as const, alias: 's', description: 'Site URL or Site ID (e.g., example.com, sc-domain:example.com, https://example.com/, or s_...)' },
@@ -117,4 +117,24 @@ export async function resolveHostedSite(
     authentication,
     siteManager,
   }
+}
+
+/**
+ * Resolve a hosted Site from either an optional positional `<site>` argument
+ * or `--site`. Rejects passing both or extra unexpected positionals.
+ */
+export function resolveHostedSiteWithTarget(
+  args: Record<string, unknown>,
+  command: { name: string, localAlternative: string },
+  positionalTarget?: string,
+): ReturnType<typeof resolveHostedSite> {
+  if (positionalTarget && args.site)
+    throw commandLineError('Pass either a positional Site or --site, not both.')
+  const extra = ((args._ as string[] | undefined) ?? []).slice(positionalTarget ? 1 : 0)
+  if (extra.length > 0)
+    throw commandLineError(`Unexpected positional argument: ${extra[0]}.`)
+  return resolveHostedSite(
+    { ...args, ...(positionalTarget ? { site: positionalTarget } : {}), _: [] },
+    command,
+  )
 }

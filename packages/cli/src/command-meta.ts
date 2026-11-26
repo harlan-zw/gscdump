@@ -113,3 +113,4 @@ export const papercutCommandMeta = {
 }
 export const telemetryCommandMeta = { name: 'telemetry', description: 'Record an explicit agent task outcome' }
 export const bingCommandMeta = { name: 'bing', description: 'Authenticate Bing, list sites, dump data, and read Indexing Evidence' }
+export const annotationsCommandMeta = { name: 'annotations', description: 'List, create, update, and delete hosted chart annotations' }

@@ -280,6 +280,11 @@
   agentRequestContextSchema: object
   analyticsCoverageQueryV1Schema: object
   analyticsCoverageV1Schemas: object
+  ANNOTATION_CATEGORIES: object
+  ANNOTATION_TONES: object
+  annotationDateV1Schema: object
+  annotationIdV1Schema: object
+  annotationUrlV1Schema: object
   bingAuthorizationRequestV1Schema: object
   bingAuthorizationV1Schemas: object
   bingCnameVerificationV1Schema: object
@@ -298,10 +303,14 @@
   bingSitesV1Schemas: object
   bingSiteV1Schemas: object
   buildHttpOperationPath: function
+  chartAnnotationItemV1Schemas: object
+  chartAnnotationsQueryV1Schema: object
+  chartAnnotationsV1Schemas: object
   createGscdumpV1Documents: function
   createGscdumpV1Protocol: function
   createHttpV1Registry: function
   createRealtimeV1Schemas: function
+  createSiteAnnotationV1Schema: object
   defineHttpOperation: function
   defineHttpSurface: function
   defineResponseObject: function
@@ -381,6 +390,10 @@
   runReportV1DataSchemas: object
   runReportV1RequestSchema: object
   serializeContractDocument: function
+  siteAnnotationDeleteV1Schemas: object
+  siteAnnotationListV1Schemas: object
+  siteAnnotationMutationV1Schemas: object
+  siteAnnotationV1Schemas: object
   siteIndexingApiGrantV1Schema: object
   siteIndexingApiGrantV1Schemas: object
   sitemapEvidenceV1Schemas: object
@@ -400,6 +413,7 @@
   submissionSummaryQueryV1Schema: object
   submissionSummaryV1Schema: object
   submissionSummaryV1Schemas: object
+  updateSiteAnnotationV1Schema: object
   userIntegrationActivityV1Schemas: object
 ./v1/browser:
   createGscdumpV1BrowserSchemas: function
@@ -409,6 +423,11 @@
   agentRequestContextSchema: object
   analyticsCoverageQueryV1Schema: object
   analyticsCoverageV1Schemas: object
+  ANNOTATION_CATEGORIES: object
+  ANNOTATION_TONES: object
+  annotationDateV1Schema: object
+  annotationIdV1Schema: object
+  annotationUrlV1Schema: object
   bingAuthorizationRequestV1Schema: object
   bingAuthorizationV1Schemas: object
   bingCnameVerificationV1Schema: object
@@ -427,8 +446,12 @@
   bingSitesV1Schemas: object
   bingSiteV1Schemas: object
   buildHttpOperationPath: function
+  chartAnnotationItemV1Schemas: object
+  chartAnnotationsQueryV1Schema: object
+  chartAnnotationsV1Schemas: object
   createGscdumpV1Protocol: function
   createHttpV1Registry: function
+  createSiteAnnotationV1Schema: object
   defineHttpOperation: function
   defineHttpSurface: function
   defineResponseObject: function
@@ -489,6 +512,10 @@
   resolveHttpOperation: function
   runReportV1DataSchemas: object
   runReportV1RequestSchema: object
+  siteAnnotationDeleteV1Schemas: object
+  siteAnnotationListV1Schemas: object
+  siteAnnotationMutationV1Schemas: object
+  siteAnnotationV1Schemas: object
   siteIndexingApiGrantV1Schema: object
   siteIndexingApiGrantV1Schemas: object
   sitemapEvidenceV1Schemas: object
@@ -508,6 +535,7 @@
   submissionSummaryQueryV1Schema: object
   submissionSummaryV1Schema: object
   submissionSummaryV1Schemas: object
+  updateSiteAnnotationV1Schema: object
   userIntegrationActivityV1Schemas: object
 ./v1/paths:
   createGscdumpV1Paths: function

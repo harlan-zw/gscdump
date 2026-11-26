@@ -75,6 +75,16 @@ import {
 } from '../site-version'
 import { userIntegrationActivityV1Schemas } from './agent-usage'
 import { analyticsCoverageQueryV1Schema, analyticsCoverageV1Schemas } from './analytics-coverage'
+import {
+  annotationIdV1Schema,
+  chartAnnotationsQueryV1Schema,
+  chartAnnotationsV1Schemas,
+  createSiteAnnotationV1Schema,
+  siteAnnotationDeleteV1Schemas,
+  siteAnnotationListV1Schemas,
+  siteAnnotationMutationV1Schemas,
+  updateSiteAnnotationV1Schema,
+} from './annotations'
 import { bingConnectionV1Schemas } from './bing'
 import { bingDataQueryV1Schema, bingDataTotalsQueryV1Schema, bingDataTotalsV1Schemas, bingDataV1Schemas } from './bing-data'
 import {
@@ -931,6 +941,15 @@ export function createGscdumpV1Protocol() {
     'internal_error',
     'contract_violation',
   ] as const
+  const partnerSiteAnnotationCreateErrors = [...partnerSiteErrors, 'conflict'] as const
+  const chartAnnotationsResponse = defineSuccessResponse(chartAnnotationsV1Schemas, partnerResponseMeta)
+  const siteAnnotationListResponse = defineSuccessResponse(siteAnnotationListV1Schemas, partnerResponseMeta)
+  const siteAnnotationMutationResponse = defineSuccessResponse(siteAnnotationMutationV1Schemas, partnerResponseMeta)
+  const siteAnnotationDeleteResponse = defineSuccessResponse(siteAnnotationDeleteV1Schemas, partnerResponseMeta)
+  const siteAnnotationParams = z.strictObject({
+    siteId: realtimeSchemas.publicSiteId,
+    annotationId: annotationIdV1Schema,
+  })
   const siteVersionErrors = [...partnerSiteErrors, 'conflict', 'service_unavailable'] as const
   const siteVersionIdentityResponse = defineSuccessResponse(
     { producer: siteVersionIdentityResponseSchema, client: siteVersionIdentityResponseSchema },
@@ -1293,6 +1312,254 @@ export function createGscdumpV1Protocol() {
           examples: {
             request: { params: { siteId: 's_01' }, query: { startDate: '2026-10-01', endDate: '2026-10-02', searchType: 'web' } },
             response: { data: { searchType: 'web', current: { startDate: '2026-10-01', endDate: '2026-10-02', complete: true }, comparison: null }, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } },
+          },
+        },
+      }),
+      getChartAnnotations: defineHttpOperation({
+        ...gscdumpV1OperationRoute('partner.sites.chart_annotations.list'),
+        visibility: 'public',
+        semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
+        auth: {
+          credentials: ['user_key', 'partner_key'],
+          scopes: ['analytics:read'],
+          ownership: [
+            { credential: 'user_key', rule: 'authorized_site' },
+            { credential: 'partner_key', rule: 'authorized_site' },
+          ],
+        },
+        request: {
+          params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }),
+          query: chartAnnotationsQueryV1Schema,
+          headers: requestHeaders,
+          body: null,
+        },
+        responses: { 200: chartAnnotationsResponse },
+        errors: partnerSiteErrors,
+        errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [{ type: 'site.analytics', idFrom: 'params.siteId' }], changes: [] },
+        lifecycle: { introduced: '7.20.0' },
+        docs: {
+          summary: 'List chart annotations',
+          description: 'Returns custom Site annotations and mirrored Google Search ranking updates for a Site, optionally bounded by startDate and endDate.',
+          tags: ['Annotations'],
+          examples: {
+            request: { params: { siteId: 's_01' }, query: { startDate: '2026-10-01', endDate: '2026-10-31' } },
+            response: {
+              data: {
+                annotations: [
+                  {
+                    id: 'ann_01',
+                    date: '2026-10-12',
+                    label: 'Site migration',
+                    description: 'Moved docs to /docs',
+                    href: 'https://example.com/changelog',
+                    category: 'custom',
+                    tone: 'neutral',
+                    editable: true,
+                  },
+                ],
+              },
+              meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
+            },
+          },
+        },
+      }),
+      listSiteAnnotations: defineHttpOperation({
+        ...gscdumpV1OperationRoute('partner.sites.annotations.list'),
+        visibility: 'public',
+        semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
+        auth: {
+          credentials: ['user_key', 'partner_key'],
+          scopes: ['analytics:read'],
+          ownership: [
+            { credential: 'user_key', rule: 'authorized_site' },
+            { credential: 'partner_key', rule: 'authorized_site' },
+          ],
+        },
+        request: {
+          params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }),
+          query: null,
+          headers: requestHeaders,
+          body: null,
+        },
+        responses: { 200: siteAnnotationListResponse },
+        errors: partnerSiteErrors,
+        errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [{ type: 'site.analytics', idFrom: 'params.siteId' }], changes: [] },
+        lifecycle: { introduced: '7.20.0' },
+        docs: {
+          summary: 'List custom Site annotations',
+          description: 'Returns custom annotations authored on a Site, ordered by date and creation time.',
+          tags: ['Annotations'],
+          examples: {
+            request: { params: { siteId: 's_01' } },
+            response: {
+              data: {
+                annotations: [
+                  {
+                    id: 'ann_01',
+                    siteId: 's_01',
+                    date: '2026-10-12',
+                    title: 'Site migration',
+                    note: 'Moved docs to /docs',
+                    url: 'https://example.com/changelog',
+                    createdAt: 1791763200,
+                    updatedAt: 1791763200,
+                  },
+                ],
+              },
+              meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
+            },
+          },
+        },
+      }),
+      createSiteAnnotation: defineHttpOperation({
+        ...gscdumpV1OperationRoute('partner.sites.annotations.create'),
+        visibility: 'public',
+        semantics: { kind: 'mutation', sideEffects: 'state', idempotent: false, retry: 'never', readConsistency: null },
+        auth: {
+          credentials: ['user_key', 'partner_key'],
+          scopes: ['sites:write'],
+          ownership: [
+            { credential: 'user_key', rule: 'authorized_site' },
+            { credential: 'partner_key', rule: 'authorized_site' },
+          ],
+        },
+        request: {
+          params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }),
+          query: null,
+          headers: requestHeaders,
+          body: createSiteAnnotationV1Schema,
+        },
+        responses: { 200: siteAnnotationMutationResponse },
+        errors: partnerSiteAnnotationCreateErrors,
+        errorResponse: errorEnvelopeSchemas(partnerSiteAnnotationCreateErrors, realtimeSchemas.publicRequestId),
+        resources: {
+          reads: [{ type: 'site.analytics', idFrom: 'params.siteId' }],
+          changes: [{ type: 'site.analytics', idFrom: 'params.siteId' }],
+        },
+        lifecycle: { introduced: '7.20.0' },
+        docs: {
+          summary: 'Create a custom Site annotation',
+          description: 'Creates a custom chart annotation on a Site. Fails with 409 conflict when the Site reaches its annotation limit.',
+          tags: ['Annotations'],
+          examples: {
+            request: {
+              params: { siteId: 's_01' },
+              body: {
+                date: '2026-10-12',
+                title: 'Site migration',
+                note: 'Moved docs to /docs',
+                url: 'https://example.com/changelog',
+              },
+            },
+            response: {
+              data: {
+                annotation: {
+                  id: 'ann_01',
+                  siteId: 's_01',
+                  date: '2026-10-12',
+                  title: 'Site migration',
+                  note: 'Moved docs to /docs',
+                  url: 'https://example.com/changelog',
+                  createdAt: 1791763200,
+                  updatedAt: 1791763200,
+                },
+              },
+              meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
+            },
+          },
+        },
+      }),
+      updateSiteAnnotation: defineHttpOperation({
+        ...gscdumpV1OperationRoute('partner.sites.annotations.update'),
+        visibility: 'public',
+        semantics: { kind: 'mutation', sideEffects: 'state', idempotent: true, retry: 'idempotent', readConsistency: null },
+        auth: {
+          credentials: ['user_key', 'partner_key'],
+          scopes: ['sites:write'],
+          ownership: [
+            { credential: 'user_key', rule: 'authorized_site' },
+            { credential: 'partner_key', rule: 'authorized_site' },
+          ],
+        },
+        request: {
+          params: siteAnnotationParams,
+          query: null,
+          headers: requestHeaders,
+          body: updateSiteAnnotationV1Schema,
+        },
+        responses: { 200: siteAnnotationMutationResponse },
+        errors: partnerSiteErrors,
+        errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
+        resources: {
+          reads: [{ type: 'site.analytics', idFrom: 'params.siteId' }],
+          changes: [{ type: 'site.analytics', idFrom: 'params.siteId' }],
+        },
+        lifecycle: { introduced: '7.20.0' },
+        docs: {
+          summary: 'Update a custom Site annotation',
+          description: 'Updates one or more fields on an existing custom Site annotation. Pass null for note or url to clear them.',
+          tags: ['Annotations'],
+          examples: {
+            request: {
+              params: { siteId: 's_01', annotationId: 'ann_01' },
+              body: { title: 'Docs migration complete' },
+            },
+            response: {
+              data: {
+                annotation: {
+                  id: 'ann_01',
+                  siteId: 's_01',
+                  date: '2026-10-12',
+                  title: 'Docs migration complete',
+                  note: 'Moved docs to /docs',
+                  url: 'https://example.com/changelog',
+                  createdAt: 1791763200,
+                  updatedAt: 1791766800,
+                },
+              },
+              meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
+            },
+          },
+        },
+      }),
+      deleteSiteAnnotation: defineHttpOperation({
+        ...gscdumpV1OperationRoute('partner.sites.annotations.delete'),
+        visibility: 'public',
+        semantics: { kind: 'mutation', sideEffects: 'state', idempotent: true, retry: 'idempotent', readConsistency: null },
+        auth: {
+          credentials: ['user_key', 'partner_key'],
+          scopes: ['sites:write'],
+          ownership: [
+            { credential: 'user_key', rule: 'authorized_site' },
+            { credential: 'partner_key', rule: 'authorized_site' },
+          ],
+        },
+        request: {
+          params: siteAnnotationParams,
+          query: null,
+          headers: requestHeaders,
+          body: null,
+        },
+        responses: { 200: siteAnnotationDeleteResponse },
+        errors: partnerSiteErrors,
+        errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
+        resources: {
+          reads: [{ type: 'site.analytics', idFrom: 'params.siteId' }],
+          changes: [{ type: 'site.analytics', idFrom: 'params.siteId' }],
+        },
+        lifecycle: { introduced: '7.20.0' },
+        docs: {
+          summary: 'Delete a custom Site annotation',
+          description: 'Deletes a custom annotation from a Site.',
+          tags: ['Annotations'],
+          examples: {
+            request: { params: { siteId: 's_01', annotationId: 'ann_01' } },
+            response: {
+              data: { deleted: true, id: 'ann_01' },
+              meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
+            },
           },
         },
       }),
@@ -4265,6 +4532,10 @@ export function createGscdumpV1Protocol() {
       analysisResponse,
       availableSitesQuery,
       availableSitesResponse,
+      chartAnnotationsResponse,
+      siteAnnotationListResponse,
+      siteAnnotationMutationResponse,
+      siteAnnotationDeleteResponse,
       indexingDiagnosticsQuery,
       indexingDiagnosticsResponse,
       indexingSummaryQuery,
@@ -4338,3 +4609,7 @@ export type PartnerSiteDeletionV1Response = z.infer<GscdumpV1Protocol['schemas']
 export type PartnerUserLifecycleV1Response = z.infer<GscdumpV1Protocol['schemas']['lifecycleResponse']['client']>
 export type PartnerUserEntitlementsV1Response = z.infer<GscdumpV1Protocol['schemas']['userEntitlementsResponse']['client']>
 export type PartnerUserEntitlementsV1 = PartnerUserEntitlementsV1Response['data']
+export type PartnerChartAnnotationsV1Response = z.infer<GscdumpV1Protocol['schemas']['chartAnnotationsResponse']['client']>
+export type PartnerSiteAnnotationListV1Response = z.infer<GscdumpV1Protocol['schemas']['siteAnnotationListResponse']['client']>
+export type PartnerSiteAnnotationMutationV1Response = z.infer<GscdumpV1Protocol['schemas']['siteAnnotationMutationResponse']['client']>
+export type PartnerSiteAnnotationDeleteV1Response = z.infer<GscdumpV1Protocol['schemas']['siteAnnotationDeleteResponse']['client']>

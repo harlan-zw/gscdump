@@ -4,12 +4,16 @@ import process from 'node:process'
 import { confirm, isCancel } from '@clack/prompts'
 import { defineCommand } from 'citty'
 import { resolveSiteInput } from 'gscdump'
+import { getLatestGscDate } from 'gscdump/dates'
+import { unwrapResult } from 'gscdump/result'
 import { addSite, deleteSite, fetchSitesWithSitemaps, getVerificationToken, getVerifiedSite, listVerifiedSites, siteUrlToVerificationSite, unverifySite, verificationMethodsFor, verifySite } from 'gscdump/sites'
 import { connectSiteStep, formatHostedSync, getHostedAccount, localModeRequired, resolveAuthentication, siteManagerOf } from '../auth-state'
 import { sitesCommandMeta } from '../command-meta'
 import { createCommandContext, formatSiteResolution } from '../context'
+import { HOSTED_ARGS, resolveHostedSiteWithTarget } from '../hosted-site'
 import { commandLineError } from '../stop'
-import { applyOutputMode, logger, OUTPUT_ARGS, plural } from '../utils'
+import { ALL_SEARCH_TYPES, applyOutputMode, logger, OUTPUT_ARGS, parseSearchType, plural } from '../utils'
+import { COMPARISON_FLAGS, DEFAULT_WINDOW, parseWindowFlags, PERIOD_FLAGS, windowFlagErrorToException } from '../window'
 
 const ALL_METHODS: VerificationMethod[] = ['META', 'FILE', 'DNS_TXT', 'DNS_CNAME', 'ANALYTICS', 'TAG_MANAGER']
 
@@ -461,6 +465,63 @@ async function runListSites(args: Record<string, unknown>): Promise<void> {
   }
 }
 
+const coverageCommand = defineCommand({
+  meta: {
+    name: 'coverage',
+    description: 'Check recorded hosted analytics coverage for a Site window and optional comparison window (hosted)',
+  },
+  args: {
+    'target': { type: 'positional', required: false, description: 'Site URL or Site ID (or pass --site)' },
+    ...HOSTED_ARGS,
+    'period': { type: 'string', description: `Window: ${PERIOD_FLAGS.join('|')} (default: 28d)` },
+    'start': { type: 'string', description: 'Start date (YYYY-MM-DD)' },
+    'end': { type: 'string', description: 'End date (YYYY-MM-DD)' },
+    'vs': { type: 'string', description: `Comparison: ${COMPARISON_FLAGS.join('|')} (default: none)` },
+    'prev-start': { type: 'string', description: 'Comparison window start date (YYYY-MM-DD)' },
+    'prev-end': { type: 'string', description: 'Comparison window end date (YYYY-MM-DD)' },
+    'type': { type: 'string', description: `Search type. One of: ${ALL_SEARCH_TYPES.join(',')} (default: web)` },
+    ...OUTPUT_ARGS,
+  },
+  async run({ args }) {
+    const { json } = applyOutputMode(args)
+    const searchType = parseSearchType(args.type, '--type') ?? 'web'
+    if (searchType === 'webMultimodal')
+      throw commandLineError('Recorded coverage checks do not support --type webMultimodal.')
+    const window = unwrapResult(parseWindowFlags({
+      period: args.period ? String(args.period) : undefined,
+      vs: args.vs ? String(args.vs) : undefined,
+      start: args.start ? String(args.start) : undefined,
+      end: args.end ? String(args.end) : undefined,
+      prevStart: args['prev-start'] ? String(args['prev-start']) : undefined,
+      prevEnd: args['prev-end'] ? String(args['prev-end']) : undefined,
+    }, DEFAULT_WINDOW, getLatestGscDate()), windowFlagErrorToException)
+
+    const { client, site } = await resolveHostedSiteWithTarget(
+      args as Record<string, unknown>,
+      { name: 'sites coverage', localAlternative: 'run `gscdump store stats --site <site>`' },
+      args.target ? String(args.target) : undefined,
+    )
+    const { data } = await client.getSiteAnalyticsCoverage({
+      params: { siteId: site.siteId },
+      query: {
+        startDate: window.start,
+        endDate: window.end,
+        ...(window.comparison ? { comparisonStartDate: window.comparison.start, comparisonEndDate: window.comparison.end } : {}),
+        searchType,
+      },
+    })
+
+    if (json) {
+      console.log(JSON.stringify({ siteId: site.siteId, siteUrl: site.siteUrl, ...data }, null, 2))
+      return
+    }
+    console.log(`${site.siteUrl} (${data.searchType})`)
+    console.log(`  Current:    ${data.current.startDate} to ${data.current.endDate} (${data.current.complete ? 'complete' : 'incomplete'})`)
+    if (data.comparison)
+      console.log(`  Comparison: ${data.comparison.startDate} to ${data.comparison.endDate} (${data.comparison.complete ? 'complete' : 'incomplete'})`)
+  },
+})
+
 const listCommand = defineCommand({
   meta: { name: 'list', description: 'List GSC sites (alias of bare `sites`)' },
   args: LIST_ARGS,
@@ -477,6 +538,7 @@ export const sitesCommand = defineCommand({
     'add': addCommand,
     'delete': deleteCommand,
     'get': getCommand,
+    'coverage': coverageCommand,
     'verify-token': verifyTokenCommand,
     'verify': verifyCommand,
     'verify-list': verifyListCommand,

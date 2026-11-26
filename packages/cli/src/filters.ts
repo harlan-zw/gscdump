@@ -15,9 +15,13 @@
 import type { Country, Device, Dimension, Filter } from 'gscdump/query'
 import { toPath } from '@gscdump/engine/ingest'
 import { and, country, device, inArray } from 'gscdump/query'
+import { commandLineError } from './stop'
 
 export const FILTER_DIMS = ['query', 'page', 'country', 'device', 'searchAppearance', 'brandedClassification'] as const
 export type FilterDim = typeof FILTER_DIMS[number]
+
+export const QUESTION_REGEX = '^\\s*(how|what|why|when|where|who|which|whose|whom|can|could|should|would|will|do|does|did|is|are|was|were|am)\\b'
+export const LONG_QUERY_REGEX = '^\\S+(?:\\s+\\S+){7,}$'
 
 type MatchOperator = 'equals' | 'notEquals' | 'contains' | 'notContains'
 type RegexOperator = 'includingRegex' | 'excludingRegex'
@@ -82,10 +86,23 @@ export function parseFilterArg(dim: FilterDim, raw: string): ParsedFilter {
 /** Parse every filter flag present in `args`. */
 export function parseFilterArgs(args: Record<string, unknown>): ParsedFilter[] {
   const argName: Record<FilterDim, string> = { query: 'query', page: 'page', country: 'country', device: 'device', searchAppearance: 'search-appearance', brandedClassification: 'branded-classification' }
-  return FILTER_DIMS.flatMap((dim) => {
+  const filters: ParsedFilter[] = FILTER_DIMS.flatMap((dim) => {
     const raw = args[argName[dim]] ?? args[dim]
     return raw == null || raw === '' ? [] : [parseFilterArg(dim, String(raw))]
   })
+  const questions = args.questions
+  if (questions !== undefined && questions !== false) {
+    const normalized = questions === true || questions === '' ? 'questions' : String(questions).trim().toLowerCase()
+    if (normalized === 'questions')
+      filters.push({ kind: 'regex', dim: 'query', operator: 'includingRegex', pattern: QUESTION_REGEX })
+    else if (normalized === 'nonquestions')
+      filters.push({ kind: 'regex', dim: 'query', operator: 'excludingRegex', pattern: QUESTION_REGEX })
+    else
+      throw commandLineError(`Invalid --questions value "${String(questions)}". Use questions or nonquestions.`)
+  }
+  if (args['long-queries'] || args.longQueries)
+    filters.push({ kind: 'regex', dim: 'query', operator: 'includingRegex', pattern: LONG_QUERY_REGEX })
+  return filters
 }
 
 export function filterDimensions(filters: readonly ParsedFilter[]): Dimension[] {
