@@ -15,9 +15,9 @@ import type {
   SyncState,
   Watermark,
 } from '../storage'
+import type { RenameRetryOptions } from './atomic-fs'
 import { Buffer } from 'node:buffer'
-import { randomBytes } from 'node:crypto'
-import { mkdir, open, readdir, readFile, rename, rm, stat, unlink, writeFile } from 'node:fs/promises'
+import { mkdir, open, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { normalize } from 'pathe'
 import { lock as lockFile } from 'proper-lockfile'
@@ -30,6 +30,10 @@ import {
   syncStateKey,
   watermarkKey,
 } from '../manifest-store-utils'
+import { writeFileAtomic } from './atomic-fs'
+
+export { isTransientRenameError, renameWithRetry, writeFileAtomic } from './atomic-fs'
+export type { RenameRetryOptions, WriteFileAtomicOptions } from './atomic-fs'
 
 export interface FilesystemDataSourceOptions {
   rootDir: string
@@ -198,6 +202,8 @@ async function walk(dir: string, out: string[]): Promise<void> {
 
 export interface FilesystemManifestStoreOptions {
   path: string
+  /** Override retry behavior for atomic manifest replacement (e.g. deterministic tests). */
+  renameRetry?: RenameRetryOptions
 }
 
 interface ManifestFile {
@@ -220,22 +226,32 @@ function lockFileFor(locksDir: string, scope: LockScope): string {
 // budget ran out once the queue held more than ~8s of work.
 const inProcessLockTails = new Map<string, Promise<void>>()
 
-async function withInProcessQueue<T>(path: string, fn: () => Promise<T>): Promise<T> {
-  const previous = inProcessLockTails.get(path) ?? Promise.resolve()
+// All reads and writes to the same manifest file in one process serialize here.
+// On Windows, `MoveFileExW` returns `EPERM` when any handle (including an
+// in-process `readFile` in libuv's thread pool) has `manifest.json` open during
+// atomic replacement.
+const inProcessManifestTails = new Map<string, Promise<void>>()
+
+async function withInProcessQueue<T>(
+  tails: Map<string, Promise<void>>,
+  key: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const previous = tails.get(key) ?? Promise.resolve()
   let release!: () => void
   const current = new Promise<void>((resolve) => {
     release = resolve
   })
   const tail = previous.then(() => current)
-  inProcessLockTails.set(path, tail)
+  tails.set(key, tail)
   await previous
   try {
     return await fn()
   }
   finally {
     release()
-    if (inProcessLockTails.get(path) === tail)
-      inProcessLockTails.delete(path)
+    if (tails.get(key) === tail)
+      tails.delete(key)
   }
 }
 
@@ -297,49 +313,11 @@ export function createFilesystemManifestStore(opts: FilesystemManifestStoreOptio
   }
 
   async function save(data: ManifestFile): Promise<void> {
-    const manifestDir = dirname(manifestPath)
-    await ensureDirectory(manifestDir)
-    const tmp = `${manifestPath}.${randomBytes(6).toString('hex')}.tmp`
-    const content = JSON.stringify(data)
-    await writeFile(tmp, content, 'utf8').catch(async (error: NodeJS.ErrnoException) => {
-      if (error.code !== 'ENOENT')
-        throw error
-      readyDirectories.delete(manifestDir)
-      await ensureDirectory(manifestDir)
-      await writeFile(tmp, content, 'utf8')
-    })
-    await rename(tmp, manifestPath).catch(async (err) => {
-      try {
-        await unlink(tmp)
-      }
-      catch (cleanupError) {
-        throw new AggregateError([err, cleanupError], `failed to replace manifest and remove temporary file ${tmp}`)
-      }
-      throw err
-    })
+    await writeFileAtomic(manifestPath, JSON.stringify(data), { retry: opts.renameRetry })
   }
-
-  const queue: Array<() => Promise<void>> = []
-  let running = false
 
   function enqueue<T>(fn: () => Promise<T>): Promise<T> {
-    return new Promise<T>((resolvePromise, rejectPromise) => {
-      queue.push(async () => {
-        await fn().then(resolvePromise, rejectPromise)
-      })
-      drain()
-    })
-  }
-
-  async function drain(): Promise<void> {
-    if (running)
-      return
-    running = true
-    while (queue.length > 0) {
-      const fn = queue.shift()!
-      await fn()
-    }
-    running = false
+    return withInProcessQueue(inProcessManifestTails, manifestPath, fn)
   }
 
   async function registerVersionsImpl(
@@ -363,12 +341,16 @@ export function createFilesystemManifestStore(opts: FilesystemManifestStoreOptio
 
   return {
     async listLive(filter) {
-      const data = await load()
-      return data.entries.filter(e => e.retiredAt === undefined && matchesManifestEntryFilter(e, filter))
+      return enqueue(async () => {
+        const data = await load()
+        return data.entries.filter(e => e.retiredAt === undefined && matchesManifestEntryFilter(e, filter))
+      })
     },
     async listAll(filter) {
-      const data = await load()
-      return data.entries.filter(e => matchesManifestEntryFilter(e, filter))
+      return enqueue(async () => {
+        const data = await load()
+        return data.entries.filter(e => matchesManifestEntryFilter(e, filter))
+      })
     },
     async registerVersion(entry, superseding) {
       return enqueue(() => registerVersionsImpl([entry], superseding))
@@ -377,8 +359,10 @@ export function createFilesystemManifestStore(opts: FilesystemManifestStoreOptio
       return enqueue(() => registerVersionsImpl(entries, superseding))
     },
     async listRetired(olderThan) {
-      const data = await load()
-      return data.entries.filter(e => e.retiredAt !== undefined && e.retiredAt <= olderThan)
+      return enqueue(async () => {
+        const data = await load()
+        return data.entries.filter(e => e.retiredAt !== undefined && e.retiredAt <= olderThan)
+      })
     },
     async delete(toDelete) {
       return enqueue(async () => {
@@ -389,12 +373,16 @@ export function createFilesystemManifestStore(opts: FilesystemManifestStoreOptio
       })
     },
     async getWatermarks(filter) {
-      const data = await load()
-      return (data.watermarks ?? []).filter(w => matchesWatermarkFilter(w, filter))
+      return enqueue(async () => {
+        const data = await load()
+        return (data.watermarks ?? []).filter(w => matchesWatermarkFilter(w, filter))
+      })
     },
     async getSyncStates(filter) {
-      const data = await load()
-      return (data.syncStates ?? []).filter(s => matchesSyncStateFilter(s, filter))
+      return enqueue(async () => {
+        const data = await load()
+        return (data.syncStates ?? []).filter(s => matchesSyncStateFilter(s, filter))
+      })
     },
     async setSyncState(scope, state, detail) {
       return enqueue(async () => {
@@ -427,7 +415,7 @@ export function createFilesystemManifestStore(opts: FilesystemManifestStoreOptio
     async withLock(scope, fn) {
       await ensureDirectory(locksDir)
       const path = lockFileFor(locksDir, scope)
-      return withInProcessQueue(path, () => withFileLock(path, fn))
+      return withInProcessQueue(inProcessLockTails, path, () => withFileLock(path, fn))
     },
     async purgeTenant(filter) {
       return enqueue(async () => {

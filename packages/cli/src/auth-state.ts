@@ -1,6 +1,6 @@
-import { randomUUID } from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import { writeFileAtomic } from '@gscdump/engine/filesystem'
 import { z } from 'zod'
 import { HOSTED_SESSION_EXPIRED, isSessionExpiredBody } from './hosted-session'
 import { useCliRuntime } from './runtime'
@@ -84,17 +84,8 @@ export function parseAuthentication(value: unknown): Authentication {
 
 export async function saveAuthentication(state: Authentication): Promise<void> {
   const parsed = parseAuthentication(state)
-  const configDir = useCliRuntime().configDir
-  await fs.mkdir(configDir, { recursive: true, mode: 0o700 })
-  const target = path.join(configDir, 'authentication.json')
-  const temporary = `${target}.${randomUUID()}.tmp`
-  try {
-    await fs.writeFile(temporary, JSON.stringify(parsed, null, 2), { mode: 0o600, flag: 'wx' })
-    await fs.rename(temporary, target)
-  }
-  finally {
-    await fs.rm(temporary, { force: true })
-  }
+  const target = path.join(useCliRuntime().configDir, 'authentication.json')
+  await writeFileAtomic(target, JSON.stringify(parsed, null, 2), { dirMode: 0o700, mode: 0o600, flag: 'wx' })
 }
 
 export async function clearAuthentication(): Promise<void> {

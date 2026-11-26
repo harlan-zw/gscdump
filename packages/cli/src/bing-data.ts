@@ -2,6 +2,7 @@ import type { BingEvidenceError, BingProviderError, BingWebmasterClient } from '
 import type { Result } from 'gscdump/result'
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import { renameWithRetry } from '@gscdump/engine/filesystem'
 import { BING_THROTTLE_IP_ERROR_CODE } from 'gscdump/bing'
 import { z } from 'zod'
 import { toCSV } from './utils'
@@ -145,8 +146,8 @@ export async function writeBingDump(siteUrl: string, outDir: string, format: 'js
     const summary = { searchEngine: 'bing' as const, siteUrl, observedAt: new Date().toISOString(), format, files }
     await fs.writeFile(path.join(staging, 'metadata.json'), `${JSON.stringify(summary, null, 2)}\n`)
     for (const file of files)
-      await fs.rename(path.join(staging, path.basename(file.path)), file.path)
-    await fs.rename(path.join(staging, 'metadata.json'), path.join(siteDir, 'metadata.json'))
+      await renameWithRetry(path.join(staging, path.basename(file.path)), file.path)
+    await renameWithRetry(path.join(staging, 'metadata.json'), path.join(siteDir, 'metadata.json'))
     return summary
   }
   finally {

@@ -133,6 +133,9 @@
   createFilesystemDataSource: function
   createFilesystemManifestStore: function
   filesystemStats: function
+  isTransientRenameError: function
+  renameWithRetry: function
+  writeFileAtomic: function
 ./hyparquet:
   createHyparquetCodec: function
   decodeParquetRowGroups: function

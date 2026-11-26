@@ -2,6 +2,7 @@ import fsp from 'node:fs/promises'
 import path from 'node:path'
 import process from 'node:process'
 import { confirm, isCancel } from '@clack/prompts'
+import { renameWithRetry } from '@gscdump/engine/filesystem'
 import { defineCommand } from 'citty'
 import { profileCommandMeta } from '../command-meta'
 import { getConfigDir, setConfigDir } from '../config'
@@ -64,7 +65,7 @@ export async function adoptCurrentConfigAsProfile(name: string): Promise<string 
     const dst = path.join(targetDir, f)
     const exists = await fsp.stat(src).then(() => true).catch(() => false)
     if (exists)
-      await fsp.rename(src, dst)
+      await renameWithRetry(src, dst)
   }
   await setActiveProfile(name)
   runtime.activeProfileOverride = name
