@@ -17,6 +17,7 @@ import { METRIC_EXPR } from '@gscdump/engine/sql-fragments'
 import { queriesQueryState } from '../analyzer/adapt-rows'
 import { paginateInMemory } from '../analyzer/paginate'
 import { rowString as str } from '../analyzer/row-values'
+import { normalizeQuery } from '../query/normalize'
 
 export const DEFAULT_URL_DOMINANCE_SHARE = 0.5
 export const DEFAULT_URL_COOCCURRENCE_COSINE = 0.75
@@ -179,11 +180,18 @@ function extractTokens(query: string): string[] {
   return query.toLowerCase().match(TOKEN_RE) ?? []
 }
 
-function extractContentTokens(tokens: readonly string[]): Set<string> {
+function extractContentTokens(query: string, tokens: readonly string[]): Set<string> {
   const out = new Set<string>()
   for (const t of tokens) {
     if (t.length >= 2 && !STOPWORDS.has(t))
       out.add(t)
+  }
+  const normalized = normalizeQuery(query)
+  if (normalized) {
+    for (const t of extractTokens(normalized)) {
+      if (t.length >= 2 && !STOPWORDS.has(t))
+        out.add(t)
+    }
   }
   return out
 }
@@ -475,7 +483,7 @@ function extractCrossLexicalSynonymPairs(
     entries.push({
       agg,
       vec,
-      contentTokens: extractContentTokens(tokens),
+      contentTokens: extractContentTokens(agg.query, tokens),
       numSig: extractDigitSignature(agg.query),
       polaritySig: extractPolaritySignature(tokens),
       directional: isDirectionalQuery(agg.query, tokens),
