@@ -39,8 +39,9 @@ describe('gscdump fleet command helpers', () => {
     })
   })
 
-  it('rejects unknown sort fields, invalid search types, and conflicting period with custom dates', () => {
+  it('rejects unknown sort fields, prototype keys, invalid search types, and conflicting period with custom dates', () => {
     expect(() => parseFleetSort('score')).toThrow(/Unknown --sort/)
+    expect(() => parseFleetSort('constructor')).toThrow(/Unknown --sort/)
     expect(() => buildHostedFleetRequest({ 'search-type': 'bogus' })).toThrow(/Invalid --search-type/)
     expect(() => buildHostedFleetRequest({ period: '7d', start: '2026-10-01', end: '2026-10-07' })).toThrow()
   })
@@ -51,13 +52,13 @@ describe('gscdump fleet command helpers', () => {
       { siteId: 's_dup_a', siteUrl: 'https://dup.example.com/' },
       { siteId: 's_dup_b', siteUrl: 'https://dup.example.com/' },
     ]
-    const manager = { kind: 'gscdump' as const }
+    const manager = { _tag: 'gscdump' as const }
     expect(resolveHostedSiteTokens(sites, ['https://one.example.com/', 's_dup_a'], manager)).toEqual(['s_one', 's_dup_a'])
     expect(() => resolveHostedSiteTokens(sites, ['https://missing.example.com/'], manager)).toThrow(/No hosted Site matches/)
     expect(() => resolveHostedSiteTokens(sites, ['https://dup.example.com/'], manager)).toThrow(/Multiple hosted Sites match/)
   })
 
-  it('renders Site rows and deduplicated Fleet totals for human output', () => {
+  it('renders Site rows, partner tags on duplicate hosts, and deduplicated Fleet totals for human output', () => {
     const cur = { clicks: 80, impressions: 1000, ctr: 0.08, position: 6.2 }
     const prev = { clicks: 120, impressions: 1000, ctr: 0.12, position: 5.1 }
     const summary = buildFleetSummary({
@@ -85,12 +86,29 @@ describe('gscdump fleet command helpers', () => {
           previousTotals: prev,
           deltas: computeFleetDeltas(cur, prev),
         },
+        {
+          _tag: 'Ok',
+          siteId: 's_02',
+          siteUrl: 'https://example.com/',
+          gscProperty: 'sc-domain:example.com',
+          partner: 'nuxtseo',
+          syncStatus: 'idle',
+          oldestDateSynced: '2026-01-01',
+          newestDateSynced: '2026-11-22',
+          coverage: { startDate: '2026-11-16', endDate: '2026-11-22', complete: true },
+          totals: cur,
+          previousTotals: prev,
+          deltas: computeFleetDeltas(cur, prev),
+        },
       ],
     })
 
     const output = renderFleetSummary(summary)
     expect(output).toContain('2026-11-16 to 2026-11-22')
+    expect(output).toContain('Partner')
     expect(output).toContain('https://example.com/')
+    expect(output).toContain('gscdump')
+    expect(output).toContain('nuxtseo')
     expect(output).toContain('Fleet total (Complete, 1 unique Sites)')
   })
 })

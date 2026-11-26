@@ -60,7 +60,7 @@ const LOCAL_AGGREGATE_TABLES: readonly TableName[] = ['dates', 'countries', 'pag
 export function parseFleetSort(raw: string | undefined): FleetSummarySortField {
   if (!raw)
     return 'clicks'
-  const mapped = SORT_ALIASES[raw]
+  const mapped = Object.hasOwn(SORT_ALIASES, raw) ? SORT_ALIASES[raw] : undefined
   if (!mapped)
     throw commandLineError(`Unknown --sort "${raw}". Valid: ${FLEET_SUMMARY_SORT_FIELDS.join(', ')}.`)
   return mapped
@@ -428,10 +428,13 @@ async function runLocalFleet(args: Record<string, unknown>): Promise<FleetSummar
 export function renderFleetSummary(summary: FleetSummaryV1Data): string {
   const options = terminalOutputOptions()
   const header = `Fleet / ${summary.window.startDate} to ${summary.window.endDate}${summary.window.comparison ? ` vs ${summary.window.comparison.startDate} to ${summary.window.comparison.endDate}` : ''}`
+  const showPartnerColumn = summary.sites.some(site => site.sameSiteUrlAs.length > 0)
   const rows = summary.sites.map((site) => {
+    const partner = site.partner ?? 'gscdump'
     if (site._tag !== 'Ok') {
       return {
         site: site.siteUrl,
+        partner,
         clicks: 'n/a',
         delta: site._tag,
         impressions: 'n/a',
@@ -445,6 +448,7 @@ export function renderFleetSummary(summary: FleetSummaryV1Data): string {
       : { text: 'n/a', direction: 'neutral' as const }
     return {
       site: site.siteUrl,
+      partner,
       clicks: formatMetric('clicks', site.totals.clicks),
       delta: change.text,
       impressions: formatMetric('impressions', site.totals.impressions),
@@ -454,18 +458,21 @@ export function renderFleetSummary(summary: FleetSummaryV1Data): string {
     }
   })
 
+  const columns = [
+    { key: 'site', label: 'Site' },
+    ...(showPartnerColumn ? [{ key: 'partner', label: 'Partner' }] : []),
+    { key: 'clicks', label: 'Clicks', numeric: true },
+    { key: 'delta', label: 'Delta', numeric: true },
+    { key: 'impressions', label: 'Impr.', numeric: true },
+    { key: 'ctr', label: 'CTR', numeric: true },
+    { key: 'position', label: 'Pos', numeric: true },
+    { key: 'status', label: 'Status' },
+  ]
+
   const lines = [
     ...textLines(header, options, 'accent'),
     '',
-    ...renderTable(rows, [
-      { key: 'site', label: 'Site' },
-      { key: 'clicks', label: 'Clicks', numeric: true },
-      { key: 'delta', label: 'Delta', numeric: true },
-      { key: 'impressions', label: 'Impr.', numeric: true },
-      { key: 'ctr', label: 'CTR', numeric: true },
-      { key: 'position', label: 'Pos', numeric: true },
-      { key: 'status', label: 'Status' },
-    ], options),
+    ...renderTable(rows, columns, options),
   ]
 
   const dt = summary.deduplicatedTotals

@@ -550,7 +550,7 @@ check are banned; words that did not are recorded in Open questions instead.
 | Cloud, cloud mode, `--mode cloud` | Hosted, `--mode hosted` | gscdump.com ADR-0012 names the mode. The CLI rejects `cloud` |
 | powerful, seamless, robust, blazing | (cut) | Marketing filler |
 | traffic trend (as a name for the whole-record classification) | Trajectory | Trajectory is one classification with named tags. A `trend` field elsewhere keeps its own meaning |
-| fleet, issue rollup (for Sites shown together or their issue counts) | Portfolio, Portfolio issue counts | Rollup names a stored engine table |
+| workspace, portfolio, account, all-sites view, issue rollup (for cross-Site sets or issue counts) | Fleet, Portfolio issue counts (legacy indexing prefix) | Fleet is the ratified cross-Site term; Rollup names a stored engine table |
 | funnel, pipeline evidence (for Inspected, Crawled, Indexable, Indexed) | Inspection stages | The Coverage ladder owns Google's sequence, and Indexing Evidence names one observation |
 
 ### Site Triage
