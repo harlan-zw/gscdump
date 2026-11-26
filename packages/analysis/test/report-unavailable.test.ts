@@ -68,6 +68,7 @@ describe('growth report against a source with no executeSql (prod repro)', () =>
     'content-velocity',
     'keyword-breadth',
     'intent-atlas',
+    'url-clusters',
     'long-tail',
   ])
   const ctx: ReportContext = { site: SITE, window: WINDOW, params: {}, registryVersion: 't' }
@@ -76,7 +77,7 @@ describe('growth report against a source with no executeSql (prod repro)', () =>
     const { growthReport } = await import('../src/report/reports/growth')
     const out = await runReport(growthReport, { source: rowsOnlySource, analyzers, ctx })
     expect(out.meta.degraded).toBe(true)
-    expect(out.meta.steps.map(s => s.status)).toEqual(['error', 'error', 'error', 'error'])
+    expect(out.meta.steps.map(s => s.status)).toEqual(['error', 'error', 'error', 'error', 'error'])
     expect(out.meta.steps[0]!.error).toContain('not provided by source')
   })
 
@@ -88,6 +89,7 @@ describe('growth report against a source with no executeSql (prod repro)', () =>
       'content-velocity',
       'keyword-breadth',
       'intent-atlas',
+      'url-clusters',
       'long-tail',
     ])
     for (const section of out.sections) {

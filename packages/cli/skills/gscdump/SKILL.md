@@ -390,10 +390,13 @@ gscdump analyze striking-distance --site example.com --json
   `--prev-end` together to override it. `--vs` belongs to `report`.
 - `--limit` caps the rows returned. It never caps the rows read.
   `--fetch-budget` caps each live fetch (default 25000, max 100000).
-- The 18 Analyzers with an impression floor accept `--min-impressions N`.
+- The 19 Analyzers with an impression floor accept `--min-impressions N`.
   `cannibalization`, `clustering`, and `intent-atlas` accept `--canonical` to
   fold near-duplicate variants via `normalizeQuery`, and `--fuzzy` to also fold
   typo and compound-spacing variants.
+- To group cross-lexical and multilingual queries without ML weights, run
+  `gscdump analyze url-clusters --site example.com --json` (`--min-cluster-size`,
+  `--threshold` in `0.01..1`, default `0.5`). Works over both the Store and `--live`.
 - To group cross-lexical synonyms in a local Store, build the opt-in
   `query_embeddings` sidecar with `gscdump entities embeddings build --site example.com`
   (`--provider ollama` or `workers-ai`), then run

@@ -7,12 +7,12 @@ import { moversReport } from '../src/report/reports/movers'
 import { runReport } from '../src/report/runtime'
 import { createInMemoryQuerySource } from '../src/source/in-memory'
 
-function stubAnalyzer(id: string, results: unknown[]): Analyzer {
+function stubAnalyzer(id: string, results: unknown[], meta?: Record<string, unknown>): Analyzer {
   return {
     id,
     requires: [],
     build: (): RowQueriesPlan => ({ kind: 'rows', queries: {} }),
-    reduce: () => ({ results: results as never[] }),
+    reduce: () => ({ results: results as never[], ...(meta ? { meta } : {}) }),
   }
 }
 
@@ -366,7 +366,7 @@ describe('pre-publish report', () => {
 describe('growth report', () => {
   const window: ResolvedWindow = { start: '2024-08-07', end: '2024-11-04', days: 90 }
 
-  it('aggregates across 4 strategic signals; long-tail has findings', async () => {
+  it('aggregates across 5 strategic signals; url-clusters and long-tail have page findings', async () => {
     const ctx: ReportContext = { site: SITE, window, params: {}, registryVersion: 't' }
     const analyzers = stubRegistry([
       stubAnalyzer('content-velocity', [
@@ -381,6 +381,10 @@ describe('growth report', () => {
         { clusterKey: 'guides', keywordCount: 40, totalImpressions: 5000, totalClicks: 200, ctr: 0.04, avgPosition: 7 },
         { clusterKey: 'reviews', keywordCount: 25, totalImpressions: 3000, totalClicks: 150, ctr: 0.05, avgPosition: 5 },
       ]),
+      stubAnalyzer('url-clusters', [
+        { url: '/tools/schema-validator', leadQuery: 'schema validator', keywordCount: 12, totalImpressions: 9000, totalClicks: 300, meanDominanceShare: 0.96 },
+        { url: '/learn-seo/open-graph', leadQuery: 'og tags', keywordCount: 8, totalImpressions: 4200, totalClicks: 140, meanDominanceShare: 0.88 },
+      ], { synonymPairs: [{ queryA: 'og tags', queryB: 'open graph seo', cosine: 0.94, sharedUrls: 2, combinedImpressions: 800, topSharedUrl: '/learn-seo/open-graph' }] }),
       stubAnalyzer('long-tail', [
         { page: '/a', queryCount: 500, totalImpressions: 9000, totalClicks: 200, slope: -0.5, intercept: 1, r2: 0.9, headImpressions: 7200, headShare: 0.8, fingerprint: 'head-heavy', points: [] },
         { page: '/b', queryCount: 200, totalImpressions: 4000, totalClicks: 100, slope: -0.3, intercept: 1, r2: 0.8, headImpressions: 1500, headShare: 0.4, fingerprint: 'balanced', points: [] },
@@ -388,11 +392,16 @@ describe('growth report', () => {
     ])
     const { growthReport } = await import('../src/report/reports/growth')
     expect(growthReport.plan({}, window).find(s => s.key === 'intent-atlas')?.params.fuzzy).toBe(true)
+    expect(growthReport.plan({}, window).find(s => s.key === 'url-clusters')?.type).toBe('url-clusters')
     const out = await runReport(growthReport, { source, analyzers, ctx })
-    expect(out.sections.map(s => s.id)).toEqual(['content-velocity', 'keyword-breadth', 'intent-atlas', 'long-tail'])
+    expect(out.sections.map(s => s.id)).toEqual(['content-velocity', 'keyword-breadth', 'intent-atlas', 'url-clusters', 'long-tail'])
     expect(out.sections[0]!.summary.magnitudeLabel).toContain('55 search queries first observed within this window')
+    expect(out.sections[3]!.summary.magnitudeLabel).toContain('2 URL topic clusters covering 20 search queries; 1 cross-lexical synonym pair')
     expect(out.sections[3]!.findings).toHaveLength(2)
-    expect(out.sections[3]!.findings[0]!.entity.value).toBe('/a')
+    expect(out.sections[3]!.findings[0]!.entity).toEqual({ kind: 'page', value: '/tools/schema-validator' })
+    expect(out.sections[3]!.findings[0]!.why).toContain('"schema validator" + 11 related queries')
+    expect(out.sections[4]!.findings).toHaveLength(2)
+    expect(out.sections[4]!.findings[0]!.entity.value).toBe('/a')
   })
 })
 
