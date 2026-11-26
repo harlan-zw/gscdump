@@ -1,3 +1,4 @@
+import type { RpcFunctionDefinitionAny } from 'devframe/rpc'
 import type { GscdumpReader } from './reader'
 import type { GscdumpContext, PageStats } from './shared/protocol'
 import { defineRpcFunction } from 'devframe'
@@ -17,7 +18,7 @@ const pageStatsResult = z.custom<PageStats>()
  * through a context scoped to the devframe id, so the wire names are
  * `gscdump:get-context` and `gscdump:get-page-stats`.
  */
-export function createRpcFunctions(reader: GscdumpReader) { // eslint-disable-line ts/explicit-function-return-type -- the definitions' inferred types are the registry
+export function createRpcFunctions(reader: GscdumpReader): readonly RpcFunctionDefinitionAny[] {
   return [
     defineRpcFunction({
       name: 'get-context',
