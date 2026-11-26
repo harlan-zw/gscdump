@@ -265,7 +265,7 @@ catalogs:
       specifier: ^5.0.1
       version: 5.0.1
     vitest:
-      specifier: ^5.0.1
+      specifier: 5.0.1
       version: 5.0.1
   devframe:
     '@types/chrome':
