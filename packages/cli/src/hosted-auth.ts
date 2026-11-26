@@ -61,7 +61,14 @@ async function requestJson(request: typeof fetch, route: string, init: RequestIn
       throw userStopError(LOGIN_CANCELLED)
     throw new Error(HOSTED_LOGIN_FAILURE)
   }
-  return response.json()
+  try {
+    return await response.json()
+  }
+  catch (error: unknown) {
+    if (error instanceof SyntaxError || isTransientNetworkError(error))
+      throw new TransientHostedLoginError()
+    throw error
+  }
 }
 
 /**
@@ -102,13 +109,19 @@ export async function loginWithHostedSession(deps: {
       if (transientFailures >= MAX_TRANSIENT_POLL_FAILURES)
         throw new Error(HOSTED_LOGIN_UNAVAILABLE)
       const backoff = Math.min(BASE_POLL_INTERVAL_MS * (transientFailures + 1), MAX_POLL_BACKOFF_MS)
-      await deps.wait(backoff)
+      const remaining = deadline - deps.now()
+      if (remaining <= 0)
+        break
+      await deps.wait(Math.min(backoff, remaining))
       continue
     }
     const result = pollSchema.parse(payload)
     if (result.status === 'complete')
       return result.sessionId
-    await deps.wait(BASE_POLL_INTERVAL_MS)
+    const remaining = deadline - deps.now()
+    if (remaining <= 0)
+      break
+    await deps.wait(Math.min(BASE_POLL_INTERVAL_MS, remaining))
   }
   throw new Error('Authorization expired. Run `gscdump auth login --mode hosted` to try again.')
 }

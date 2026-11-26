@@ -13,6 +13,7 @@ import { clearAuthentication, formatHostedSync, getHostedAccount, hostedAccountW
 import { clearBingCredentials, getBingClient, inspectBingCredentials } from '../bing-auth'
 import { authCommandMeta } from '../command-meta'
 import { loadConfig, saveConfig } from '../config'
+import { resolveCliEnvironment } from '../environment'
 import { loginWithHostedSession } from '../hosted-auth'
 import { useCliRuntime } from '../runtime'
 import { currentAccessToken, fetchTokenInfo, redactTokens } from '../token-info'
@@ -80,9 +81,12 @@ export const HOSTED_COMMANDS = [
 ] as const
 
 function cliSessionUserAgent(): string {
-  const host = os.hostname().replace(/\p{Cc}+/gu, '').trim()
-  const label = host ? `${os.platform()} ${host}` : os.platform()
-  return `gscdump-cli/${VERSION} (${label})`.slice(0, 120)
+  return `gscdump-cli/${VERSION} (${os.platform()} ${os.arch()})`.slice(0, 120)
+}
+
+/** True when a human can answer interactive prompts. Pipes, CI, and agents cannot. */
+export function isInteractiveTty(runtime = useCliRuntime()): boolean {
+  return process.stdin.isTTY === true && process.stdout.isTTY === true && !runtime.environment.CI
 }
 
 export async function promptAccessMode(): Promise<AccessMode> {
@@ -141,8 +145,9 @@ export async function loginHosted(args: Record<string, unknown>): Promise<{ site
   }
   const account = await getHostedAccount(state)
   await saveAuthentication(state)
+  const manager = siteManagerOf(state, account.issuer)
   const nextStep = loginNextStep(state, account.sites.length, account.issuer)
-  const warnings = hostedAccountWarnings(account)
+  const warnings = hostedAccountWarnings(account, manager)
   if (json) {
     console.log(JSON.stringify({
       authenticated: true,
@@ -238,7 +243,7 @@ async function runStatus(args: Record<string, unknown>): Promise<void> {
       return
     }
     const sites = account.value.sites
-    const warnings = hostedAccountWarnings(account.value)
+    const warnings = hostedAccountWarnings(account.value, siteManagerOf(authentication, account.value.issuer))
     if (json) {
       console.log(JSON.stringify({
         authenticated: true,
@@ -448,7 +453,8 @@ const loginCommand = defineCommand({
       return
     }
     const byok = resolveBYOK()
-    if (!requestedMode && !args['service-account'] && !args.force && !args.json && !byok && process.stdin.isTTY === true) {
+    const cliEnv = resolveCliEnvironment()
+    if (!requestedMode && !args['service-account'] && !args.force && !args.json && !byok && !cliEnv.clientId && !cliEnv.clientSecret && !cliEnv.serviceAccountPath && isInteractiveTty(runtime)) {
       const existingConfig = await loadConfig()
       const existingTokens = await loadTokens()
       if (!existingConfig.clientId && !existingConfig.clientSecret && !existingConfig.serviceAccountPath && !existingTokens) {

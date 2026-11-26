@@ -225,4 +225,155 @@ describe('hosted CLI signup & Site setup UX', () => {
     await expect(run(['init', '--mode', 'hosted', '--no-browser'])).resolves.toBe(0)
     expect(stdout.join('\n')).not.toContain('gscdump query --site <site>')
   })
+
+  it('isolates partner API keys in warnings and `sites add` without naming gscdump.com', async () => {
+    await fs.writeFile(
+      path.join(runtime.configDir, 'authentication.json'),
+      JSON.stringify({ _tag: 'Hosted', apiRoot: 'https://gscdump.com/api', apiKey: 'gsd_user_partner_key' }),
+    )
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({
+      user: { publicId: 'u_partner', email: 'partner@example.com' },
+      hostedAccess: false,
+      accountStatus: { hostedAccess: false, needsReauth: true, searchConsoleScopeGranted: false },
+      issuer: { _tag: 'partner', name: 'Request Indexing' },
+      sites: [],
+    })))
+
+    await expect(run(['auth', 'status', '--json'])).resolves.toBe(0)
+    const statusJson = JSON.parse(stdout.join('\n'))
+    expect(statusJson.warnings).toEqual(['Google access expired. Reconnect Google in Request Indexing.'])
+    expect(JSON.stringify(statusJson.warnings)).not.toContain('gscdump.com')
+
+    stdout = []
+    await expect(run(['doctor', '--json'])).resolves.toBe(0)
+    const doctorJson = JSON.parse(stdout.join('\n'))
+    expect(doctorJson.checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: 'hosted.account', status: 'warn', detail: 'Google access expired. Reconnect Google in Request Indexing.' }),
+    ]))
+
+    stdout = []
+    stderr = ''
+    await expect(run(['sites', 'add', 'https://example.com/'])).resolves.toBe(1)
+    expect(stderr).not.toContain('gscdump.com')
+    expect(stderr).not.toContain('gscdump sites available')
+  })
+
+  it('does not misclassify Hosted 403 refusals as Google Search Console permission errors', async () => {
+    await writeHostedSession()
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json(
+      { data: { message: 'Hosted access is required before connecting Sites.' } },
+      { status: 403 },
+    )))
+
+    await expect(run(['sites', 'connect', 'sc-domain:example.com', '--json'])).resolves.toBe(1)
+    const json = JSON.parse(stdout.join('\n'))
+    expect(json.error.message).toContain('Hosted access is required before connecting Sites.')
+    expect(json.error.message).not.toContain('full user or owner')
+    expect(stderr).not.toContain('Auth sources:')
+  })
+
+  it('handles `sites connect` edge cases: subpath exclusion, exact hostScope, trailing dots, case-insensitive sc-domain, and --no-inspect', async () => {
+    await writeHostedSession()
+    const connectBodies: unknown[] = []
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(input instanceof Request ? input.url : input)
+      if (url.pathname === '/api/cli/sites/available') {
+        return Response.json({
+          properties: [
+            {
+              propertyUrl: 'https://example.com/blog/',
+              propertyType: 'url-prefix',
+              permissionLevel: 'siteOwner',
+              canConnect: true,
+              hostScope: 'exact',
+              host: 'example.com',
+              connected: false,
+              connectedSites: [],
+            },
+            {
+              propertyUrl: 'https://example.com/',
+              propertyType: 'url-prefix',
+              permissionLevel: 'siteOwner',
+              canConnect: true,
+              hostScope: 'exact',
+              host: 'example.com',
+              connected: false,
+              connectedSites: [],
+            },
+          ],
+          sites: { used: 0, allowance: 10, remaining: 10 },
+        })
+      }
+      if (url.pathname === '/api/cli/sites/connect') {
+        connectBodies.push(JSON.parse(String(init?.body)))
+        return Response.json({
+          status: 'connected',
+          message: 'Connected example.com.',
+          site: { siteId: 's_1', siteUrl: 'https://example.com/', propertyUrl: 'https://example.com/' },
+        })
+      }
+      throw new Error(`Unexpected request: ${url.pathname}`)
+    }))
+
+    // Bare host with trailing dot ignores `/blog/` subpath and does not send `host` for exact URL-prefix
+    await expect(run(['sites', 'connect', 'example.com.', '--no-inspect', '--json'])).resolves.toBe(0)
+    expect(connectBodies[0]).toEqual({ propertyUrl: 'https://example.com/', inspectionEnabled: false })
+
+    // Case-insensitive SC-DOMAIN skips `/available` lookup and normalizes prefix
+    stdout = []
+    await expect(run(['sites', 'connect', 'SC-DOMAIN:example.com', '--json'])).resolves.toBe(0)
+    expect(connectBodies[1]).toEqual({ propertyUrl: 'sc-domain:example.com' })
+
+    // Rejects --host on URL-prefix property and rejects invalid bare host
+    stdout = []
+    await expect(run(['sites', 'connect', 'https://example.com/', '--host', 'www.example.com', '--json'])).resolves.toBe(1)
+    expect(JSON.parse(stdout.join('\n')).error.code).toBe('USAGE')
+
+    stdout = []
+    await expect(run(['sites', 'connect', 'foo/bar.example.com', '--json'])).resolves.toBe(1)
+    expect(JSON.parse(stdout.join('\n')).error.code).toBe('USAGE')
+  })
+
+  it('honors GSCDUMP_AUTH_MODE=hosted and GSCDUMP_API_KEY on `init`', async () => {
+    runtime.environment.GSCDUMP_API_KEY = 'gsd_user_env_key'
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+      const url = new URL(input instanceof Request ? input.url : input)
+      if (url.pathname === '/api/cli/me')
+        return Response.json({ user: { publicId: 'u_env', email: 'env@example.com' }, sites: [] })
+      throw new Error(`Unexpected request: ${url.pathname}`)
+    }))
+
+    await expect(run(['init', '--json'])).resolves.toBe(0)
+    expect(JSON.parse(stdout.join('\n'))).toMatchObject({ authenticated: true, account: 'env@example.com' })
+  })
+
+  it('returns an empty summary for `fleet` when Hosted account has Sites but summary is empty', async () => {
+    await writeHostedSession()
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+      const url = new URL(input instanceof Request ? input.url : input)
+      if (url.pathname === '/api/analytics/v1/fleet/summary') {
+        return Response.json({
+          data: buildFleetSummary({
+            window: {
+              startDate: '2026-10-01',
+              endDate: '2026-10-28',
+              days: 28,
+              comparison: { startDate: '2026-09-03', endDate: '2026-09-30' },
+            },
+            searchType: 'web',
+            sortBy: 'clicks',
+            sortDir: 'desc',
+            sites: [],
+          }),
+          meta: { requestId: 'req_empty_with_sites', surface: 'analytics', version: '1.0' },
+        })
+      }
+      if (url.pathname === '/api/cli/me')
+        return Response.json({ user: { publicId: 'u_1', email: 'dev@example.com' }, sites: [{ siteId: 's_1', siteUrl: 'https://example.com/' }] })
+      throw new Error(`Unexpected request: ${url.pathname}`)
+    }))
+
+    await expect(run(['fleet', '--json'])).resolves.toBe(0)
+    expect(JSON.parse(stdout.join('\n')).sites).toEqual([])
+  })
 })

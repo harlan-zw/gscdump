@@ -165,13 +165,13 @@ export type KeyIssuer = z.infer<typeof keyIssuerSchema>
 const hostedAccountStatusSchema = z.object({
   hostedAccess: z.boolean(),
   needsReauth: z.boolean(),
-  searchConsoleScopeGranted: z.boolean().nullable(),
+  searchConsoleScopeGranted: z.boolean().nullable().optional().default(null),
 }).passthrough()
 
 const accountSchema = z.object({
   user: z.object({ publicId: z.string(), email: z.string() }),
   sites: z.array(hostedSiteSchema),
-  hostedAccess: z.boolean().optional(),
+  hostedAccess: z.boolean().optional().catch(undefined),
   accountStatus: hostedAccountStatusSchema.optional().catch(undefined),
   // An older gscdump.com omits `issuer`. An issuer this CLI cannot read, such
   // as a later issuer kind, is unknown in the same way. Neither one fails the
@@ -199,8 +199,8 @@ const hostedAvailablePropertySchema = z.object({
     siteId: z.string().nullable(),
     siteUrl: z.string(),
   }).passthrough()),
-  estimate: hostedEstimateSchema.nullable(),
-  estimateNote: z.string().optional(),
+  estimate: hostedEstimateSchema.nullable().optional().default(null),
+  estimateNote: z.string().nullable().optional(),
 }).passthrough()
 
 const hostedAvailablePropertiesSchema = z.object({
@@ -210,7 +210,7 @@ const hostedAvailablePropertiesSchema = z.object({
     allowance: z.number(),
     remaining: z.number(),
   }).passthrough(),
-  note: z.string().optional(),
+  note: z.string().nullable().optional(),
 }).passthrough()
 
 export type HostedAvailableProperty = z.infer<typeof hostedAvailablePropertySchema>
@@ -223,7 +223,7 @@ const hostedSiteConnectionSchema = z.object({
     siteId: z.string().nullable(),
     siteUrl: z.string(),
     propertyUrl: z.string(),
-    syncStatus: z.string().nullable(),
+    syncStatus: z.string().nullable().optional().default(null),
   }).passthrough(),
   estimate: hostedEstimateSchema.nullable().optional(),
   inspectionEnabled: z.boolean().optional(),
@@ -277,10 +277,13 @@ export async function hostedRequest(state: HostedAuthentication, route: string, 
       ? extractHostedErrorDetails(await response.json().catch(() => null))
       : { message: null, reason: null }
     const suffix = parsed.message ? ` ${parsed.message}` : ' Check `gscdump auth status`.'
-    throw Object.assign(new Error(`Hosted request failed (${response.status}) for ${route.split('?')[0]}.${suffix}`), {
+    const error = Object.assign(new Error(`Hosted request failed (${response.status}) for ${route.split('?')[0]}.${suffix}`), {
+      hostedRequestError: true as const,
       ...details,
       ...(parsed.reason ? { reason: parsed.reason } : {}),
     })
+    error.name = 'HostedRequestError'
+    throw error
   }
   return response.status === 204 ? undefined : response.json()
 }
@@ -369,16 +372,25 @@ export async function connectHostedSite(
 
 const HOSTED_GOOGLE_RECONNECT_URL = 'https://gscdump.com/auth/google?reauth=1&redirect=%2Fapp%2Fonboarding%3Fstep%3Dconnect-sites%26agent%3Dskip'
 
+function reconnectGooglePlace(manager: SiteManager): string {
+  switch (manager._tag) {
+    case 'gscdump': return `at ${HOSTED_GOOGLE_RECONNECT_URL}`
+    case 'partner': return `in ${manager.name}`
+    case 'key_issuer': return 'in the app that issued this API key'
+  }
+}
+
 /** Actionable account-level warnings returned by `/cli/me`, empty when healthy or unsupported by an older host. */
-export function hostedAccountWarnings(account: HostedAccount): string[] {
+export function hostedAccountWarnings(account: HostedAccount, manager: SiteManager): string[] {
   const warnings: string[] = []
   const hostedAccess = account.hostedAccess ?? account.accountStatus?.hostedAccess
-  if (hostedAccess === false)
+  if (hostedAccess === false && manager._tag === 'gscdump')
     warnings.push('Hosted access is not active. Activate Hosted at https://gscdump.com/app/activate.')
+  const reconnect = reconnectGooglePlace(manager)
   if (account.accountStatus?.needsReauth)
-    warnings.push(`Google access expired. Reconnect Google at ${HOSTED_GOOGLE_RECONNECT_URL}.`)
+    warnings.push(`Google access expired. Reconnect Google ${reconnect}.`)
   else if (account.accountStatus?.searchConsoleScopeGranted === false)
-    warnings.push(`Search Console read access is missing. Reconnect Google at ${HOSTED_GOOGLE_RECONNECT_URL} and keep the Search Console box ticked.`)
+    warnings.push(`Search Console read access is missing. Reconnect Google ${reconnect} and keep the Search Console box ticked.`)
   return warnings
 }
 

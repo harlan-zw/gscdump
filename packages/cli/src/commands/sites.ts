@@ -1,5 +1,5 @@
 import type { VerificationMethod } from 'gscdump/sites'
-import type { HostedAuthentication } from '../auth-state'
+import type { HostedAuthentication, HostedAvailableProperty } from '../auth-state'
 import process from 'node:process'
 import { confirm, isCancel } from '@clack/prompts'
 import { defineCommand } from 'citty'
@@ -92,8 +92,12 @@ const addCommand = defineCommand({
   },
   async run({ args }) {
     applyOutputMode(args)
-    if ((await resolveAuthentication())._tag === 'Hosted')
-      throw localModeRequired('To connect a Site to gscdump.com in Hosted mode, run `gscdump sites available` and `gscdump sites connect <property>`.')
+    const auth = await resolveAuthentication()
+    if (auth._tag === 'Hosted') {
+      throw localModeRequired('sessionId' in auth
+        ? 'To connect a Site to gscdump.com in Hosted mode, run `gscdump sites available` and `gscdump sites connect <property>`.'
+        : undefined)
+    }
     const ctx = await createCommandContext({ needsAuth: true })
     await addSite(ctx.client!, args.url)
 
@@ -593,6 +597,19 @@ const availableCommand = defineCommand({
   },
 })
 
+function normalizeBareHost(value: string): string | null {
+  const normalized = value.trim().toLowerCase().replace(/^\/+|\/+$/g, '').replace(/\.+$/, '')
+  if (!normalized || normalized.includes('/'))
+    return null
+  return URL.parse(`https://${normalized}`)?.hostname === normalized ? normalized : null
+}
+
+function isRootProperty(prop: HostedAvailableProperty): boolean {
+  if (prop.propertyType !== 'url-prefix')
+    return true
+  return URL.parse(prop.propertyUrl)?.pathname === '/'
+}
+
 const connectCommand = defineCommand({
   meta: {
     name: 'connect',
@@ -609,23 +626,52 @@ const connectCommand = defineCommand({
   async run({ args }) {
     const { json } = applyOutputMode(args)
     const authentication = await resolveHostedOnlyAuth(args as Record<string, unknown>, 'sites connect')
-    const rawTarget = String(args.property).trim()
-    let propertyUrl = rawTarget
-    let host = args.host ? String(args.host).trim() : undefined
+    const rawTarget = String(args.property ?? '').trim()
+    if (!rawTarget)
+      throw commandLineError('Pass a Search Console property URL (sc-domain:example.com or https://example.com/) or host (example.com).')
 
-    // Allow passing a bare host like `example.com`: resolve unambiguously from available properties.
-    if (!rawTarget.startsWith('sc-domain:') && !/^https?:\/\//i.test(rawTarget)) {
+    let host: string | undefined
+    if (args.host !== undefined && String(args.host).trim() !== '') {
+      const normalizedFlagHost = normalizeBareHost(String(args.host))
+      if (!normalizedFlagHost)
+        throw commandLineError(`Invalid --host "${String(args.host)}". Pass a bare hostname such as www.example.com.`)
+      host = normalizedFlagHost
+    }
+
+    let propertyUrl = rawTarget
+    if (/^sc-domain:/i.test(rawTarget)) {
+      propertyUrl = `sc-domain:${rawTarget.slice('sc-domain:'.length)}`
+    }
+    else if (/^https?:\/\//i.test(rawTarget)) {
+      if (host)
+        throw commandLineError('--host applies only to Domain properties (sc-domain:...), not URL-prefix properties.')
+    }
+    else {
+      // Allow passing a bare host like `example.com`: resolve unambiguously from available properties.
+      const normalized = normalizeBareHost(rawTarget)
+      if (!normalized)
+        throw commandLineError(`Invalid property or host "${rawTarget}". Pass a property URL (sc-domain:example.com or https://example.com/) or a bare host (example.com).`)
       const available = await listHostedAvailableProperties(authentication)
-      const normalized = rawTarget.toLowerCase().replace(/^\/+|\/+$/g, '')
       const matches = available.properties.filter(prop =>
         prop.canConnect
+        && isRootProperty(prop)
         && (prop.host.toLowerCase() === normalized
           || (prop.hostScope === 'domain' && normalized.endsWith(`.${prop.host.toLowerCase()}`))),
       )
       if (matches.length === 1) {
-        propertyUrl = matches[0]!.propertyUrl
-        if (!host)
-          host = normalized
+        const matched = matches[0]!
+        propertyUrl = matched.propertyUrl
+        if (matched.hostScope === 'exact') {
+          if (host)
+            throw commandLineError(`--host applies only to Domain properties, not "${propertyUrl}".`)
+        }
+        else {
+          const matchedHost = matched.host.toLowerCase()
+          if (host && host !== matchedHost && !host.endsWith(`.${matchedHost}`))
+            throw commandLineError(`--host "${host}" is outside Domain property "${propertyUrl}".`)
+          if (!host)
+            host = normalized
+        }
       }
       else if (matches.length > 1) {
         throw commandLineError(`Multiple Search Console properties match "${rawTarget}": ${matches.map(m => m.propertyUrl).join(', ')}. Pass the exact propertyUrl.`)

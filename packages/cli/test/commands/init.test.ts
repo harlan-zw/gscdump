@@ -30,7 +30,8 @@ vi.mock('../../src/config', () => ({
   defaultDataDir: mocks.defaultDataDir,
 }))
 
-vi.mock('../../src/auth-state', () => ({
+vi.mock('../../src/auth-state', async importOriginal => ({
+  ...await importOriginal<typeof import('../../src/auth-state')>(),
   saveAuthentication: mocks.saveAuthentication,
 }))
 

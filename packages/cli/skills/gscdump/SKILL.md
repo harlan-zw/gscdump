@@ -281,7 +281,7 @@ A routing stop also has `siteUrl`. `STORE_RANGE_NOT_COVERED` adds `missingDates`
 
 | Command | Use it for |
 | --- | --- |
-| `gscdump sites` | Local mode: list Google Sites and permission levels. Hosted mode: list hosted Sites and sync state (`sites coverage` checks recorded window coverage) |
+| `gscdump sites` | Local mode: list Google Sites and permission levels. Hosted mode: list hosted Sites and sync state (`sites available` lists connectable properties, `sites connect` connects a Site, `sites coverage` checks recorded window coverage) |
 | `gscdump fleet` | Ranked totals, period deltas, coverage, and deduplicated totals across every Site in Local or Hosted mode |
 | `gscdump annotations` | Hosted: list chart annotations (custom + Google Search updates), create, update, and delete custom annotations |
 | `gscdump bing login`, `status`, `logout` | Manage Bing authentication and check connections |
@@ -482,10 +482,11 @@ If submission fails, mention it and continue. Never retry an uncertain submissio
 
 ## Guardrails
 
-- **Get consent before a mutation.** `sites add`, `sites delete`,
+- **Get consent before a mutation.** `sites add`, `sites connect`, `sites delete`,
   `sites verify`, `sitemaps submit`, `sitemaps delete`, `indexing submit`,
-  `indexing remove`, `store reset`, and `store rm-site` change Google or
-  delete local data. `indexing watch add` spends URL Inspections every week,
+  `indexing remove`, `store reset`, and `store rm-site` change Google,
+  use a Hosted Site allowance slot (starting Backfill and automatic URL Inspection unless `--no-inspect` is passed),
+  or delete local data. `indexing watch add` spends URL Inspections every week,
   and `indexing watch remove` deletes Watched URL inspections.
 - **Check which commands accept `--yes`.** Pass it only when the command's
   `--help` lists it. Follow the reporting rules above for papercuts and telemetry.

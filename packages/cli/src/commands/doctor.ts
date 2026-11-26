@@ -261,15 +261,16 @@ async function checkHostedConnection(authentication: HostedAuthentication): Prom
   }
 
   const count = account.value.sites.length
+  const manager = siteManagerOf(authentication, account.value.issuer)
   const heldSites = account.value.sites.filter(site => site.hold && site.hold !== 'size_pending')
-  const accountChecks: Check[] = hostedAccountWarnings(account.value).map((detail, index) => ({
+  const accountChecks: Check[] = hostedAccountWarnings(account.value, manager).map((detail, index) => ({
     name: index === 0 ? 'hosted.account' : `hosted.account.${index + 1}`,
     status: 'warn' as const,
     detail,
   }))
   const sitesChecks: Check[] = [count > 0
     ? { name: 'hosted.sites', status: 'pass', detail: `${count} hosted Site(s)` }
-    : { name: 'hosted.sites', status: 'warn', detail: `no hosted Sites. ${connectSiteStep(siteManagerOf(authentication, account.value.issuer))}` }]
+    : { name: 'hosted.sites', status: 'warn', detail: `no hosted Sites. ${connectSiteStep(manager)}` }]
   const holdChecks: Check[] = heldSites.length > 0
     ? [{ name: 'hosted.holds', status: 'warn', detail: heldSites.map(site => `${site.siteUrl} (${site.hold})`).join(', ') }]
     : []

@@ -253,6 +253,8 @@ export function describeCliError(error: unknown): CliErrorReport {
     const text = describeRecordReadRefusal(refusal)
     return { kind: 'expected', ...text, showAuthSources: false, stop: recordReadStop(refusal, text) }
   }
+  if (error instanceof Error && (error as { hostedRequestError?: unknown }).hostedRequestError === true)
+    return { kind: 'expected', message: error.message, hint: '', showAuthSources: false }
   const classified = classifyError(error)
   const message = classified.message.replace(PARAM_NAME_RE, name => flagForParam(name))
   const typedHint = suggestionForTypedError(error)
