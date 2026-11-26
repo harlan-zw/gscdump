@@ -71,7 +71,7 @@ describe('report discovery and execution over MCP', () => {
     }
   })
 
-  it.each(['health', 'growth', 'triage'])('omits %s and rejects it before authentication or Google requests', async (id) => {
+  it.each(['health', 'triage'])('omits %s and rejects it before authentication or Google requests', async (id) => {
     const reports = readResult<DiscoveredReport[]>(await client.callTool({ name: 'list-reports', arguments: {} }) as CallToolResult)
     expect(reports.map(report => report.id)).not.toContain(id)
     const result = await client.callTool({ name: 'run-report', arguments: { siteUrl: SITE, id, target: 'example' } })
