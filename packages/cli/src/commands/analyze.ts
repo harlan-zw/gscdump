@@ -147,6 +147,7 @@ const MIN_IMPRESSIONS_TOOLS = new Set<AnalysisTool>([
   'striking-distance',
   'survival',
   'trends',
+  'url-clusters',
   'zero-click',
 ])
 
@@ -154,27 +155,31 @@ const MIN_IMPRESSIONS_TOOLS = new Set<AnalysisTool>([
 const CANONICAL_TOOLS = new Set<AnalysisTool>(['cannibalization', 'clustering', 'intent-atlas'])
 
 const TOOL_EXTRA_ARGS: Partial<Record<AnalysisTool, Record<string, { type: string, description: string, alias?: string }>>> = {
-  brand: {
+  'brand': {
     'brand-terms': { type: 'string', description: 'Comma-separated brand terms (required)' },
   },
-  movers: {
+  'movers': {
     ...COMPARISON_ARGS,
     'sort-by': { type: 'string', description: `Sort: ${MOVERS_SORT_METRICS.join(', ')} (default: clicksDelta)` },
   },
-  decay: COMPARISON_ARGS,
-  concentration: {
+  'decay': COMPARISON_ARGS,
+  'concentration': {
     dimension: { type: 'string', description: 'Dimension: pages or keywords (default: pages)' },
   },
-  seasonality: {
+  'seasonality': {
     metric: { type: 'string', description: 'Metric: clicks or impressions (default: clicks)' },
   },
-  clustering: {
+  'clustering': {
     'cluster-by': { type: 'string', description: 'Cluster by: prefix, intent, or both (default: both)' },
   },
-  trends: {
+  'trends': {
     'dimension': { type: 'string', description: 'Dimension: pages or keywords (default: pages)' },
     'weeks': { type: 'string', description: 'Rolling window size in weeks (default: 28)' },
     'min-weeks': { type: 'string', description: 'Minimum weeks with data to include an entity (default: weeks/4)' },
+  },
+  'url-clusters': {
+    'min-cluster-size': { type: 'string', description: 'Minimum queries per URL cluster (default: 2)' },
+    'threshold': { type: 'string', description: 'Minimum dominant URL impression share in 0..1 (default: 0.5)' },
   },
 }
 
@@ -228,6 +233,20 @@ function buildParams(tool: AnalysisTool, args: Record<string, unknown>): Analysi
     params.weeks = weeks
   if (minWeeks !== undefined)
     params.minWeeksWithData = minWeeks
+  if (args['min-cluster-size'] !== undefined) {
+    const minClusterSize = parseIntegerOption(args['min-cluster-size'], '--min-cluster-size', 1)
+    if (minClusterSize !== undefined) {
+      if (minClusterSize < 2)
+        throw new Error(`Invalid --min-cluster-size "${String(args['min-cluster-size'])}". Use an integer >= 2.`)
+      params.minClusterSize = minClusterSize
+    }
+  }
+  if (args.threshold !== undefined) {
+    const threshold = Number(args.threshold)
+    if (!Number.isFinite(threshold) || threshold <= 0 || threshold > 1)
+      throw new Error(`Invalid --threshold "${String(args.threshold)}". Use a number in (0, 1].`)
+    params.threshold = threshold
+  }
 
   return params
 }
