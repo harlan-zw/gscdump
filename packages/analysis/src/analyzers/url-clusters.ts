@@ -77,6 +77,7 @@ export interface UrlClustersResult {
 
 const DIGIT_RUN_RE = /\d+/g
 const TOKEN_RE = /[\p{L}\p{N}]+/gu
+const DIRECTIONAL_SYMBOL_RE = /\S\s*[>→]\s*\S/
 
 const STOPWORDS = new Set([
   'an',
@@ -204,20 +205,14 @@ function extractPolaritySignature(tokens: readonly string[]): string {
   return [...new Set(found)].join('|')
 }
 
-function extractDirectionalPair(tokens: readonly string[]): [string, string] | null {
+function isDirectionalQuery(query: string, tokens: readonly string[]): boolean {
+  if (DIRECTIONAL_SYMBOL_RE.test(query))
+    return true
   for (let i = 1; i < tokens.length - 1; i++) {
     if (DIRECTIONAL_CONNECTORS.has(tokens[i]!) && !NON_DIRECTIONAL_BEFORE.has(tokens[i - 1]!))
-      return [tokens[i - 1]!, tokens[i + 1]!]
+      return true
   }
-  return null
-}
-
-function hasSwappedDirection(a: readonly string[], b: readonly string[]): boolean {
-  const dirA = extractDirectionalPair(a)
-  const dirB = extractDirectionalPair(b)
-  if (!dirA || !dirB)
-    return false
-  return dirA[0] === dirB[1] && dirA[1] === dirB[0] && dirA[0] !== dirA[1]
+  return false
 }
 
 interface AggCell {
@@ -289,14 +284,18 @@ export function analyzeUrlClusters(
   }
 
   // Step 2: Filter queries meeting minImpressions and count URL document frequency.
+  // Only count positive-impression (query, url) cells in urlDf so zero-impression
+  // rows from live/row sources stay identical to SQL (which drops 0-imp cells when minImpressions > 0).
   const validQueries: QueryAggregate[] = []
   const urlDf = new Map<string, number>()
   for (const qAgg of byQuery.values()) {
     if (qAgg.impressions < minImpressions)
       continue
     validQueries.push(qAgg)
-    for (const url of qAgg.urls.keys())
-      urlDf.set(url, (urlDf.get(url) ?? 0) + 1)
+    for (const [url, cell] of qAgg.urls) {
+      if (cell.impressions > 0 || qAgg.impressions === 0)
+        urlDf.set(url, (urlDf.get(url) ?? 0) + 1)
+    }
   }
 
   // Step 3: Assign each query to its dominant URL when urlShare >= minDominanceShare.
@@ -411,10 +410,19 @@ export function analyzeUrlClusters(
 interface MultiUrlEntry {
   agg: QueryAggregate
   vec: Map<string, number>
-  tokens: string[]
   contentTokens: Set<string>
   numSig: string
   polaritySig: string
+  directional: boolean
+}
+
+function countPositiveUrls(agg: QueryAggregate): number {
+  let count = 0
+  for (const cell of agg.urls.values()) {
+    if (cell.impressions > 0)
+      count++
+  }
+  return count
 }
 
 function extractCrossLexicalSynonymPairs(
@@ -427,7 +435,7 @@ function extractCrossLexicalSynonymPairs(
     return []
 
   const multiUrl = validQueries
-    .filter(q => q.urls.size >= 2 && q.impressions > 0)
+    .filter(q => q.impressions > 0 && countPositiveUrls(q) >= 2)
     .sort((a, b) =>
       b.impressions - a.impressions
       || b.clicks - a.clicks
@@ -467,10 +475,10 @@ function extractCrossLexicalSynonymPairs(
     entries.push({
       agg,
       vec,
-      tokens,
       contentTokens: extractContentTokens(tokens),
       numSig: extractDigitSignature(agg.query),
       polaritySig: extractPolaritySignature(tokens),
+      directional: isDirectionalQuery(agg.query, tokens),
     })
 
     for (const url of vec.keys()) {
@@ -505,9 +513,9 @@ function extractCrossLexicalSynonymPairs(
       if (sharedNonHub < 2)
         continue
       const b = entries[j]!
-      if (a.numSig !== b.numSig || a.polaritySig !== b.polaritySig)
+      if (a.directional || b.directional)
         continue
-      if (hasSwappedDirection(a.tokens, b.tokens))
+      if (a.numSig !== b.numSig || a.polaritySig !== b.polaritySig)
         continue
 
       // Require non-empty content tokens with zero overlap so we surface true cross-lexical synonyms.
@@ -574,24 +582,41 @@ export const urlClustersAnalyzer = defineAnalyzer<AnalysisParams, Row, UrlTopicC
     const minImpressions = params.minImpressions ?? 10
 
     const sql = `
+      WITH agg AS (
+        SELECT
+          TRIM(query) AS query,
+          TRIM(url) AS url,
+          ${METRIC_EXPR.clicks} AS clicks,
+          ${METRIC_EXPR.impressions} AS impressions,
+          ${METRIC_EXPR.ctr} AS ctr,
+          ${METRIC_EXPR.position} AS position
+        FROM read_parquet({{FILES}}, union_by_name = true)
+        WHERE date >= ? AND date <= ?
+          AND query IS NOT NULL AND TRIM(query) <> ''
+          AND url IS NOT NULL AND TRIM(url) <> ''
+        GROUP BY TRIM(query), TRIM(url)
+        HAVING SUM(impressions) >= ?
+      ),
+      qualifying AS (
+        SELECT query
+        FROM agg
+        GROUP BY query
+        HAVING SUM(impressions) >= ?
+      )
       SELECT
-        query,
-        url,
-        ${METRIC_EXPR.clicks} AS clicks,
-        ${METRIC_EXPR.impressions} AS impressions,
-        ${METRIC_EXPR.ctr} AS ctr,
-        ${METRIC_EXPR.position} AS position
-      FROM read_parquet({{FILES}}, union_by_name = true)
-      WHERE date >= ? AND date <= ?
-        AND query IS NOT NULL AND query <> ''
-        AND url IS NOT NULL AND url <> ''
-      GROUP BY query, url
-      HAVING SUM(impressions) >= ?
+        a.query,
+        a.url,
+        a.clicks,
+        a.impressions,
+        a.ctr,
+        a.position
+      FROM agg a
+      JOIN qualifying q USING (query)
     `
 
     return {
       sql,
-      params: [startDate, endDate, minImpressions > 0 ? 1 : 0],
+      params: [startDate, endDate, minImpressions > 0 ? 1 : 0, minImpressions],
       current: { table: 'page_queries', partitions: enumeratePartitions(startDate, endDate) },
     }
   },

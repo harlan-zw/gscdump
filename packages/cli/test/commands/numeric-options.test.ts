@@ -82,6 +82,17 @@ const cases = [
   ['analyze decay', child(analyzeCommand, 'decay'), {}, 'min-impressions', '50'],
   ['analyze decay', child(analyzeCommand, 'decay'), {}, 'canonical', true],
   ['analyze decay', child(analyzeCommand, 'decay'), {}, 'fuzzy', true],
+  ['analyze decay', child(analyzeCommand, 'decay'), {}, 'threshold', true],
+  ['analyze decay', child(analyzeCommand, 'decay'), {}, 'threshold', '0.5'],
+  ['analyze decay', child(analyzeCommand, 'decay'), {}, 'min-cluster-size', '3'],
+  ['analyze clustering', child(analyzeCommand, 'clustering'), {}, 'min-cluster-size', '3'],
+  ['analyze url-clusters', child(analyzeCommand, 'url-clusters'), {}, 'min-cluster-size', '1'],
+  ['analyze url-clusters', child(analyzeCommand, 'url-clusters'), {}, 'min-cluster-size', true],
+  ['analyze url-clusters', child(analyzeCommand, 'url-clusters'), {}, 'threshold', '0'],
+  ['analyze url-clusters', child(analyzeCommand, 'url-clusters'), {}, 'threshold', '0.005'],
+  ['analyze url-clusters', child(analyzeCommand, 'url-clusters'), {}, 'threshold', '1.5'],
+  ['analyze url-clusters', child(analyzeCommand, 'url-clusters'), {}, 'threshold', true],
+  ['analyze url-clusters', child(analyzeCommand, 'url-clusters'), {}, 'threshold', ''],
 ] as const
 
 describe('cLI numeric options', () => {
@@ -146,5 +157,12 @@ describe('cLI numeric options', () => {
       await run(child(analyzeCommand, tool), { canonical: true, fuzzy: true })
       expect(runAnalysis).toHaveBeenCalledWith(expect.objectContaining({ canonical: true, fuzzy: true }))
     }
+  })
+
+  it('forwards --min-impressions, --min-cluster-size, and --threshold on url-clusters', async () => {
+    const runAnalysis = vi.fn().mockResolvedValue({ results: [], meta: {} })
+    boundary.analysis.mockResolvedValueOnce({ runAnalysis, anchor: '2026-08-23' })
+    await run(child(analyzeCommand, 'url-clusters'), { 'min-impressions': '25', 'min-cluster-size': '3', 'threshold': '0.65' })
+    expect(runAnalysis).toHaveBeenCalledWith(expect.objectContaining({ minImpressions: 25, minClusterSize: 3, threshold: 0.65 }))
   })
 })

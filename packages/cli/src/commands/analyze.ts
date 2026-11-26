@@ -179,7 +179,7 @@ const TOOL_EXTRA_ARGS: Partial<Record<AnalysisTool, Record<string, { type: strin
   },
   'url-clusters': {
     'min-cluster-size': { type: 'string', description: 'Minimum queries per URL cluster (default: 2)' },
-    'threshold': { type: 'string', description: 'Minimum dominant URL impression share in 0..1 (default: 0.5)' },
+    'threshold': { type: 'string', description: 'Minimum dominant URL impression share in 0.01..1 (default: 0.5)' },
   },
 }
 
@@ -234,6 +234,8 @@ function buildParams(tool: AnalysisTool, args: Record<string, unknown>): Analysi
   if (minWeeks !== undefined)
     params.minWeeksWithData = minWeeks
   if (args['min-cluster-size'] !== undefined) {
+    if (tool !== 'url-clusters')
+      throw new Error(`--min-cluster-size is not supported by ${tool}.`)
     const minClusterSize = parseIntegerOption(args['min-cluster-size'], '--min-cluster-size', 1)
     if (minClusterSize !== undefined) {
       if (minClusterSize < 2)
@@ -242,9 +244,13 @@ function buildParams(tool: AnalysisTool, args: Record<string, unknown>): Analysi
     }
   }
   if (args.threshold !== undefined) {
-    const threshold = Number(args.threshold)
-    if (!Number.isFinite(threshold) || threshold <= 0 || threshold > 1)
-      throw new Error(`Invalid --threshold "${String(args.threshold)}". Use a number in (0, 1].`)
+    if (tool !== 'url-clusters')
+      throw new Error(`--threshold is not supported by ${tool}.`)
+    const rawThreshold = args.threshold
+    const text = typeof rawThreshold === 'string' || typeof rawThreshold === 'number' ? String(rawThreshold).trim() : ''
+    const threshold = text.length > 0 ? Number(text) : Number.NaN
+    if (!Number.isFinite(threshold) || threshold < 0.01 || threshold > 1)
+      throw new Error(`Invalid --threshold "${String(rawThreshold)}". Use a number between 0.01 and 1.`)
     params.threshold = threshold
   }
 

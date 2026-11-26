@@ -106,22 +106,22 @@ describe('analyzeUrlClusters (pure)', () => {
       row('crawler directive', '/docs/robots', 180),
       row('crawler directive', '/tools/robots-tester', 90),
 
-      // Directional guard: swapped conversion endpoints must NOT pair
-      row('png to jpg', '/tools/convert', 200),
-      row('png to jpg', '/guides/images', 100),
-      row('jpg to png', '/tools/convert', 180),
-      row('jpg to png', '/guides/images', 90),
+      // Directional guard: directional conversion query vs zero-overlap non-directional query must NOT pair
+      row('png to jpeg', '/tools/convert', 200),
+      row('png to jpeg', '/guides/images', 100),
+      row('raster format switcher', '/tools/convert', 180),
+      row('raster format switcher', '/guides/images', 90),
     ]
 
     const out = analyzeUrlClusters(rows, { minImpressions: 10, minCooccurrenceCosine: 0.75 })
     const pairKeys = out.synonymPairs.map(p => `${p.queryA} <-> ${p.queryB}`)
     expect(pairKeys).toContain('og tags <-> open graph seo')
     expect(pairKeys).toContain('open graph seo <-> og image')
-    // Must not pair queries sharing 2-char token "og", differing digits, polarity, or swapped direction
+    // Must not pair queries sharing 2-char token "og", differing digits, polarity, or directional conversions
     expect(pairKeys).not.toContain('og tags <-> og image')
     expect(pairKeys).not.toContain('nuxt 3 <-> vue 4')
     expect(pairKeys).not.toContain('robots nofollow <-> crawler directive')
-    expect(pairKeys).not.toContain('png to jpg <-> jpg to png')
+    expect(pairKeys).not.toContain('png to jpeg <-> raster format switcher')
     expect(out.synonymPairs).toHaveLength(2)
     expect(out.synonymPairs[0]).toMatchObject({
       queryA: 'og tags',
@@ -143,6 +143,26 @@ describe('analyzeUrlClusters (pure)', () => {
     const forward = analyzeUrlClusters(rows)
     const reversed = analyzeUrlClusters([...rows].reverse())
     expect(reversed).toEqual(forward)
+  })
+
+  it('skips broad hub URLs during synonym pair candidate generation and supports minImpressions=0', () => {
+    const rows: QueryPageRow[] = []
+    // Create 60 distinct queries all touching hub URLs /hub-a and /hub-b (df = 60 > maxHubDf = 50)
+    for (let i = 0; i < 60; i++) {
+      rows.push(row(`alpha${i} topic`, '/hub-a', 100))
+      rows.push(row(`alpha${i} topic`, '/hub-b', 100))
+    }
+    const hubOnly = analyzeUrlClusters(rows, { minImpressions: 10 })
+    // Both /hub-a and /hub-b exceed maxHubDf (50), so no spurious hub-only synonym pairs are generated.
+    expect(hubOnly.synonymPairs).toEqual([])
+
+    const zeroImp = analyzeUrlClusters([
+      row('zero alpha', '/zero', 0, 0, 5),
+      row('zero beta', '/zero', 0, 0, 6),
+    ], { minImpressions: 0, minClusterSize: 2 })
+    expect(zeroImp.clusters).toHaveLength(1)
+    expect(zeroImp.clusters[0]!.keywordCount).toBe(2)
+    expect(zeroImp.clusters[0]!.avgPosition).toBe(5.5)
   })
 })
 
@@ -173,6 +193,8 @@ describe('url-clusters analyzer (DuckDB SQL + rows)', () => {
       { url: '/tools/meta-tag-generator', query: 'open graph seo', date: d, clicks: 5, impressions: 80, sum_position: 480 },
       { url: '/tools/schema-validator', query: 'schema validator', date: d, clicks: 100, impressions: 1000, sum_position: 2000 },
       { url: '/tools/schema-validator', query: 'json ld checker', date: d, clicks: 40, impressions: 500, sum_position: 1500 },
+      // Zero-impression cell for a qualifying query must not skew SQL vs row parity
+      { url: '/unused-zero-cell', query: 'schema validator', date: d, clicks: 0, impressions: 0, sum_position: 0 },
     ]
     await engine.writeDay({ userId: USER, siteId: SITE, table: 'page_queries', date: d }, pageQueryRows)
 
@@ -182,6 +204,17 @@ describe('url-clusters analyzer (DuckDB SQL + rows)', () => {
       { type: 'url-clusters', startDate: d, endDate: d, minImpressions: 10, minClusterSize: 2, threshold: 0.6 },
       defaultAnalyzerRegistry,
     )
+
+    const pagedOut = await runAnalyzerWithEngine(
+      { engine },
+      { userId: USER, siteId: SITE },
+      { type: 'url-clusters', startDate: d, endDate: d, minImpressions: 10, minClusterSize: 2, threshold: 0.6, limit: 1, offset: 1 },
+      defaultAnalyzerRegistry,
+    )
+    expect(pagedOut.results).toHaveLength(1)
+    expect((pagedOut.results[0] as { url: string }).url).toBe('/learn-seo/open-graph')
+    expect(pagedOut.meta.total).toBe(2)
+    expect(pagedOut.meta.returned).toBe(1)
 
     const clusters = sqlOut.results as Array<{ url: string, leadQuery: string, keywordCount: number, meanDominanceShare: number }>
     expect(clusters).toHaveLength(2)
@@ -210,8 +243,8 @@ describe('url-clusters analyzer (DuckDB SQL + rows)', () => {
           page: r.url,
           clicks: r.clicks,
           impressions: r.impressions,
-          ctr: Number(r.clicks) / Number(r.impressions),
-          position: Number(r.sum_position) / Number(r.impressions) + 1,
+          ctr: Number(r.impressions) > 0 ? Number(r.clicks) / Number(r.impressions) : 0,
+          position: Number(r.impressions) > 0 ? Number(r.sum_position) / Number(r.impressions) + 1 : 1,
         })) as unknown as Row[],
       },
       { params: { type: 'url-clusters', startDate: d, endDate: d, minImpressions: 10, minClusterSize: 2, threshold: 0.6 } },

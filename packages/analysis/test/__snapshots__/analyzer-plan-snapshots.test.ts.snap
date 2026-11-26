@@ -4108,22 +4108,40 @@ exports[`analyzer plan snapshots > sql plan: url-clusters 1`] = `
     "2024-02-01",
     "2024-02-29",
     1,
+    10,
   ],
   "previous": undefined,
   "sql": "
+      WITH agg AS (
+        SELECT
+          TRIM(query) AS query,
+          TRIM(url) AS url,
+          CAST(SUM(clicks) AS DOUBLE) AS clicks,
+          CAST(SUM(impressions) AS DOUBLE) AS impressions,
+          CAST(SUM(clicks) AS DOUBLE) / NULLIF(SUM(impressions), 0) AS ctr,
+          SUM(sum_position) / NULLIF(SUM(impressions), 0) + 1 AS position
+        FROM read_parquet({{FILES}}, union_by_name = true)
+        WHERE date >= ? AND date <= ?
+          AND query IS NOT NULL AND TRIM(query) <> ''
+          AND url IS NOT NULL AND TRIM(url) <> ''
+        GROUP BY TRIM(query), TRIM(url)
+        HAVING SUM(impressions) >= ?
+      ),
+      qualifying AS (
+        SELECT query
+        FROM agg
+        GROUP BY query
+        HAVING SUM(impressions) >= ?
+      )
       SELECT
-        query,
-        url,
-        CAST(SUM(clicks) AS DOUBLE) AS clicks,
-        CAST(SUM(impressions) AS DOUBLE) AS impressions,
-        CAST(SUM(clicks) AS DOUBLE) / NULLIF(SUM(impressions), 0) AS ctr,
-        SUM(sum_position) / NULLIF(SUM(impressions), 0) + 1 AS position
-      FROM read_parquet({{FILES}}, union_by_name = true)
-      WHERE date >= ? AND date <= ?
-        AND query IS NOT NULL AND query <> ''
-        AND url IS NOT NULL AND url <> ''
-      GROUP BY query, url
-      HAVING SUM(impressions) >= ?
+        a.query,
+        a.url,
+        a.clicks,
+        a.impressions,
+        a.ctr,
+        a.position
+      FROM agg a
+      JOIN qualifying q USING (query)
     ",
 }
 `;
