@@ -29,6 +29,7 @@ operations across partner, analytics, and realtime.
 
 Focused guides:
 
+- [SDK documentation on gscdump.com](https://gscdump.com/gscdump-sdk) and [Builders overview](https://gscdump.com/builders)
 - [Quickstart](../../docs/guides/hosted-v1.md#quickstart)
 - [Authentication](../../docs/guides/hosted-v1.md#authentication)
 - [Errors](../../docs/guides/hosted-v1.md#errors)

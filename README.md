@@ -111,6 +111,8 @@ gscdump mcp
 
 Hosted login opens gscdump.com in your browser. Sign in, approve the CLI, then [connect a Site](https://gscdump.com/app/onboarding?step=connect-sites). The CLI saves its own session. Hosted mode reads your hosted record. `indexing inspect --yes` requests new Google URL Inspections through the platform. `sitemaps inspect --engine google` reads one Sitemap live through the platform. That read uses Google's API quota, without spending URL Inspections. Bing Sitemap inspection reads dated stored evidence. Direct Google commands, such as `sync`, `inspect`, and `query --live`, need Local mode.
 
+To connect chat agents directly over OAuth with no local server, use the [Google Search Console MCP server](https://gscdump.com/mcp) (`https://gscdump.com/mcp`): [connect Google Search Console to Claude](https://gscdump.com/mcp/claude) or [connect Google Search Console to ChatGPT](https://gscdump.com/mcp/chatgpt). Compare Hosted, Local CLI, live-API proxies, desktop archives, and BigQuery export on [Compare Search Console alternatives](https://gscdump.com/compare).
+
 ```bash
 gscdump auth login --mode hosted
 gscdump sites
@@ -124,7 +126,9 @@ The `gscdump` npm package contains the library; `@gscdump/cli` provides the comm
 
 ## Documentation
 
-- [SDK documentation](./docs/gscdump-sdk/guides/1.start/index.md)
+- [CLI documentation](https://gscdump.com/gscdump-cli) and [SDK documentation](https://gscdump.com/gscdump-sdk) on gscdump.com
+- [Google Search Console MCP server](https://gscdump.com/mcp): [Claude guide](https://gscdump.com/mcp/claude) and [ChatGPT guide](https://gscdump.com/mcp/chatgpt)
+- [Compare Search Console alternatives](https://gscdump.com/compare) (`mcp-gsc`, GSC Wizard, SEO Utils, BigQuery)
 - [Getting started](./docs/gscdump-cli/guides/1.start/1.first-result.md)
 - [Authentication](./docs/gscdump-cli/guides/1.start/2.choose-access.md)
 - [Command reference](./docs/gscdump-cli/api/1.commands.md)

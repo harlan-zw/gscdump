@@ -8,6 +8,9 @@ Choose [Local or Hosted mode](../../docs/gscdump-cli/guides/1.start/2.choose-acc
 npm install -g @gscdump/cli
 ```
 
+- [CLI documentation](https://gscdump.com/gscdump-cli) and [SDK documentation](https://gscdump.com/gscdump-sdk)
+- [Google Search Console MCP server](https://gscdump.com/mcp) ([Claude](https://gscdump.com/mcp/claude), [ChatGPT](https://gscdump.com/mcp/chatgpt))
+- [Compare Search Console alternatives](https://gscdump.com/compare)
 - [Getting started](../../docs/gscdump-cli/guides/1.start/1.first-result.md)
 - [Authentication](../../docs/gscdump-cli/guides/1.start/2.choose-access.md)
 - [Command reference](../../docs/gscdump-cli/api/1.commands.md)
