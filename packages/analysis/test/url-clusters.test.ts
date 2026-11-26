@@ -111,14 +111,22 @@ describe('analyzeUrlClusters (pure)', () => {
       row('png to jpeg', '/guides/images', 100),
       row('raster format switcher', '/tools/convert', 180),
       row('raster format switcher', '/guides/images', 90),
+
+      // Singular/plural overlap: "robot tags" and "robots meta tag" share normalized tokens ("robot", "tag")
+      row('robot tags', '/learn-seo/meta-tags', 220),
+      row('robot tags', '/learn-seo/robots', 110),
+      row('robots meta tag', '/learn-seo/meta-tags', 200),
+      row('robots meta tag', '/learn-seo/robots', 100),
     ]
 
     const out = analyzeUrlClusters(rows, { minImpressions: 10, minCooccurrenceCosine: 0.75 })
     const pairKeys = out.synonymPairs.map(p => `${p.queryA} <-> ${p.queryB}`)
     expect(pairKeys).toContain('og tags <-> open graph seo')
     expect(pairKeys).toContain('open graph seo <-> og image')
-    // Must not pair queries sharing 2-char token "og", differing digits, polarity, or directional conversions
+    // Must not pair queries sharing 2-char token "og", plural/singular tokens, differing digits, polarity, or directional conversions
     expect(pairKeys).not.toContain('og tags <-> og image')
+    expect(pairKeys).not.toContain('robot tags <-> robots meta tag')
+    expect(pairKeys).not.toContain('robots meta tag <-> robot tags')
     expect(pairKeys).not.toContain('nuxt 3 <-> vue 4')
     expect(pairKeys).not.toContain('robots nofollow <-> crawler directive')
     expect(pairKeys).not.toContain('png to jpeg <-> raster format switcher')
