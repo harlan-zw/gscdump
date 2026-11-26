@@ -2,13 +2,13 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { writeFileAtomic } from '@gscdump/engine/filesystem'
 import { z } from 'zod'
-import { HOSTED_SESSION_EXPIRED, isSessionExpiredBody } from './hosted-session'
+import { HOSTED_KEY_REJECTED_MESSAGE, HOSTED_SESSION_EXPIRED, HOSTED_SESSION_REJECTED_MESSAGE, isSessionExpiredBody } from './hosted-session'
 import { useCliRuntime } from './runtime'
 import { stopError } from './stop'
 
-export const HOSTED_SESSION_REJECTED = 'gscdump.com rejected the CLI session. Run `gscdump auth login --mode hosted` again.'
+export const HOSTED_SESSION_REJECTED = HOSTED_SESSION_REJECTED_MESSAGE
 /** A hosted 401: the gscdump.com API key failed, not a Google credential. */
-export const HOSTED_KEY_REJECTED = 'gscdump.com rejected the API key. Run `gscdump auth login --mode hosted --api-key KEY` with a valid key.'
+export const HOSTED_KEY_REJECTED = HOSTED_KEY_REJECTED_MESSAGE
 
 /** A command that calls Google ran in Hosted mode. */
 export const LOCAL_MODE_REQUIRED = [
