@@ -124,4 +124,34 @@ describe('foldCanonicalTypos', () => {
     expect(mapForward.get('screeeming')).toBe('screeeming')
     expect(mapForward.get('screeeeming')).toBe('screeeming')
   })
+
+  it('scales sub-linearly on brand-heavy multi-word queries without quadratic blowup', () => {
+    const alphabet = 'abcdefghijklmnopqrstuvwxyz'
+    const entries: Array<{ canonical: string, impressions: number }> = []
+    for (let i = 0; i < 3000; i++) {
+      // Distinct 8-char words sharing one brand token `nuxt`.
+      const w = [
+        alphabet[i % 26],
+        alphabet[Math.floor(i / 26) % 26],
+        alphabet[Math.floor(i / 676) % 26],
+        alphabet[(i * 7) % 26],
+        alphabet[(i * 11) % 26],
+        alphabet[(i * 13) % 26],
+        alphabet[(i * 17) % 26],
+        alphabet[(i * 19) % 26],
+      ].join('')
+      entries.push({ canonical: `nuxt ${w}`, impressions: 3000 - i })
+    }
+    // Add one genuine 2-edit typo of the top branded query to verify recall is preserved.
+    const topWord = entries[0]!.canonical.split(' ')[1]!
+    const typo = `nuxt ${topWord.slice(0, 3)}zz${topWord.slice(5)}`
+    entries.push({ canonical: typo, impressions: 1 })
+
+    const t0 = performance.now()
+    const map = foldCanonicalTypos(entries)
+    const elapsedMs = performance.now() - t0
+
+    expect(map.get(typo)).toBe(entries[0]!.canonical)
+    expect(elapsedMs).toBeLessThan(1500)
+  })
 })

@@ -101,6 +101,19 @@ function extractPolaritySignature(tokens: readonly string[]): string {
   return [...new Set(found)].join('|')
 }
 
+let dpPrevPrev = new Uint16Array(64)
+let dpPrev = new Uint16Array(64)
+let dpCurr = new Uint16Array(64)
+
+function ensureDpCapacity(needed: number): void {
+  if (dpPrev.length < needed) {
+    const cap = Math.max(needed, dpPrev.length * 2)
+    dpPrevPrev = new Uint16Array(cap)
+    dpPrev = new Uint16Array(cap)
+    dpCurr = new Uint16Array(cap)
+  }
+}
+
 /**
  * Bounded optimal string alignment (Damerau-Levenshtein) distance.
  * Treats adjacent transpositions as a single edit and exits early with
@@ -118,9 +131,10 @@ export function damerauLevenshteinBounded(a: string, b: string, maxDist: number)
   if (lb === 0)
     return la <= maxDist ? la : maxDist + 1
 
-  let prevPrev = new Uint16Array(lb + 1)
-  let prev = new Uint16Array(lb + 1)
-  let curr = new Uint16Array(lb + 1)
+  ensureDpCapacity(lb + 1)
+  let prevPrev = dpPrevPrev
+  let prev = dpPrev
+  let curr = dpCurr
   for (let j = 0; j <= lb; j++)
     prev[j] = j
 
@@ -241,17 +255,23 @@ function isSpacelessCompoundMatch(anchor: Anchor, tokens: readonly string[], spa
   return canTileExact(anchor.spaceless, tokens)
 }
 
-function leaveOneTokenOutKeys(tokens: readonly string[]): string[] {
+function leaveOneTokenEntries(tokens: readonly string[]): Array<{ restKey: string, omitted: string }> {
   if (tokens.length < 2)
     return []
-  const keys = new Set<string>()
+  const seen = new Set<string>()
+  const out: Array<{ restKey: string, omitted: string }> = []
   for (let i = 0; i < tokens.length; i++) {
-    if (tokens[i]!.length < MIN_TOKEN_DIST1_LEN)
+    const omitted = tokens[i]!
+    if (omitted.length < MIN_TOKEN_DIST1_LEN)
       continue
-    const rest = [...tokens.slice(0, i), ...tokens.slice(i + 1)].sort()
-    keys.add(rest.join('\x01'))
+    const restKey = [...tokens.slice(0, i), ...tokens.slice(i + 1)].sort().join('\x01')
+    const dedupe = `${restKey}\x02${omitted}`
+    if (seen.has(dedupe))
+      continue
+    seen.add(dedupe)
+    out.push({ restKey, omitted })
   }
-  return [...keys]
+  return out
 }
 
 function multisetSingleTokenDiff(a: readonly string[], b: readonly string[]): [string, string] | null {
@@ -420,13 +440,17 @@ export function resolveCanonicalTypoFolds(
   const matches: TypoFoldMatch[] = []
 
   const compoundSigIndex = new Map<string, Anchor[]>()
-  const delete1Index = new Map<string, Anchor[]>()
-  const trigramIndex = new Map<string, Anchor[]>()
-  const leaveOneTokenIndex = new Map<string, Anchor[]>()
+  const singleWordDelete1Index = new Map<string, Anchor[]>()
+  const singleWordTrigramIndex = new Map<string, Anchor[]>()
+  const multiWordDelete1Index = new Map<string, Anchor[]>()
+  const multiWordTrigramIndex = new Map<string, Anchor[]>()
+  const tokenDelete1Index = new Map<string, Anchor[]>()
+  const tokenTrigramIndex = new Map<string, Anchor[]>()
 
   for (const item of sorted) {
     const canonical = item.canonical
     const tokens = canonical.split(WHITESPACE_RE).filter(Boolean)
+    const isSingleWord = tokens.length === 1
     const spaceless = tokens.join('')
     const compoundSig = spaceless.length >= MIN_SPACELESS_LEN ? sortedCharSignature(spaceless) : ''
     const forms = spacelessForms(tokens, spaceless)
@@ -459,45 +483,104 @@ export function resolveCanonicalTypoFolds(
     if (!bestAnchor && spaceless.length >= MIN_DIST1_LEN) {
       const candidateSet = new Set<Anchor>()
 
-      // Leave-one-token-out catches single-token typos even when bag-of-words
-      // sorting moves the misspelled token to a different position.
-      for (const lotoKey of leaveOneTokenOutKeys(tokens)) {
-        const bucket = leaveOneTokenIndex.get(lotoKey)
-        if (bucket) {
-          for (const anchor of bucket)
-            candidateSet.add(anchor)
-        }
-      }
-
-      // Exact 1-delete neighborhood over spaceless form(s) catches all d <= 1
-      // matches (including both single-word and cross-word spacing+1-edit).
-      for (const form of forms) {
-        for (const dk of delete1Keys(form)) {
-          const bucket = delete1Index.get(dk)
-          if (bucket) {
-            for (const anchor of bucket)
+      if (isSingleWord) {
+        // Single-word queries match single-word typos and multi-word compound+typos.
+        for (const dk of delete1Keys(spaceless)) {
+          const singleBucket = singleWordDelete1Index.get(dk)
+          if (singleBucket) {
+            for (const anchor of singleBucket)
+              candidateSet.add(anchor)
+          }
+          const multiBucket = multiWordDelete1Index.get(dk)
+          if (multiBucket) {
+            for (const anchor of multiBucket)
               candidateSet.add(anchor)
           }
         }
-      }
 
-      // For d = 2 on long strings (len >= 10), require >= 1 shared trigram at
-      // len 10..11 and >= 2 at len >= 12 to preserve recall across transpositions.
-      if (maxEditDistance >= 2 && spaceless.length >= MIN_DIST2_LEN) {
-        const minTrigramHits = spaceless.length <= 11 ? 1 : 2
-        for (const form of forms) {
+        if (maxEditDistance >= 2 && spaceless.length >= MIN_DIST2_LEN) {
+          const minTrigramHits = spaceless.length <= 11 ? 1 : 2
           const hitCounts = new Map<Anchor, number>()
-          for (const tg of trigrams(form)) {
-            const bucket = trigramIndex.get(tg)
-            if (!bucket)
-              continue
-            for (const anchor of bucket) {
-              if (Math.abs(anchor.spaceless.length - spaceless.length) > 2)
+          for (const tg of trigrams(spaceless)) {
+            for (const index of [singleWordTrigramIndex, multiWordTrigramIndex]) {
+              const bucket = index.get(tg)
+              if (!bucket)
                 continue
-              const next = (hitCounts.get(anchor) ?? 0) + 1
-              hitCounts.set(anchor, next)
-              if (next >= minTrigramHits)
+              for (const anchor of bucket) {
+                if (Math.abs(anchor.spaceless.length - spaceless.length) > 2)
+                  continue
+                const next = (hitCounts.get(anchor) ?? 0) + 1
+                hitCounts.set(anchor, next)
+                if (next >= minTrigramHits)
+                  candidateSet.add(anchor)
+              }
+            }
+          }
+        }
+      }
+      else {
+        // Multi-word queries: key same-word-count lookups by (rest, edit-key(omitted))
+        // so brand-heavy queries sharing a short token (`nuxt <w>`) stay O(1).
+        for (const { restKey, omitted } of leaveOneTokenEntries(tokens)) {
+          for (const dk of delete1Keys(omitted)) {
+            const bucket = tokenDelete1Index.get(`${restKey}\x02${dk}`)
+            if (bucket) {
+              for (const anchor of bucket)
                 candidateSet.add(anchor)
+            }
+          }
+          if (maxEditDistance >= 2 && omitted.length >= MIN_TOKEN_DIST2_LEN) {
+            const minTokHits = omitted.length <= 11 ? 1 : 2
+            const hitCounts = new Map<Anchor, number>()
+            for (const tg of trigrams(omitted)) {
+              const bucket = tokenTrigramIndex.get(`${restKey}\x03${tg}`)
+              if (!bucket)
+                continue
+              for (const anchor of bucket) {
+                const next = (hitCounts.get(anchor) ?? 0) + 1
+                hitCounts.set(anchor, next)
+                if (next >= minTokHits)
+                  candidateSet.add(anchor)
+              }
+            }
+          }
+        }
+
+        // Cross-word spacing + typo: check 1-delete neighborhood over spaceless forms
+        // (O(1) buckets) and single-word trigram index (never collides multi-word vs multi-word).
+        for (const form of forms) {
+          for (const dk of delete1Keys(form)) {
+            const singleBucket = singleWordDelete1Index.get(dk)
+            if (singleBucket) {
+              for (const anchor of singleBucket)
+                candidateSet.add(anchor)
+            }
+            const multiBucket = multiWordDelete1Index.get(dk)
+            if (multiBucket) {
+              for (const anchor of multiBucket) {
+                if (anchor.tokens.length !== tokens.length)
+                  candidateSet.add(anchor)
+              }
+            }
+          }
+        }
+
+        if (maxEditDistance >= 2 && spaceless.length >= MIN_DIST2_LEN) {
+          const minTrigramHits = spaceless.length <= 11 ? 1 : 2
+          for (const form of forms) {
+            const hitCounts = new Map<Anchor, number>()
+            for (const tg of trigrams(form)) {
+              const bucket = singleWordTrigramIndex.get(tg)
+              if (!bucket)
+                continue
+              for (const anchor of bucket) {
+                if (Math.abs(anchor.spaceless.length - spaceless.length) > 2)
+                  continue
+                const next = (hitCounts.get(anchor) ?? 0) + 1
+                hitCounts.set(anchor, next)
+                if (next >= minTrigramHits)
+                  candidateSet.add(anchor)
+              }
             }
           }
         }
@@ -545,20 +628,38 @@ export function resolveCanonicalTypoFolds(
 
     if (compoundSig)
       addToIndex(compoundSigIndex, compoundSig, anchor)
-    if (spaceless.length >= MIN_DIST1_LEN) {
-      for (const form of forms) {
-        for (const dk of delete1Keys(form))
-          addToIndex(delete1Index, dk, anchor)
+    if (isSingleWord) {
+      if (spaceless.length >= MIN_DIST1_LEN) {
+        for (const dk of delete1Keys(spaceless))
+          addToIndex(singleWordDelete1Index, dk, anchor)
+      }
+      if (maxEditDistance >= 2 && spaceless.length >= MIN_DIST2_LEN) {
+        for (const tg of trigrams(spaceless))
+          addToIndex(singleWordTrigramIndex, tg, anchor)
       }
     }
-    if (maxEditDistance >= 2 && spaceless.length >= MIN_DIST2_LEN) {
-      for (const form of forms) {
-        for (const tg of trigrams(form))
-          addToIndex(trigramIndex, tg, anchor)
+    else {
+      if (spaceless.length >= MIN_DIST1_LEN) {
+        for (const form of forms) {
+          for (const dk of delete1Keys(form))
+            addToIndex(multiWordDelete1Index, dk, anchor)
+        }
+      }
+      if (maxEditDistance >= 2 && spaceless.length >= MIN_DIST2_LEN && tokens.length === 2) {
+        for (const form of forms) {
+          for (const tg of trigrams(form))
+            addToIndex(multiWordTrigramIndex, tg, anchor)
+        }
+      }
+      for (const { restKey, omitted } of leaveOneTokenEntries(tokens)) {
+        for (const dk of delete1Keys(omitted))
+          addToIndex(tokenDelete1Index, `${restKey}\x02${dk}`, anchor)
+        if (maxEditDistance >= 2 && omitted.length >= MIN_TOKEN_DIST2_LEN) {
+          for (const tg of trigrams(omitted))
+            addToIndex(tokenTrigramIndex, `${restKey}\x03${tg}`, anchor)
+        }
       }
     }
-    for (const lotoKey of leaveOneTokenOutKeys(tokens))
-      addToIndex(leaveOneTokenIndex, lotoKey, anchor)
   }
 
   return { mapping, matches }
