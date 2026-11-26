@@ -8,6 +8,7 @@ import {
   doctorCommandMeta,
   dumpCommandMeta,
   entitiesCommandMeta,
+  fleetCommandMeta,
   indexingCommandMeta,
   initCommandMeta,
   inspectCommandMeta,
@@ -190,6 +191,10 @@ export const CLI_SUBCOMMANDS = {
   sites: shallowCommand(
     sitesCommandMeta,
     () => import('./commands/sites').then(module => module.sitesCommand),
+  ),
+  fleet: shallowCommand(
+    fleetCommandMeta,
+    () => import('./commands/fleet').then(module => module.fleetCommand),
   ),
   sitemaps: shallowCommand(
     sitemapsCommandMeta,

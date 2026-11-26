@@ -92,8 +92,8 @@ const cases: readonly TreeShakeCase[] = [
   {
     entry: 'packages/contracts/dist/v1/http.mjs',
     exportName: 'createGscdumpV1Protocol',
-    // Include the optional agent journey and skill response schemas, IndexNow automatic sending, Submission summaries and outcomes, Bing keyword and Page totals, and chart annotations.
-    maxBytes: 236_000,
+    // Include the optional agent journey and skill response schemas, IndexNow automatic sending, Submission summaries and outcomes, Bing keyword and Page totals, Fleet summary, and chart annotations.
+    maxBytes: 240_000,
     allowedImports: ['zod'],
   },
   {

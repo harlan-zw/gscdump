@@ -115,6 +115,31 @@ const COMPARISON_ARGS = {
 /** Analyzers that compare the window with a previous period. */
 const COMPARISON_TOOLS = new Set<AnalysisTool>(['movers', 'decay'])
 
+/** Analyzers that read `params.minImpressions`. */
+const MIN_IMPRESSIONS_TOOLS = new Set<AnalysisTool>([
+  'bayesian-ctr',
+  'bipartite-pagerank',
+  'brand',
+  'cannibalization',
+  'change-point',
+  'clustering',
+  'ctr-anomaly',
+  'intent-atlas',
+  'long-tail',
+  'movers',
+  'opportunity',
+  'position-volatility',
+  'query-migration',
+  'stl-decompose',
+  'striking-distance',
+  'survival',
+  'trends',
+  'zero-click',
+])
+
+/** Analyzers that support `params.canonical` query folding. */
+const CANONICAL_TOOLS = new Set<AnalysisTool>(['cannibalization', 'clustering', 'intent-atlas'])
+
 const TOOL_EXTRA_ARGS: Partial<Record<AnalysisTool, Record<string, { type: string, description: string, alias?: string }>>> = {
   brand: {
     'brand-terms': { type: 'string', description: 'Comma-separated brand terms (required)' },
@@ -149,9 +174,19 @@ function buildParams(tool: AnalysisTool, args: Record<string, unknown>): Analysi
   if (fetchBudget !== undefined)
     params.fetchBudget = fetchBudget
 
-  const minImpressions = parseIntegerOption(args['min-impressions'], '--min-impressions', 0)
-  if (minImpressions !== undefined)
-    params.minImpressions = minImpressions
+  if (args['min-impressions'] !== undefined) {
+    if (!MIN_IMPRESSIONS_TOOLS.has(tool))
+      throw new Error(`--min-impressions is not supported by ${tool}.`)
+    const minImpressions = parseIntegerOption(args['min-impressions'], '--min-impressions', 0)
+    if (minImpressions !== undefined)
+      params.minImpressions = minImpressions
+  }
+
+  if (args.canonical) {
+    if (!CANONICAL_TOOLS.has(tool))
+      throw new Error(`--canonical is not supported by ${tool}.`)
+    params.canonical = true
+  }
 
   if (args['brand-terms'])
     params.brandTerms = String(args['brand-terms']).split(',').map(t => t.trim()).filter(Boolean)
@@ -205,7 +240,15 @@ function withWindow(tool: AnalysisTool, params: AnalysisParams, args: Record<str
 }
 
 function makeToolCommand(tool: AnalysisTool): CommandDef<any> {
-  const extraArgs = TOOL_EXTRA_ARGS[tool] || {}
+  const extraArgs: Record<string, { type: string, description: string, alias?: string, default?: unknown }> = {
+    ...(MIN_IMPRESSIONS_TOOLS.has(tool)
+      ? { 'min-impressions': { type: 'string', description: 'Minimum impressions floor (analyzer default when omitted)' } }
+      : {}),
+    ...(CANONICAL_TOOLS.has(tool)
+      ? { canonical: { type: 'boolean', default: false, description: 'Fold near-duplicate query variants via normalizeQuery before grouping' } }
+      : {}),
+    ...(TOOL_EXTRA_ARGS[tool] || {}),
+  }
 
   return defineCommand({
     meta: {
@@ -218,7 +261,6 @@ function makeToolCommand(tool: AnalysisTool): CommandDef<any> {
       'start': { type: 'string', description: 'Start date (YYYY-MM-DD). Implies --period custom' },
       'end': { type: 'string', description: 'End date (YYYY-MM-DD). Implies --period custom' },
       'limit': { type: 'string', alias: 'l', default: '100', description: 'Max results to return' },
-      'min-impressions': { type: 'string', description: 'Minimum impressions floor (analyzer default when omitted)' },
       'fetch-budget': { type: 'string', description: `Max rows each live fetch reads (default: ${DEFAULT_FETCH_BUDGET}, max: ${MAX_FETCH_BUDGET})` },
       'format': { type: 'string', alias: 'f', default: 'table', description: 'Output: table, json, csv' },
       'json': { type: 'boolean', default: false, description: 'Output as JSON' },

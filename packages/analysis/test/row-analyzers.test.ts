@@ -102,6 +102,64 @@ describe('row analyzer reductions', () => {
     })
   })
 
+  it('matches exact intent-only queries and whitespace-separated intent prefixes', () => {
+    const rows: QueriesRow[] = [
+      { query: '  top  ', clicks: 2, impressions: 20, ctr: 0.1, position: 2 },
+      { query: 'top\twidgets', clicks: 3, impressions: 30, ctr: 0.1, position: 3 },
+      { query: '\tsolo\n', clicks: 1, impressions: 40, ctr: 0.025, position: 4 },
+    ]
+    const result = analyzeClustering(rows, { clusterBy: 'both' })
+
+    expect(result.clusters).toHaveLength(1)
+    expect(result.clusters[0]).toMatchObject({
+      clusterName: 'top',
+      clusterType: 'intent',
+      keywordCount: 2,
+    })
+    expect(result.unclustered.map(row => row.query)).toEqual(['\tsolo\n'])
+  })
+
+  it('groups canonical query variants when canonical mode is enabled', () => {
+    const rows: QueriesRow[] = [
+      { query: 'schema validator', clicks: 40, impressions: 1000, ctr: 0.04, position: 2 },
+      { query: 'schema checker', clicks: 20, impressions: 400, ctr: 0.05, position: 3 },
+      { query: 'free schema tester online', clicks: 5, impressions: 100, ctr: 0.05, position: 4 },
+      { query: 'nuxt sitemap guide', clicks: 3, impressions: 60, ctr: 0.05, position: 5 },
+      { query: 'nuxt sitemap setup', clicks: 2, impressions: 40, ctr: 0.05, position: 6 },
+      { query: 'best standalone orphan', clicks: 1, impressions: 30, ctr: 0.03, position: 7 },
+    ]
+    const result = analyzeClustering(rows, { canonical: true })
+
+    expect(result.clusters.find(c => c.clusterType === 'canonical')).toMatchObject({
+      clusterName: 'schema validator',
+      keywordCount: 3,
+      totalImpressions: 1500,
+    })
+    expect(result.clusters.find(c => c.clusterName === 'nuxt sitemap')).toMatchObject({
+      clusterType: 'prefix',
+      keywordCount: 2,
+    })
+    // Singleton intent query must not vanish from unclustered.
+    expect(result.unclustered.map(k => k.query)).toEqual(['best standalone orphan'])
+  })
+
+  it('folds free-prefixed variant with base query under default clusterBy=both', () => {
+    const rows: QueriesRow[] = [
+      { query: 'schema validator', clicks: 10, impressions: 200, ctr: 0.05, position: 2 },
+      { query: 'free schema validator', clicks: 5, impressions: 100, ctr: 0.05, position: 3 },
+    ]
+    const result = analyzeClustering(rows, { canonical: true })
+
+    expect(result.clusters).toHaveLength(1)
+    expect(result.clusters[0]).toMatchObject({
+      clusterName: 'schema validator',
+      clusterType: 'canonical',
+      keywordCount: 2,
+      totalImpressions: 300,
+    })
+    expect(result.unclustered).toEqual([])
+  })
+
   it('computes cannibalization totals and spread before sorting qualifying pages', () => {
     const rows: QueryPageRow[] = [
       { query: 'shared', page: '/a', clicks: 2, impressions: 20, ctr: 0.1, position: 5 },
@@ -119,6 +177,43 @@ describe('row analyzer reductions', () => {
       positionSpread: 3,
     })
     expect(result[0]?.pages.map(page => page.page)).toEqual(['/b', '/a'])
+  })
+
+  it('folds canonical variants before detecting row-level cannibalization when canonical is enabled', () => {
+    const rows: QueryPageRow[] = [
+      { query: 'schema validator', page: '/tools/schema', clicks: 10, impressions: 100, ctr: 0.1, position: 3 },
+      { query: 'schema checker', page: '/docs/schema', clicks: 4, impressions: 80, ctr: 0.05, position: 5 },
+      { query: 'free schema tester online', page: '/docs/schema', clicks: 1, impressions: 20, ctr: 0.05, position: 6 },
+    ]
+    expect(analyzeCannibalization(rows)).toEqual([])
+
+    const canonical = analyzeCannibalization(rows, { canonical: true })
+    expect(canonical).toHaveLength(1)
+    expect(canonical[0]).toMatchObject({
+      query: 'schema validator',
+      canonicalKey: 'schema validator',
+      totalClicks: 15,
+      totalImpressions: 200,
+      variants: ['schema validator', 'schema checker', 'free schema tester online'],
+    })
+    expect(canonical[0]?.pages.map(p => p.page)).toEqual(['/tools/schema', '/docs/schema'])
+  })
+
+  it('excludes sub-threshold URL variants from canonical cannibalization headline and variants', () => {
+    const rows: QueryPageRow[] = [
+      { query: 'schema validator', page: '/a', clicks: 6, impressions: 60, ctr: 0.1, position: 3 },
+      { query: 'schema validator', page: '/b', clicks: 5, impressions: 55, ctr: 0.09, position: 4 },
+      { query: 'schema checker', page: '/c', clicks: 2, impressions: 40, ctr: 0.05, position: 5 },
+      { query: 'schema checker', page: '/d', clicks: 2, impressions: 40, ctr: 0.05, position: 5 },
+      { query: 'schema checker', page: '/e', clicks: 2, impressions: 40, ctr: 0.05, position: 5 },
+    ]
+    const canonical = analyzeCannibalization(rows, { canonical: true, minImpressions: 50 })
+    expect(canonical).toHaveLength(1)
+    expect(canonical[0]).toMatchObject({
+      query: 'schema validator',
+      canonicalKey: 'schema validator',
+      variants: ['schema validator'],
+    })
   })
 
   it('keeps the best-positioned page for each zero-click query', () => {

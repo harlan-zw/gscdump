@@ -58,6 +58,11 @@ export interface AnalysisParams {
   maxPositionSpread?: number
   minClusterSize?: number
   clusterBy?: 'prefix' | 'intent' | 'both'
+  /**
+   * cannibalization, clustering, intent-atlas: fold near-duplicate query
+   * variants through `normalizeQuery()` before grouping. Defaults to false.
+   */
+  canonical?: boolean
   dimension?: 'pages' | 'keywords'
   topN?: number
   metric?: 'clicks' | 'impressions'

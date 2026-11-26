@@ -77,7 +77,7 @@ gscdump sites --json
 gscdump query --site example.com -d page -f json
 ```
 
-Hosted mode can run these commands: `sites`, `sites coverage`, `annotations list|create|update|delete`, `query`, `report`,
+Hosted mode can run these commands: `sites`, `sites coverage`, `fleet`, `annotations list|create|update|delete`, `query`, `report`,
 `analyze` (`device-gap`, `position-distribution`, `ctr-curve`, `dark-traffic`, `content-velocity`, `keyword-breadth`),
 `sitemaps current`, `sitemaps history`, `sitemaps membership`, `sitemaps lastmod`, `sitemaps export`, `sitemaps inspect`, `sitemaps visibility`,
 `indexing urls`, `indexing inspect --yes`, `indexing summary`, `indexing watch list|add|remove`,
@@ -282,6 +282,7 @@ A routing stop also has `siteUrl`. `STORE_RANGE_NOT_COVERED` adds `missingDates`
 | Command | Use it for |
 | --- | --- |
 | `gscdump sites` | Local mode: list Google Sites and permission levels. Hosted mode: list hosted Sites and sync state (`sites coverage` checks recorded window coverage) |
+| `gscdump fleet` | Ranked totals, period deltas, coverage, and deduplicated totals across every Site in Local or Hosted mode |
 | `gscdump annotations` | Hosted: list chart annotations (custom + Google Search updates), create, update, and delete custom annotations |
 | `gscdump bing login`, `status`, `logout` | Manage Bing authentication and check connections |
 | `gscdump bing sites` | List Bing Sites and connection details |

@@ -107,6 +107,7 @@ export const GSCDUMP_V1_ROUTE_CATALOG = {
     'partner.users.api_keys.create': { surface: 'partner', method: 'POST', template: '/users/{userId}/api-keys' },
     'partner.users.api_keys.list': { surface: 'partner', method: 'GET', template: '/users/{userId}/api-keys' },
     'partner.users.api_keys.revoke': { surface: 'partner', method: 'DELETE', template: '/users/{userId}/api-keys/{keyId}' },
+    'analytics.fleet.summary.query': { surface: 'analytics', method: 'POST', template: '/fleet/summary' },
     'analytics.rows.query': { surface: 'analytics', method: 'POST', template: '/sites/{siteId}/rows' },
     'analytics.reports.query': { surface: 'analytics', method: 'POST', template: '/sites/{siteId}/reports' },
     'analytics.reports.run': { surface: 'analytics', method: 'POST', template: '/sites/{siteId}/reports/run' },

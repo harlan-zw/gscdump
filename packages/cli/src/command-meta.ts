@@ -18,6 +18,11 @@ export const sitesCommandMeta = {
   description: 'List GSC sites; manage properties (add/delete) and verify ownership',
 }
 
+export const fleetCommandMeta = {
+  name: 'fleet',
+  description: 'Summarize search analytics and period deltas across all Sites in your Fleet',
+}
+
 export const sitemapsCommandMeta = {
   name: 'sitemaps',
   description: 'Manage sitemaps',

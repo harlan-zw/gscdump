@@ -100,6 +100,7 @@ import {
   createGscdumpV1BrowserSchemas,
   GSCDUMP_V1_ANALYTICS_DIMENSIONS,
 } from './browser'
+import { fleetSummaryV1DataSchemas, fleetSummaryV1RequestSchema } from './fleet'
 import { googleSubmissionReceiptV1Schemas, googleSubmitV1Schema, indexingApiGrantUpdateV1Schema, indexingApiGrantV1Schemas, siteIndexingApiGrantV1Schemas } from './google-indexing'
 import {
   defineHttpOperation,
@@ -189,6 +190,7 @@ export function createGscdumpV1Protocol() {
   })
   const userIntegrationActivityResponse = defineSuccessResponse(userIntegrationActivityV1Schemas, partnerResponseMeta)
   const runReportResponse = defineSuccessResponse(runReportV1DataSchemas, responseMeta)
+  const fleetSummaryResponse = defineSuccessResponse(fleetSummaryV1DataSchemas, responseMeta)
   const realtimeResponseMeta = defineResponseObject({
     requestId: realtimeSchemas.publicRequestId,
     surface: z.literal('realtime'),
@@ -1008,6 +1010,15 @@ export function createGscdumpV1Protocol() {
     'forbidden',
     'site_not_found',
     'rate_limited',
+    'internal_error',
+    'contract_violation',
+  ] as const
+  const analyticsFleetErrors = [
+    'invalid_request',
+    'unauthorized',
+    'forbidden',
+    'rate_limited',
+    'service_unavailable',
     'internal_error',
     'contract_violation',
   ] as const
@@ -4135,6 +4146,45 @@ export function createGscdumpV1Protocol() {
   const analytics = defineHttpSurface({
     ...gscdumpV1Surface('analytics'),
     operations: {
+      queryFleetSummary: defineHttpOperation({
+        ...gscdumpV1OperationRoute('analytics.fleet.summary.query'),
+        visibility: 'public',
+        semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
+        auth: { credentials: ['user_key'], scopes: ['analytics:execute'], ownership: [{ credential: 'user_key', rule: 'self' }] },
+        request: { params: null, query: null, headers: requestHeaders, body: fleetSummaryV1RequestSchema },
+        responses: { 200: fleetSummaryResponse },
+        errors: analyticsFleetErrors,
+        errorResponse: errorEnvelopeSchemas(analyticsFleetErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [{ type: 'user.sites', idFrom: 'principal.id' }], changes: [] },
+        lifecycle: { introduced: '7.20.0' },
+        docs: {
+          summary: 'Query search analytics across a Fleet of Sites',
+          description: 'Returns per-Site totals, period deltas, coverage disclosures, and same-host deduplicated Fleet totals in one request.',
+          tags: ['Analytics fleet'],
+          examples: {
+            request: { body: { period: 'last-7d', comparison: 'prev-period', sortBy: 'clicksDelta', sortDir: 'asc' } },
+            response: {
+              data: {
+                window: { startDate: '2026-11-16', endDate: '2026-11-22', days: 7, comparison: { startDate: '2026-11-09', endDate: '2026-11-15' } },
+                searchType: 'web',
+                sortBy: 'clicksDelta',
+                sortDir: 'asc',
+                sortFormula: 'Ok Sites ordered by clicksDelta asc (nulls last, tie-break siteUrl asc, siteId asc), followed by non-Ok Sites ordered by siteUrl asc, siteId asc.',
+                sites: [],
+                deduplicatedTotals: {
+                  _tag: 'Complete',
+                  uniqueSiteUrls: 0,
+                  includedSiteIds: [],
+                  excludedDuplicateSiteIds: [],
+                  failedSiteIds: [],
+                  totals: { clicks: 0, impressions: 0, ctr: 0, position: null },
+                },
+              },
+              meta: { requestId: 'req_01', surface: 'analytics', version: '1.0' },
+            },
+          },
+        },
+      }),
       runReport: defineHttpOperation({
         ...gscdumpV1OperationRoute('analytics.reports.run'),
         visibility: 'public',

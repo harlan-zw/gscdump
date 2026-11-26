@@ -315,6 +315,16 @@
   defineHttpSurface: function
   defineResponseObject: function
   defineSuccessResponse: function
+  FLEET_SUMMARY_MAX_SITES: number
+  FLEET_SUMMARY_PERIODS: object
+  FLEET_SUMMARY_SORT_FIELDS: object
+  fleetSummarySortFormula: function
+  fleetSummaryV1DataSchemas: object
+  fleetSummaryV1DeduplicatedTotalsSchema: object
+  fleetSummaryV1DeltasSchema: object
+  fleetSummaryV1RequestSchema: object
+  fleetSummaryV1SiteSchema: object
+  fleetSummaryV1TotalsSchema: object
   GOOGLE_INDEXING_API_PROJECT_DAILY_DEFAULT: number
   GOOGLE_RECEIPT_STATES: object
   GOOGLE_SUBMISSION_MAX_ATTEMPTS: number
@@ -446,6 +456,16 @@
   defineHttpSurface: function
   defineResponseObject: function
   defineSuccessResponse: function
+  FLEET_SUMMARY_MAX_SITES: number
+  FLEET_SUMMARY_PERIODS: object
+  FLEET_SUMMARY_SORT_FIELDS: object
+  fleetSummarySortFormula: function
+  fleetSummaryV1DataSchemas: object
+  fleetSummaryV1DeduplicatedTotalsSchema: object
+  fleetSummaryV1DeltasSchema: object
+  fleetSummaryV1RequestSchema: object
+  fleetSummaryV1SiteSchema: object
+  fleetSummaryV1TotalsSchema: object
   GOOGLE_INDEXING_API_PROJECT_DAILY_DEFAULT: number
   GOOGLE_RECEIPT_STATES: object
   GOOGLE_SUBMISSION_MAX_ATTEMPTS: number
