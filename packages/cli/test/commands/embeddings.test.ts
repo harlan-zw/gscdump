@@ -93,6 +93,7 @@ describe('entities embeddings + analyze semantic-clusters CLI', () => {
       [
         { query: 'nyfw', date: '2026-04-10', clicks: 40, impressions: 800, sum_position: 2400 },
         { query: 'new york fashion week', date: '2026-04-10', clicks: 80, impressions: 1200, sum_position: 2400 },
+        { query: 'fashion week new york', date: '2026-04-10', clicks: 10, impressions: 200, sum_position: 600 },
         { query: 'nuxt 3 seo', date: '2026-04-10', clicks: 15, impressions: 300, sum_position: 600 },
         { query: 'nuxt 4 seo', date: '2026-04-10', clicks: 15, impressions: 300, sum_position: 600 },
       ],
@@ -105,13 +106,15 @@ describe('entities embeddings + analyze semantic-clusters CLI', () => {
 
     const vectorLookup: Record<string, number[]> = {
       'nyfw': [0.99, 0.14, 0, 0],
-      'fashion new week york': [0.98, 0.2, 0, 0],
-      '3 nuxt seo': [0, 0, 1, 0],
-      '4 nuxt seo': [0, 0, 1, 0],
+      'new york fashion week': [0.98, 0.2, 0, 0],
+      'nuxt 3 seo': [0, 0, 1, 0],
+      'nuxt 4 seo': [0, 0, 1, 0],
     }
 
+    const embeddedInputs: string[][] = []
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (_url, init) => {
       const body = JSON.parse(String(init?.body)) as { input: string[] }
+      embeddedInputs.push(body.input)
       const embeddings = body.input.map(text => vectorLookup[text] ?? [0, 0, 0, 1])
       return new Response(JSON.stringify({ embeddings }), { status: 200 })
     })
@@ -138,6 +141,7 @@ describe('entities embeddings + analyze semantic-clusters CLI', () => {
       quantization: 'int8-symmetric',
     })
     expect(fetchSpy).toHaveBeenCalledTimes(1)
+    expect(embeddedInputs[0]).toEqual(['nuxt 3 seo', 'nuxt 4 seo', 'new york fashion week', 'nyfw'])
 
     // 2. Re-run is incremental: 0 new embeddings fetched.
     await runSub(buildCmd, { 'site': siteUrl, 'provider': 'ollama', 'model': 'embeddinggemma:300m', 'min-impressions': '10', 'json': true })
@@ -153,7 +157,7 @@ describe('entities embeddings + analyze semantic-clusters CLI', () => {
       meta: { model: 'embeddinggemma:300m', dims: 4, rowCount: 4, quantization: 'int8-symmetric' },
     })
 
-    // 4. `analyze semantic-clusters` clusters `nyfw` + `new york fashion week`, keeps `nuxt 3` vs `nuxt 4` apart.
+    // 4. `analyze semantic-clusters` clusters `nyfw` + both `new york fashion week` variants, keeps `nuxt 3` vs `nuxt 4` apart.
     await runSub(semanticCmd, {
       'site': siteUrl,
       'start': '2026-04-10',
@@ -166,14 +170,14 @@ describe('entities embeddings + analyze semantic-clusters CLI', () => {
     expect(clustered.results).toHaveLength(1)
     expect(clustered.results[0]).toMatchObject({
       label: 'new york fashion week',
-      keywordCount: 2,
-      totalImpressions: 2000,
+      keywordCount: 3,
+      totalImpressions: 2200,
     })
     expect(clustered.meta).toMatchObject({
       algorithm: 'upgma',
       model: 'embeddinggemma:300m',
       threshold: 0.86,
-      embeddedQueries: 4,
+      embeddedQueries: 5,
       missingEmbeddings: 0,
       unclusteredQueries: 2,
     })

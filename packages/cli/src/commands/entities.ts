@@ -275,12 +275,24 @@ const embeddingsBuildSubCommand = defineCommand({
       params: [minImpressions],
     })
 
-    const uniqueCanonicals = new Set<string>()
+    // Key embeddings by canonical query, but embed the highest-impression raw
+    // phrasing for each canonical group so transformer models keep natural word
+    // order instead of receiving alphabetically sorted bag-of-words tokens.
+    const representativeByCanonical = new Map<string, { text: string, impressions: number }>()
     for (const r of rows) {
-      const raw = String(r.query)
-      const canonical = normalizeQuery(raw) || raw.trim()
-      if (canonical)
-        uniqueCanonicals.add(canonical)
+      const raw = String(r.query).trim()
+      if (!raw)
+        continue
+      const canonical = normalizeQuery(raw) || raw
+      const impressions = Number(r.impressions) || 0
+      const existing = representativeByCanonical.get(canonical)
+      if (
+        !existing
+        || impressions > existing.impressions
+        || (impressions === existing.impressions && raw < existing.text)
+      ) {
+        representativeByCanonical.set(canonical, { text: raw, impressions })
+      }
     }
 
     const embeddingsStore = createQueryEmbeddingsStore({ dataSource: store.dataSource })
@@ -295,12 +307,13 @@ const embeddingsBuildSubCommand = defineCommand({
         existingCanonicals.add(rec.query_canonical)
     }
 
-    const missing = [...uniqueCanonicals].filter(c => !existingCanonicals.has(c)).sort()
+    const missing = [...representativeByCanonical.keys()].filter(c => !existingCanonicals.has(c)).sort()
     const embeddedEntries: Array<{ queryCanonical: string, vector: number[] }> = []
 
     for (let i = 0; i < missing.length; i += provider.batchSize) {
       const batch = missing.slice(i, i + provider.batchSize)
-      const vectors = await provider.embedBatch(batch)
+      const batchTexts = batch.map(c => representativeByCanonical.get(c)!.text)
+      const vectors = await provider.embedBatch(batchTexts)
       for (let j = 0; j < batch.length; j++)
         embeddedEntries.push({ queryCanonical: batch[j]!, vector: vectors[j]! })
       if (!quiet && !json)
@@ -346,9 +359,9 @@ const embeddingsBuildSubCommand = defineCommand({
       dims: meta?.dims ?? 0,
       quantization: meta?.quantization ?? 'int8-symmetric',
       normalizerVersion: NORMALIZER_VERSION,
-      canonicalQueries: uniqueCanonicals.size,
+      canonicalQueries: representativeByCanonical.size,
       newlyEmbedded: newRecords.length,
-      reused: writeResult.replaced ? 0 : uniqueCanonicals.size - newRecords.length,
+      reused: writeResult.replaced ? 0 : representativeByCanonical.size - newRecords.length,
       totalStored: writeResult.rowCount,
       bytes: writeResult.bytes,
       parquetKey: writeResult.parquetKey,
