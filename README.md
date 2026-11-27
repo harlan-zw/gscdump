@@ -6,6 +6,8 @@
 [![npm downloads](https://img.shields.io/npm/dm/gscdump?color=555b66&labelColor=1b2130&style=flat)](https://npm.chart.dev/gscdump)
 [![license](https://img.shields.io/badge/license-MIT-555b66?labelColor=1b2130&style=flat)](https://github.com/harlan-zw/gscdump/blob/main/LICENSE)
 [![Skill on skilld.dev](https://img.shields.io/badge/Skill-skilld.dev-c23e00?labelColor=1b2130&style=flat)](https://skilld.dev/gh/harlan-zw/gscdump)
+[![gscdump MCP server](https://glama.ai/mcp/servers/harlan-zw/gscdump/badges/score.svg)](https://glama.ai/mcp/servers/harlan-zw/gscdump)
+[![gscdump MCP connector](https://glama.ai/mcp/connectors/com.gscdump/gscdump/badges/score.svg)](https://glama.ai/mcp/connectors/com.gscdump/gscdump)
 
 > **Google Search Console data for agents.** Dump your entire Google Search Console dataset and put your agents to work finding insights and improving your SEO.
 
