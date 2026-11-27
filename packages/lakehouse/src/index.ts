@@ -76,6 +76,24 @@ export { buildManifestPartitionFilter } from './partition-prune'
 export type { IcebergFieldSummary, ManifestPartitionFilter, PartitionValueMatch } from './partition-prune'
 
 export {
+  encodeIcebergBoundValue,
+  extractParquetColumnStats,
+  registerIcebergParquetFiles,
+} from './register-parquet'
+
+export type {
+  IcebergBoundScalar,
+  IcebergBoundType,
+  IcebergSchemaLike,
+  ParquetFileColumnStats,
+  ParquetFileDescriptor,
+  ParquetFileMetadataLike,
+  RegisterParquetFilesErrorReason,
+  RegisterParquetFilesOptions,
+  RegisterParquetFilesResult,
+} from './register-parquet'
+
+export {
   DEFAULT_PARTITION_KEY_ENCODING,
   ICEBERG_TYPE_MAP,
 } from './schema'
