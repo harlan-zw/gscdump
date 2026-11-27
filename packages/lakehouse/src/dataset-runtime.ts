@@ -27,6 +27,7 @@ import {
 
 export { resolveIcebergAppendFiles as resolveDatasetAppendFiles } from './catalog'
 export { createIcebergAppendFileResolver as createDatasetAppendFileResolver } from './catalog'
+export { registerIcebergParquetFiles as registerDatasetParquetFiles } from './register-parquet'
 
 interface PreparedRows {
   records: Record<string, unknown>[]

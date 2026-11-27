@@ -11,11 +11,14 @@
   defineIcebergDataset: function
   deriveTableSpec: function
   dropIcebergTables: function
+  encodeIcebergBoundValue: function
   encodeJsonBigintSafe: function
   ensureIcebergNamespace: function
+  extractParquetColumnStats: function
   ICEBERG_TYPE_MAP: object
   invalidateSnapshotRef: function
   listIcebergTables: function
+  registerIcebergParquetFiles: function
   resolveIcebergDataFiles: function
   stringifyBigintSafe: function
   toIcebergDayCount: function

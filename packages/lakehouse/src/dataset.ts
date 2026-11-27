@@ -26,6 +26,11 @@ import type { CatalogCache } from './catalog-cache'
 import type { ManifestReadLimits } from './manifest-read-limits'
 import type { ManifestPartitionFilter, PartitionValueMatch } from './partition-prune'
 import type {
+  ParquetFileDescriptor,
+  RegisterParquetFilesOptions,
+  RegisterParquetFilesResult,
+} from './register-parquet'
+import type {
   IcebergColumn,
   IcebergColumnType,
   IcebergPartitionField,
@@ -277,6 +282,16 @@ export interface IcebergDataset {
    * across source batches.
    */
   appendBatches: (conn: IcebergConnection, source: AppendBatchSource, opts: AppendBatchesOptions) => Promise<AppendBatchesResult>
+  /**
+   * Register already-written Parquet data files (including ZSTD-compressed
+   * DuckDB Parquets) directly into ONE Avro manifest and ONE atomic append
+   * snapshot without reading or re-encoding rows in JS.
+   */
+  registerParquetFiles: (
+    conn: IcebergConnection,
+    files: readonly ParquetFileDescriptor[],
+    opts: RegisterParquetFilesOptions,
+  ) => Promise<RegisterParquetFilesResult>
   /** Fresh, exact snapshot membership. Missing evidence never falls back to current files. */
   resolveAppendFiles: (conn: IcebergConnection, appendId: string, identity: string | number, dims?: Record<string, string>) => Promise<
     { _tag: 'Ok', snapshotId: string, files: IcebergListedDataFile[] } | { _tag: 'Err', reason: 'append-unavailable' }
@@ -461,6 +476,15 @@ export function defineIcebergDataset(def: IcebergDatasetDef): IcebergDataset {
     return appendDatasetBatches(conn, def.table, source, process, opts)
   }
 
+  async function registerParquetFiles(
+    conn: IcebergConnection,
+    files: readonly ParquetFileDescriptor[],
+    opts: RegisterParquetFilesOptions,
+  ): Promise<RegisterParquetFilesResult> {
+    const { registerDatasetParquetFiles } = await import('./dataset-runtime')
+    return registerDatasetParquetFiles(conn, def.table, files, opts)
+  }
+
   function appendSink(opts: AppendSinkOptions): AppendSink {
     let buffer: Record<string, unknown>[] = []
     let connection: Promise<IcebergConnection> | undefined
@@ -569,6 +593,7 @@ export function defineIcebergDataset(def: IcebergDatasetDef): IcebergDataset {
     verifyTable,
     appendRows,
     appendBatches,
+    registerParquetFiles,
     resolveAppendFiles,
     createAppendFileResolver,
     prepareRows: process,
