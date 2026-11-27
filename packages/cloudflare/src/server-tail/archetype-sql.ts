@@ -349,6 +349,19 @@ function buildEntityDailySparkline(q: EntityDailySparklineQuery, pruned: boolean
   }
 }
 
+function breakdownOrderBy(
+  orderBy: { metric: Metric, dir: 'asc' | 'desc' },
+  metricList: readonly Metric[],
+  tieBreakColumn?: string,
+): string {
+  const parts = [`${metricAlias(orderBy.metric)} ${orderBy.dir.toUpperCase()}`]
+  if (orderBy.metric === 'clicks' && orderBy.dir === 'desc' && metricList.includes('impressions'))
+    parts.push(`${metricAlias('impressions')} DESC`)
+  if (tieBreakColumn)
+    parts.push(`${tieBreakColumn} ASC`)
+  return parts.join(', ')
+}
+
 function buildTopNBreakdown(q: TopNBreakdownQuery, pruned: boolean, mode: PartitionPredicateMode, separateComparisonTable = false): ArchetypeSqlPlan {
   const previousTable = separateComparisonTable ? COMPARISON_TABLE_PLACEHOLDER : TABLE_PLACEHOLDER
   const table = tableForTopNBreakdown(q)
@@ -370,7 +383,6 @@ function buildTopNBreakdown(q: TopNBreakdownQuery, pruned: boolean, mode: Partit
   // unqualified output columns are in scope.
   // A metric alone leaves tied rows free to move across LIMIT/OFFSET pages.
   const orderKey = q.dimension === 'page' && !q.compareRange ? 'url' : q.dimension
-  const order = `${metricAlias(q.orderBy.metric)} ${q.orderBy.dir.toUpperCase()}, ${orderKey} ASC`
   const limit = `LIMIT ${Math.max(0, Math.floor(q.limit))}`
   const offset = q.offset && q.offset > 0 ? ` OFFSET ${Math.floor(q.offset)}` : ''
   const metricList0 = q.metrics.includes(q.orderBy.metric) ? q.metrics : [...q.metrics, q.orderBy.metric]
@@ -379,6 +391,7 @@ function buildTopNBreakdown(q: TopNBreakdownQuery, pruned: boolean, mode: Partit
   const metricList = q.compareRange && q.movers
     ? [...new Set<Metric>([...metricList0, 'clicks', 'impressions'])]
     : metricList0
+  const order = breakdownOrderBy(q.orderBy, metricList, orderKey)
   const variantSel = q.dimension === 'queryCanonical' ? ', COUNT(DISTINCT query) AS variantCount' : ''
 
   if (q.dimension === 'device') {
@@ -513,7 +526,7 @@ function buildTwoDimensionDetail(q: TwoDimensionDetailQuery, pruned: boolean, mo
   const metrics = metricList.map(metricExpr).join(', ')
   let sql = `SELECT url, query, ${metrics} FROM ${factTableRef()} WHERE ${clause} GROUP BY url, query`
   if (q.orderBy)
-    sql += ` ORDER BY ${metricAlias(q.orderBy.metric)} ${q.orderBy.dir.toUpperCase()}`
+    sql += ` ORDER BY ${breakdownOrderBy(q.orderBy, metricList)}`
   if (q.limit && q.limit > 0)
     sql += ` LIMIT ${Math.floor(q.limit)}`
   return { table: 'page_queries', params, sql }
