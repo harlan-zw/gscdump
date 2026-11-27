@@ -493,3 +493,37 @@ it('keeps current and previous comparison relations independently bindable', asy
   expect(rows).toMatchObject([{ query: 'term', clicks: 7, prevClicks: 3 }])
   await resetNodeDuckDB()
 })
+
+it('breaks zero-click ties by impressions DESC in top-n-breakdown and two-dimension-detail', async () => {
+  const db = createNodeDuckDBHandle()
+  const query: TopNBreakdownQuery = {
+    ...base,
+    archetype: 'top-n-breakdown',
+    dimension: 'country',
+    metrics: ['clicks', 'impressions'],
+    orderBy: { metric: 'clicks', dir: 'desc' },
+    limit: 2,
+  }
+  const plan = buildArchetypeSql(query, { partitionPruned: true })
+  expect(plan.sql).toContain('ORDER BY clicks DESC, impressions DESC, country ASC LIMIT 2')
+  const table = `(SELECT 'are' AS country, DATE '2026-01-01' AS date, 0 AS clicks, 2 AS impressions, 12 AS sum_position
+    UNION ALL SELECT 'usa' AS country, DATE '2026-01-01' AS date, 0 AS clicks, 400 AS impressions, 2000 AS sum_position
+    UNION ALL SELECT 'gbr' AS country, DATE '2026-01-01' AS date, 0 AS clicks, 95 AS impressions, 500 AS sum_position)`
+  const sql = bindLiterals(plan.sql, plan.params).replaceAll('{{TABLE}}', table)
+  const rows = await db.query(sql)
+  expect(rows).toEqual([
+    { country: 'usa', clicks: 0n, impressions: 400n },
+    { country: 'gbr', clicks: 0n, impressions: 95n },
+  ])
+
+  const detailPlan = buildArchetypeSql({
+    ...base,
+    archetype: 'two-dimension-detail',
+    metrics: ['clicks', 'impressions'],
+    orderBy: { metric: 'clicks', dir: 'desc' },
+    limit: 5,
+    filter: { page: 'https://example.com/' },
+  }, { partitionPruned: true })
+  expect(detailPlan.sql).toContain('ORDER BY clicks DESC, impressions DESC LIMIT 5')
+  await resetNodeDuckDB()
+})

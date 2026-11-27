@@ -346,17 +346,22 @@ export function compileArchetypeSql(query: ArchetypeQuery): CompiledArchetypeSql
       const where = rangePredicate(query)
       const cmp = compareRangePredicate(query)
       const dir = query.orderBy.dir === 'asc' ? 'ASC' : 'DESC'
+      const metricList = query.metrics.includes(query.orderBy.metric)
+        ? query.metrics
+        : [...query.metrics, query.orderBy.metric]
+      const tieImpressions = query.orderBy.metric === 'clicks' && dir === 'DESC' && metricList.includes('impressions')
       // compareRange branches join `FROM cur c FULL OUTER JOIN prev p` and
       // re-alias the qualified `c.<metric>` back to the bare output name, which
       // makes a bare `ORDER BY <metric>` ambiguous on strict planners (R2 SQL /
       // DataFusion 40004; DuckDB tolerates it). Order by the qualified coalesced
       // current-range value — same ordering, unambiguous. Mirrors the
       // @gscdump/cloudflare server-tail sibling.
-      const compareOrder = `COALESCE(c.${query.orderBy.metric}, 0) ${dir}`
-      const order = `${query.orderBy.metric} ${dir}, ${query.dimension} ASC`
-      const metricList = query.metrics.includes(query.orderBy.metric)
-        ? query.metrics
-        : [...query.metrics, query.orderBy.metric]
+      const compareOrder = tieImpressions
+        ? `COALESCE(c.${query.orderBy.metric}, 0) ${dir}, COALESCE(c.impressions, 0) DESC`
+        : `COALESCE(c.${query.orderBy.metric}, 0) ${dir}`
+      const order = tieImpressions
+        ? `${query.orderBy.metric} ${dir}, impressions DESC, ${query.dimension} ASC`
+        : `${query.orderBy.metric} ${dir}, ${query.dimension} ASC`
       // `queryCanonical` rows surface the count of distinct raw queries collapsed
       // under one canonical (the `{N}v` badge).
       const variantSel = query.dimension === 'queryCanonical' ? ', COUNT(DISTINCT query) AS variantCount' : ''
@@ -503,7 +508,10 @@ export function compileArchetypeSql(query: ArchetypeQuery): CompiledArchetypeSql
       const params = [...where.params, ...filterParams, ...facet.params]
       if (query.orderBy) {
         const dir = query.orderBy.dir === 'asc' ? 'ASC' : 'DESC'
-        sql += ` ORDER BY ${query.orderBy.metric} ${dir}`
+        const tieImpressions = query.orderBy.metric === 'clicks' && dir === 'DESC' && query.metrics.includes('impressions')
+        sql += tieImpressions
+          ? ` ORDER BY ${query.orderBy.metric} ${dir}, impressions DESC`
+          : ` ORDER BY ${query.orderBy.metric} ${dir}`
       }
       if (typeof query.limit === 'number') {
         sql += ' LIMIT ?'
