@@ -14,6 +14,7 @@ The Nuxt and Next.js examples check a user session before reading Site data. The
 | Nuxt | [Nuxt](/gscdump-sdk/guides/build-integrations/nuxt) |
 | Next.js | [Next.js](/gscdump-sdk/guides/build-integrations/nextjs) |
 | Hono or Express | [Hono / Express](/gscdump-sdk/guides/build-integrations/hono-express) |
+| Python | [Python](/gscdump-sdk/guides/build-integrations/python) |
 | Browser change notices | [Realtime](/gscdump-sdk/guides/build-integrations/realtime) |
 | Server event delivery | [Webhooks](/gscdump-sdk/guides/build-integrations/webhooks) |
 
