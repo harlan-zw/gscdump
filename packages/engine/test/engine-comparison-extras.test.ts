@@ -381,22 +381,30 @@ describe('queryCanonicalVariantsRollup (integration)', () => {
   async function seed(engine: StorageEngine) {
     // 'foo' canonical: two variants, 'Foo' out-clicks 'foos' → canonicalName='Foo'.
     // 'bar' canonical: single variant.
+    // 'boots' canonical: three 0-click variants, tied impressions broken by query ASC → canonicalName='beta boot'.
     await engine.writeDay(
       { userId: 'u1', siteId: 's1', table: 'queries', date: '2026-03-10' },
       [
         queryRow('Foo', '2026-03-10', 500, 5000),
         queryRow('foos', '2026-03-10', 100, 1000),
         queryRow('bar', '2026-03-10', 100, 1000),
+        queryRow('alpha boot', '2026-03-10', 0, 5),
+        queryRow('zeta boot', '2026-03-10', 0, 200),
+        queryRow('beta boot', '2026-03-10', 0, 200),
       ],
     )
   }
 
   async function writeQueryDim(dataSource: ReturnType<typeof createFilesystemDataSource>) {
     const store = createQueryDimStore({ dataSource })
-    const records = buildQueryDimRecords(['Foo', 'foos', 'bar'], {
+    const records = buildQueryDimRecords(['Foo', 'foos', 'bar', 'alpha boot', 'zeta boot', 'beta boot'], {
       normalizeQuery: (query) => {
         const lower = query.toLowerCase()
-        return lower === 'foos' ? 'foo' : lower
+        if (lower === 'foos')
+          return 'foo'
+        if (lower.endsWith(' boot'))
+          return 'boots'
+        return lower
       },
       normalizerVersion: 2,
       classifyIntentCode: () => 0,
@@ -445,5 +453,7 @@ describe('queryCanonicalVariantsRollup (integration)', () => {
 
     expect(live.get('foo')).toMatchObject({ variantCount: 2, canonicalName: 'Foo' })
     expect(live.get('bar')).toMatchObject({ variantCount: 1, canonicalName: 'bar' })
+    expect(live.get('boots')).toMatchObject({ variantCount: 3, canonicalName: 'beta boot' })
+    expect(rolledUp.get('boots')).toMatchObject({ variantCount: 3, canonicalName: 'beta boot' })
   })
 })

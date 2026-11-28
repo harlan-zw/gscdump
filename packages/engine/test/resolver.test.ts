@@ -425,9 +425,11 @@ describe('clicks DESC impressions tie-breaker', () => {
         INSERT INTO queries VALUES
           ('2026-03-05', 'alpha', 0, 5, 50),
           ('2026-03-05', 'zeta', 0, 500, 5000),
-          ('2026-03-05', 'beta', 0, 500, 2500),
+          ('2026-03-05', 'beta', 0, 200, 1000),
+          ('2026-03-06', 'beta', 0, 300, 1500),
           ('2026-03-05', 'winner', 3, 10, 20),
-          ('2026-02-05', 'alpha', 0, 100, 1000);
+          ('2026-02-05', 'alpha', 0, 100, 1000),
+          ('2026-02-05', 'lost-huge', 0, 9999, 99990);
       `)
       const current = state({
         dimensions: ['query'],
@@ -450,28 +452,35 @@ describe('clicks DESC impressions tie-breaker', () => {
         rowLimit: 10,
       })
 
-      const compiled = [
+      for (const plan of [
         resolverResolveToSQL(current, { adapter: pgResolverAdapter }),
         resolveToSQLOptimized(current, { adapter: pgResolverAdapter }),
-        resolveComparisonSQL(current, previous, { adapter: pgResolverAdapter }),
-        resolveComparisonSQLOptimized(current, previous, { adapter: pgResolverAdapter }),
-      ]
-      for (const plan of compiled) {
+      ]) {
         const params = plan.params.map(v => typeof v === 'number' ? v : String(v))
         const rows = (await connection.runAndReadAll(plan.sql, params)).getRowObjectsJS()
         expect(rows.map(r => r.query)).toEqual(['winner', 'beta', 'zeta', 'alpha'])
       }
 
-      // Default orderBy (omitted) also applies clicks DESC, impressions DESC.
-      const defaultOrder = resolveToSQLOptimized(state({
-        dimensions: ['query'],
-        metrics: ['clicks', 'impressions'],
-      }), { adapter: pgResolverAdapter })
-      const defaultRows = (await connection.runAndReadAll(
-        defaultOrder.sql,
-        defaultOrder.params.map(String),
-      )).getRowObjectsJS()
-      expect(defaultRows.map(r => r.query)).toEqual(['winner', 'beta', 'zeta', 'alpha'])
+      // Comparison orders by current impressions DESC (not prevImpressions), so a
+      // previous-only row with 0 current impressions ranks after current rows.
+      for (const plan of [
+        resolveComparisonSQL(current, previous, { adapter: pgResolverAdapter }),
+        resolveComparisonSQLOptimized(current, previous, { adapter: pgResolverAdapter }),
+      ]) {
+        const params = plan.params.map(v => typeof v === 'number' ? v : String(v))
+        const rows = (await connection.runAndReadAll(plan.sql, params)).getRowObjectsJS()
+        expect(rows.map(r => r.query)).toEqual(['winner', 'beta', 'zeta', 'alpha', 'lost-huge'])
+      }
+
+      // Default orderBy (omitted) and unselected clicks + selected impressions both tie-break by impressions DESC.
+      for (const plan of [
+        resolveToSQLOptimized(state({ dimensions: ['query'], metrics: ['clicks', 'impressions'] }), { adapter: pgResolverAdapter }),
+        resolverResolveToSQL(state({ dimensions: ['query'], metrics: ['impressions'] }), { adapter: pgResolverAdapter }),
+        resolveToSQLOptimized(state({ dimensions: ['query'], metrics: ['impressions'] }), { adapter: pgResolverAdapter }),
+      ]) {
+        const rows = (await connection.runAndReadAll(plan.sql, plan.params.map(String))).getRowObjectsJS()
+        expect(rows.map(r => r.query)).toEqual(['winner', 'beta', 'zeta', 'alpha'])
+      }
 
       // clicks ASC does not add an impressions DESC tie-breaker.
       const ascPlan = resolverResolveToSQL(state({
@@ -481,6 +490,11 @@ describe('clicks DESC impressions tie-breaker', () => {
       }), { adapter: pgResolverAdapter })
       expect(ascPlan.sql).toContain('ORDER BY clicks ASC, "query" ASC')
       expect(ascPlan.sql).not.toContain('impressions DESC')
+      const ascRows = (await connection.runAndReadAll(
+        ascPlan.sql,
+        ascPlan.params.map(String),
+      )).getRowObjectsJS()
+      expect(ascRows.map(r => r.query)).toEqual(['alpha', 'beta', 'zeta', 'winner'])
 
       // Queries omitting impressions from metrics do not reference impressions in ORDER BY.
       const clicksOnly = resolverResolveToSQL(state({

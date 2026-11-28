@@ -64,8 +64,15 @@ function retainCanonicalVariant(
   let insertAt = 0
   while (insertAt < bucket.top.length) {
     const existing = bucket.top[insertAt]!
-    if (clicks > existing.clicks || (clicks === existing.clicks && query.localeCompare(existing.query) < 0))
+    if (
+      clicks > existing.clicks
+      || (clicks === existing.clicks && (
+        impressions > existing.impressions
+        || (impressions === existing.impressions && query < existing.query)
+      ))
+    ) {
       break
+    }
     insertAt++
   }
   if (insertAt >= CANONICAL_VARIANT_LIMIT)
