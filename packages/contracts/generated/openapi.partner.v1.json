@@ -7243,6 +7243,91 @@
           }
         ]
       },
+      "partner.users.indexing.indexnow.sites.list.error": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "enum": [
+                  "invalid_request",
+                  "unauthorized",
+                  "forbidden",
+                  "user_not_found",
+                  "rate_limited",
+                  "internal_error",
+                  "contract_violation"
+                ],
+                "type": "string"
+              },
+              "details": {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/partner.users.indexing.indexnow.sites.list.error.__schema0"
+                },
+                "propertyNames": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              "message": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "requestId": {
+                "pattern": "^req_[\\w-]+$",
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "requestId",
+              "retryable",
+              "details"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "partner.users.indexing.indexnow.sites.list.error.__schema0": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          },
+          {
+            "items": {
+              "$ref": "#/components/schemas/partner.users.indexing.indexnow.sites.list.error.__schema0"
+            },
+            "type": "array"
+          },
+          {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/partner.users.indexing.indexnow.sites.list.error.__schema0"
+            },
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": "object"
+          }
+        ]
+      },
       "partner.users.integration_activity.get.error": {
         "additionalProperties": false,
         "properties": {
@@ -17313,6 +17398,375 @@
                                         "_tag": {
                                           "const": "collecting",
                                           "type": "string"
+                                        },
+                                        "health": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "crawl": {
+                                              "anyOf": [
+                                                {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "blockedByRobotsTxt": {
+                                                      "maximum": 9007199254740991,
+                                                      "minimum": 0,
+                                                      "type": "integer"
+                                                    },
+                                                    "code4xx": {
+                                                      "maximum": 9007199254740991,
+                                                      "minimum": 0,
+                                                      "type": "integer"
+                                                    },
+                                                    "code5xx": {
+                                                      "maximum": 9007199254740991,
+                                                      "minimum": 0,
+                                                      "type": "integer"
+                                                    },
+                                                    "containsMalware": {
+                                                      "maximum": 9007199254740991,
+                                                      "minimum": 0,
+                                                      "type": "integer"
+                                                    },
+                                                    "crawlErrors": {
+                                                      "maximum": 9007199254740991,
+                                                      "minimum": 0,
+                                                      "type": "integer"
+                                                    },
+                                                    "crawledPages": {
+                                                      "maximum": 9007199254740991,
+                                                      "minimum": 0,
+                                                      "type": "integer"
+                                                    },
+                                                    "inIndex": {
+                                                      "maximum": 9007199254740991,
+                                                      "minimum": 0,
+                                                      "type": "integer"
+                                                    },
+                                                    "latestDate": {
+                                                      "anyOf": [
+                                                        {
+                                                          "format": "date",
+                                                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                                          "type": "string"
+                                                        },
+                                                        {
+                                                          "type": "null"
+                                                        }
+                                                      ]
+                                                    },
+                                                    "weekly": {
+                                                      "items": {
+                                                        "additionalProperties": false,
+                                                        "properties": {
+                                                          "blockedByRobotsTxt": {
+                                                            "maximum": 9007199254740991,
+                                                            "minimum": 0,
+                                                            "type": "integer"
+                                                          },
+                                                          "code4xx": {
+                                                            "maximum": 9007199254740991,
+                                                            "minimum": 0,
+                                                            "type": "integer"
+                                                          },
+                                                          "code5xx": {
+                                                            "maximum": 9007199254740991,
+                                                            "minimum": 0,
+                                                            "type": "integer"
+                                                          },
+                                                          "containsMalware": {
+                                                            "maximum": 9007199254740991,
+                                                            "minimum": 0,
+                                                            "type": "integer"
+                                                          },
+                                                          "crawlErrors": {
+                                                            "maximum": 9007199254740991,
+                                                            "minimum": 0,
+                                                            "type": "integer"
+                                                          },
+                                                          "crawledPages": {
+                                                            "maximum": 9007199254740991,
+                                                            "minimum": 0,
+                                                            "type": "integer"
+                                                          },
+                                                          "inIndex": {
+                                                            "maximum": 9007199254740991,
+                                                            "minimum": 0,
+                                                            "type": "integer"
+                                                          },
+                                                          "weekStart": {
+                                                            "format": "date",
+                                                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                                            "type": "string"
+                                                          }
+                                                        },
+                                                        "required": [
+                                                          "weekStart",
+                                                          "crawledPages",
+                                                          "inIndex",
+                                                          "crawlErrors",
+                                                          "blockedByRobotsTxt",
+                                                          "containsMalware",
+                                                          "code4xx",
+                                                          "code5xx"
+                                                        ],
+                                                        "type": "object"
+                                                      },
+                                                      "type": "array"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "latestDate",
+                                                    "crawledPages",
+                                                    "inIndex",
+                                                    "crawlErrors",
+                                                    "blockedByRobotsTxt",
+                                                    "containsMalware",
+                                                    "code4xx",
+                                                    "code5xx",
+                                                    "weekly"
+                                                  ],
+                                                  "type": "object"
+                                                },
+                                                {
+                                                  "type": "null"
+                                                }
+                                              ]
+                                            },
+                                            "crawlSync": {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "errorReason": {
+                                                  "type": [
+                                                    "string",
+                                                    "null"
+                                                  ]
+                                                },
+                                                "lastAttemptAt": {
+                                                  "anyOf": [
+                                                    {
+                                                      "format": "date-time",
+                                                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                                      "type": "string"
+                                                    },
+                                                    {
+                                                      "type": "null"
+                                                    }
+                                                  ]
+                                                },
+                                                "lastSuccessAt": {
+                                                  "anyOf": [
+                                                    {
+                                                      "format": "date-time",
+                                                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                                      "type": "string"
+                                                    },
+                                                    {
+                                                      "type": "null"
+                                                    }
+                                                  ]
+                                                },
+                                                "providerEndDate": {
+                                                  "anyOf": [
+                                                    {
+                                                      "format": "date",
+                                                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                                      "type": "string"
+                                                    },
+                                                    {
+                                                      "type": "null"
+                                                    }
+                                                  ]
+                                                },
+                                                "providerStartDate": {
+                                                  "anyOf": [
+                                                    {
+                                                      "format": "date",
+                                                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                                      "type": "string"
+                                                    },
+                                                    {
+                                                      "type": "null"
+                                                    }
+                                                  ]
+                                                },
+                                                "state": {
+                                                  "enum": [
+                                                    "missing",
+                                                    "ready",
+                                                    "unavailable"
+                                                  ],
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "state",
+                                                "providerStartDate",
+                                                "providerEndDate",
+                                                "lastSuccessAt",
+                                                "lastAttemptAt",
+                                                "errorReason"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            "traffic": {
+                                              "anyOf": [
+                                                {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "coveredDays": {
+                                                      "maximum": 9007199254740991,
+                                                      "minimum": 0,
+                                                      "type": "integer"
+                                                    },
+                                                    "current28dClicks": {
+                                                      "minimum": 0,
+                                                      "type": "number"
+                                                    },
+                                                    "current28dImpressions": {
+                                                      "minimum": 0,
+                                                      "type": "number"
+                                                    },
+                                                    "prior28dClicks": {
+                                                      "minimum": 0,
+                                                      "type": "number"
+                                                    },
+                                                    "prior28dImpressions": {
+                                                      "minimum": 0,
+                                                      "type": "number"
+                                                    },
+                                                    "weekly": {
+                                                      "items": {
+                                                        "additionalProperties": false,
+                                                        "properties": {
+                                                          "clicks": {
+                                                            "minimum": 0,
+                                                            "type": "number"
+                                                          },
+                                                          "days": {
+                                                            "maximum": 9007199254740991,
+                                                            "minimum": 0,
+                                                            "type": "integer"
+                                                          },
+                                                          "impressions": {
+                                                            "minimum": 0,
+                                                            "type": "number"
+                                                          },
+                                                          "weekStart": {
+                                                            "format": "date",
+                                                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                                            "type": "string"
+                                                          }
+                                                        },
+                                                        "required": [
+                                                          "weekStart",
+                                                          "clicks",
+                                                          "impressions",
+                                                          "days"
+                                                        ],
+                                                        "type": "object"
+                                                      },
+                                                      "type": "array"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "current28dClicks",
+                                                    "prior28dClicks",
+                                                    "current28dImpressions",
+                                                    "prior28dImpressions",
+                                                    "coveredDays",
+                                                    "weekly"
+                                                  ],
+                                                  "type": "object"
+                                                },
+                                                {
+                                                  "type": "null"
+                                                }
+                                              ]
+                                            },
+                                            "trafficSync": {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "errorReason": {
+                                                  "type": [
+                                                    "string",
+                                                    "null"
+                                                  ]
+                                                },
+                                                "lastAttemptAt": {
+                                                  "anyOf": [
+                                                    {
+                                                      "format": "date-time",
+                                                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                                      "type": "string"
+                                                    },
+                                                    {
+                                                      "type": "null"
+                                                    }
+                                                  ]
+                                                },
+                                                "lastSuccessAt": {
+                                                  "anyOf": [
+                                                    {
+                                                      "format": "date-time",
+                                                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                                      "type": "string"
+                                                    },
+                                                    {
+                                                      "type": "null"
+                                                    }
+                                                  ]
+                                                },
+                                                "providerEndDate": {
+                                                  "anyOf": [
+                                                    {
+                                                      "format": "date",
+                                                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                                      "type": "string"
+                                                    },
+                                                    {
+                                                      "type": "null"
+                                                    }
+                                                  ]
+                                                },
+                                                "providerStartDate": {
+                                                  "anyOf": [
+                                                    {
+                                                      "format": "date",
+                                                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                                      "type": "string"
+                                                    },
+                                                    {
+                                                      "type": "null"
+                                                    }
+                                                  ]
+                                                },
+                                                "state": {
+                                                  "enum": [
+                                                    "missing",
+                                                    "ready",
+                                                    "unavailable"
+                                                  ],
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "state",
+                                                "providerStartDate",
+                                                "providerEndDate",
+                                                "lastSuccessAt",
+                                                "lastAttemptAt",
+                                                "errorReason"
+                                              ],
+                                              "type": "object"
+                                            }
+                                          },
+                                          "required": [
+                                            "trafficSync",
+                                            "crawlSync",
+                                            "traffic",
+                                            "crawl"
+                                          ],
+                                          "type": "object"
                                         },
                                         "lastEvidenceAt": {
                                           "anyOf": [
@@ -41420,6 +41874,375 @@
                                         "const": "collecting",
                                         "type": "string"
                                       },
+                                      "health": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "crawl": {
+                                            "anyOf": [
+                                              {
+                                                "additionalProperties": false,
+                                                "properties": {
+                                                  "blockedByRobotsTxt": {
+                                                    "maximum": 9007199254740991,
+                                                    "minimum": 0,
+                                                    "type": "integer"
+                                                  },
+                                                  "code4xx": {
+                                                    "maximum": 9007199254740991,
+                                                    "minimum": 0,
+                                                    "type": "integer"
+                                                  },
+                                                  "code5xx": {
+                                                    "maximum": 9007199254740991,
+                                                    "minimum": 0,
+                                                    "type": "integer"
+                                                  },
+                                                  "containsMalware": {
+                                                    "maximum": 9007199254740991,
+                                                    "minimum": 0,
+                                                    "type": "integer"
+                                                  },
+                                                  "crawlErrors": {
+                                                    "maximum": 9007199254740991,
+                                                    "minimum": 0,
+                                                    "type": "integer"
+                                                  },
+                                                  "crawledPages": {
+                                                    "maximum": 9007199254740991,
+                                                    "minimum": 0,
+                                                    "type": "integer"
+                                                  },
+                                                  "inIndex": {
+                                                    "maximum": 9007199254740991,
+                                                    "minimum": 0,
+                                                    "type": "integer"
+                                                  },
+                                                  "latestDate": {
+                                                    "anyOf": [
+                                                      {
+                                                        "format": "date",
+                                                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                                        "type": "string"
+                                                      },
+                                                      {
+                                                        "type": "null"
+                                                      }
+                                                    ]
+                                                  },
+                                                  "weekly": {
+                                                    "items": {
+                                                      "additionalProperties": false,
+                                                      "properties": {
+                                                        "blockedByRobotsTxt": {
+                                                          "maximum": 9007199254740991,
+                                                          "minimum": 0,
+                                                          "type": "integer"
+                                                        },
+                                                        "code4xx": {
+                                                          "maximum": 9007199254740991,
+                                                          "minimum": 0,
+                                                          "type": "integer"
+                                                        },
+                                                        "code5xx": {
+                                                          "maximum": 9007199254740991,
+                                                          "minimum": 0,
+                                                          "type": "integer"
+                                                        },
+                                                        "containsMalware": {
+                                                          "maximum": 9007199254740991,
+                                                          "minimum": 0,
+                                                          "type": "integer"
+                                                        },
+                                                        "crawlErrors": {
+                                                          "maximum": 9007199254740991,
+                                                          "minimum": 0,
+                                                          "type": "integer"
+                                                        },
+                                                        "crawledPages": {
+                                                          "maximum": 9007199254740991,
+                                                          "minimum": 0,
+                                                          "type": "integer"
+                                                        },
+                                                        "inIndex": {
+                                                          "maximum": 9007199254740991,
+                                                          "minimum": 0,
+                                                          "type": "integer"
+                                                        },
+                                                        "weekStart": {
+                                                          "format": "date",
+                                                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                                          "type": "string"
+                                                        }
+                                                      },
+                                                      "required": [
+                                                        "weekStart",
+                                                        "crawledPages",
+                                                        "inIndex",
+                                                        "crawlErrors",
+                                                        "blockedByRobotsTxt",
+                                                        "containsMalware",
+                                                        "code4xx",
+                                                        "code5xx"
+                                                      ],
+                                                      "type": "object"
+                                                    },
+                                                    "type": "array"
+                                                  }
+                                                },
+                                                "required": [
+                                                  "latestDate",
+                                                  "crawledPages",
+                                                  "inIndex",
+                                                  "crawlErrors",
+                                                  "blockedByRobotsTxt",
+                                                  "containsMalware",
+                                                  "code4xx",
+                                                  "code5xx",
+                                                  "weekly"
+                                                ],
+                                                "type": "object"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
+                                          },
+                                          "crawlSync": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "errorReason": {
+                                                "type": [
+                                                  "string",
+                                                  "null"
+                                                ]
+                                              },
+                                              "lastAttemptAt": {
+                                                "anyOf": [
+                                                  {
+                                                    "format": "date-time",
+                                                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                                    "type": "string"
+                                                  },
+                                                  {
+                                                    "type": "null"
+                                                  }
+                                                ]
+                                              },
+                                              "lastSuccessAt": {
+                                                "anyOf": [
+                                                  {
+                                                    "format": "date-time",
+                                                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                                    "type": "string"
+                                                  },
+                                                  {
+                                                    "type": "null"
+                                                  }
+                                                ]
+                                              },
+                                              "providerEndDate": {
+                                                "anyOf": [
+                                                  {
+                                                    "format": "date",
+                                                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                                    "type": "string"
+                                                  },
+                                                  {
+                                                    "type": "null"
+                                                  }
+                                                ]
+                                              },
+                                              "providerStartDate": {
+                                                "anyOf": [
+                                                  {
+                                                    "format": "date",
+                                                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                                    "type": "string"
+                                                  },
+                                                  {
+                                                    "type": "null"
+                                                  }
+                                                ]
+                                              },
+                                              "state": {
+                                                "enum": [
+                                                  "missing",
+                                                  "ready",
+                                                  "unavailable"
+                                                ],
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "state",
+                                              "providerStartDate",
+                                              "providerEndDate",
+                                              "lastSuccessAt",
+                                              "lastAttemptAt",
+                                              "errorReason"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          "traffic": {
+                                            "anyOf": [
+                                              {
+                                                "additionalProperties": false,
+                                                "properties": {
+                                                  "coveredDays": {
+                                                    "maximum": 9007199254740991,
+                                                    "minimum": 0,
+                                                    "type": "integer"
+                                                  },
+                                                  "current28dClicks": {
+                                                    "minimum": 0,
+                                                    "type": "number"
+                                                  },
+                                                  "current28dImpressions": {
+                                                    "minimum": 0,
+                                                    "type": "number"
+                                                  },
+                                                  "prior28dClicks": {
+                                                    "minimum": 0,
+                                                    "type": "number"
+                                                  },
+                                                  "prior28dImpressions": {
+                                                    "minimum": 0,
+                                                    "type": "number"
+                                                  },
+                                                  "weekly": {
+                                                    "items": {
+                                                      "additionalProperties": false,
+                                                      "properties": {
+                                                        "clicks": {
+                                                          "minimum": 0,
+                                                          "type": "number"
+                                                        },
+                                                        "days": {
+                                                          "maximum": 9007199254740991,
+                                                          "minimum": 0,
+                                                          "type": "integer"
+                                                        },
+                                                        "impressions": {
+                                                          "minimum": 0,
+                                                          "type": "number"
+                                                        },
+                                                        "weekStart": {
+                                                          "format": "date",
+                                                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                                          "type": "string"
+                                                        }
+                                                      },
+                                                      "required": [
+                                                        "weekStart",
+                                                        "clicks",
+                                                        "impressions",
+                                                        "days"
+                                                      ],
+                                                      "type": "object"
+                                                    },
+                                                    "type": "array"
+                                                  }
+                                                },
+                                                "required": [
+                                                  "current28dClicks",
+                                                  "prior28dClicks",
+                                                  "current28dImpressions",
+                                                  "prior28dImpressions",
+                                                  "coveredDays",
+                                                  "weekly"
+                                                ],
+                                                "type": "object"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
+                                          },
+                                          "trafficSync": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "errorReason": {
+                                                "type": [
+                                                  "string",
+                                                  "null"
+                                                ]
+                                              },
+                                              "lastAttemptAt": {
+                                                "anyOf": [
+                                                  {
+                                                    "format": "date-time",
+                                                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                                    "type": "string"
+                                                  },
+                                                  {
+                                                    "type": "null"
+                                                  }
+                                                ]
+                                              },
+                                              "lastSuccessAt": {
+                                                "anyOf": [
+                                                  {
+                                                    "format": "date-time",
+                                                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                                    "type": "string"
+                                                  },
+                                                  {
+                                                    "type": "null"
+                                                  }
+                                                ]
+                                              },
+                                              "providerEndDate": {
+                                                "anyOf": [
+                                                  {
+                                                    "format": "date",
+                                                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                                    "type": "string"
+                                                  },
+                                                  {
+                                                    "type": "null"
+                                                  }
+                                                ]
+                                              },
+                                              "providerStartDate": {
+                                                "anyOf": [
+                                                  {
+                                                    "format": "date",
+                                                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                                    "type": "string"
+                                                  },
+                                                  {
+                                                    "type": "null"
+                                                  }
+                                                ]
+                                              },
+                                              "state": {
+                                                "enum": [
+                                                  "missing",
+                                                  "ready",
+                                                  "unavailable"
+                                                ],
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "state",
+                                              "providerStartDate",
+                                              "providerEndDate",
+                                              "lastSuccessAt",
+                                              "lastAttemptAt",
+                                              "errorReason"
+                                            ],
+                                            "type": "object"
+                                          }
+                                        },
+                                        "required": [
+                                          "trafficSync",
+                                          "crawlSync",
+                                          "traffic",
+                                          "crawl"
+                                        ],
+                                        "type": "object"
+                                      },
                                       "lastEvidenceAt": {
                                         "anyOf": [
                                           {
@@ -42681,6 +43504,683 @@
           "readConsistency": null,
           "retry": "idempotent",
           "sideEffects": "state"
+        },
+        "x-gscdump-visibility": "public"
+      }
+    },
+    "/api/partner/v1/users/{userId}/indexing/indexnow/sites": {
+      "get": {
+        "description": "Returns each visible Site's IndexNow connection, latest Submission Receipt summary, 30-day accepted URL count, and weekly buckets.",
+        "operationId": "partner.users.indexing.indexnow.sites.list",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": {
+              "pattern": "^u_[\\w-]+$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "teamId",
+            "required": false,
+            "schema": {
+              "pattern": "^t_[\\w-]+$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "pattern": "^req_[\\w-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "sites": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "acceptedUrls30d": {
+                                "maximum": 9007199254740991,
+                                "minimum": 0,
+                                "type": "integer"
+                              },
+                              "connection": {
+                                "oneOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "_tag": {
+                                        "const": "disconnected",
+                                        "type": "string"
+                                      },
+                                      "host": {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "_tag",
+                                      "host"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "_tag": {
+                                        "const": "verification-required",
+                                        "type": "string"
+                                      },
+                                      "automaticSending": {
+                                        "oneOf": [
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "_tag": {
+                                                "const": "off",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "_tag"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "_tag": {
+                                                "const": "on",
+                                                "type": "string"
+                                              },
+                                              "lastCheck": {
+                                                "anyOf": [
+                                                  {
+                                                    "additionalProperties": false,
+                                                    "properties": {
+                                                      "changedUrls": {
+                                                        "maximum": 9007199254740991,
+                                                        "minimum": 0,
+                                                        "type": "integer"
+                                                      },
+                                                      "checkedAt": {
+                                                        "format": "date-time",
+                                                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                                        "type": "string"
+                                                      },
+                                                      "completeness": {
+                                                        "oneOf": [
+                                                          {
+                                                            "additionalProperties": false,
+                                                            "properties": {
+                                                              "_tag": {
+                                                                "const": "complete",
+                                                                "type": "string"
+                                                              }
+                                                            },
+                                                            "required": [
+                                                              "_tag"
+                                                            ],
+                                                            "type": "object"
+                                                          },
+                                                          {
+                                                            "additionalProperties": false,
+                                                            "properties": {
+                                                              "_tag": {
+                                                                "const": "truncated",
+                                                                "type": "string"
+                                                              },
+                                                              "reasons": {
+                                                                "items": {
+                                                                  "enum": [
+                                                                    "daily-limit",
+                                                                    "scan-limit"
+                                                                  ],
+                                                                  "type": "string"
+                                                                },
+                                                                "minItems": 1,
+                                                                "type": "array"
+                                                              }
+                                                            },
+                                                            "required": [
+                                                              "_tag",
+                                                              "reasons"
+                                                            ],
+                                                            "type": "object"
+                                                          }
+                                                        ]
+                                                      },
+                                                      "sentUrls": {
+                                                        "maximum": 9007199254740991,
+                                                        "minimum": 0,
+                                                        "type": "integer"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "checkedAt",
+                                                      "changedUrls",
+                                                      "sentUrls",
+                                                      "completeness"
+                                                    ],
+                                                    "type": "object"
+                                                  },
+                                                  {
+                                                    "type": "null"
+                                                  }
+                                                ]
+                                              },
+                                              "since": {
+                                                "format": "date-time",
+                                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "_tag",
+                                              "since",
+                                              "lastCheck"
+                                            ],
+                                            "type": "object"
+                                          }
+                                        ]
+                                      },
+                                      "host": {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "keyLocation": {
+                                        "format": "uri",
+                                        "type": "string"
+                                      },
+                                      "reason": {
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "_tag",
+                                      "host",
+                                      "keyLocation",
+                                      "reason",
+                                      "automaticSending"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "_tag": {
+                                        "const": "connected",
+                                        "type": "string"
+                                      },
+                                      "automaticSending": {
+                                        "oneOf": [
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "_tag": {
+                                                "const": "off",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "_tag"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "_tag": {
+                                                "const": "on",
+                                                "type": "string"
+                                              },
+                                              "lastCheck": {
+                                                "anyOf": [
+                                                  {
+                                                    "additionalProperties": false,
+                                                    "properties": {
+                                                      "changedUrls": {
+                                                        "maximum": 9007199254740991,
+                                                        "minimum": 0,
+                                                        "type": "integer"
+                                                      },
+                                                      "checkedAt": {
+                                                        "format": "date-time",
+                                                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                                        "type": "string"
+                                                      },
+                                                      "completeness": {
+                                                        "oneOf": [
+                                                          {
+                                                            "additionalProperties": false,
+                                                            "properties": {
+                                                              "_tag": {
+                                                                "const": "complete",
+                                                                "type": "string"
+                                                              }
+                                                            },
+                                                            "required": [
+                                                              "_tag"
+                                                            ],
+                                                            "type": "object"
+                                                          },
+                                                          {
+                                                            "additionalProperties": false,
+                                                            "properties": {
+                                                              "_tag": {
+                                                                "const": "truncated",
+                                                                "type": "string"
+                                                              },
+                                                              "reasons": {
+                                                                "items": {
+                                                                  "enum": [
+                                                                    "daily-limit",
+                                                                    "scan-limit"
+                                                                  ],
+                                                                  "type": "string"
+                                                                },
+                                                                "minItems": 1,
+                                                                "type": "array"
+                                                              }
+                                                            },
+                                                            "required": [
+                                                              "_tag",
+                                                              "reasons"
+                                                            ],
+                                                            "type": "object"
+                                                          }
+                                                        ]
+                                                      },
+                                                      "sentUrls": {
+                                                        "maximum": 9007199254740991,
+                                                        "minimum": 0,
+                                                        "type": "integer"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "checkedAt",
+                                                      "changedUrls",
+                                                      "sentUrls",
+                                                      "completeness"
+                                                    ],
+                                                    "type": "object"
+                                                  },
+                                                  {
+                                                    "type": "null"
+                                                  }
+                                                ]
+                                              },
+                                              "since": {
+                                                "format": "date-time",
+                                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "_tag",
+                                              "since",
+                                              "lastCheck"
+                                            ],
+                                            "type": "object"
+                                          }
+                                        ]
+                                      },
+                                      "host": {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "keyLocation": {
+                                        "format": "uri",
+                                        "type": "string"
+                                      },
+                                      "verifiedAt": {
+                                        "format": "date-time",
+                                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "_tag",
+                                      "host",
+                                      "keyLocation",
+                                      "verifiedAt",
+                                      "automaticSending"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              },
+                              "latestReceipt": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "_tag": {
+                                        "enum": [
+                                          "queued",
+                                          "accepted",
+                                          "pending",
+                                          "rejected",
+                                          "retrying",
+                                          "failed"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "createdAt": {
+                                        "format": "date-time",
+                                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                        "type": "string"
+                                      },
+                                      "httpStatus": {
+                                        "anyOf": [
+                                          {
+                                            "maximum": 599,
+                                            "minimum": 100,
+                                            "type": "integer"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "id": {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "reason": {
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "retryAt": {
+                                        "anyOf": [
+                                          {
+                                            "format": "date-time",
+                                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "trigger": {
+                                        "enum": [
+                                          "manual",
+                                          "automatic"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "updatedAt": {
+                                        "format": "date-time",
+                                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                        "type": "string"
+                                      },
+                                      "urlCount": {
+                                        "maximum": 9007199254740991,
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "required": [
+                                      "_tag",
+                                      "id",
+                                      "trigger",
+                                      "urlCount",
+                                      "httpStatus",
+                                      "reason",
+                                      "createdAt",
+                                      "updatedAt",
+                                      "retryAt"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "siteId": {
+                                "pattern": "^s_[\\w-]+$",
+                                "type": "string"
+                              },
+                              "siteUrl": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "teamId": {
+                                "anyOf": [
+                                  {
+                                    "pattern": "^t_[\\w-]+$",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "weekly": {
+                                "items": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "acceptedCount": {
+                                      "maximum": 9007199254740991,
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    "acceptedUrls": {
+                                      "maximum": 9007199254740991,
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    "failedCount": {
+                                      "maximum": 9007199254740991,
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    "retryingCount": {
+                                      "maximum": 9007199254740991,
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    "weekStart": {
+                                      "format": "date",
+                                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "weekStart",
+                                    "acceptedUrls",
+                                    "acceptedCount",
+                                    "failedCount",
+                                    "retryingCount"
+                                  ],
+                                  "type": "object"
+                                },
+                                "type": "array"
+                              }
+                            },
+                            "required": [
+                              "siteId",
+                              "siteUrl",
+                              "teamId",
+                              "acceptedUrls30d",
+                              "connection",
+                              "latestReceipt",
+                              "weekly"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "sites"
+                      ],
+                      "type": "object"
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "requestId": {
+                          "pattern": "^req_[\\w-]+$",
+                          "type": "string"
+                        },
+                        "surface": {
+                          "const": "partner",
+                          "type": "string"
+                        },
+                        "version": {
+                          "const": "1.0",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "requestId",
+                        "surface",
+                        "version"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.users.indexing.indexnow.sites.list.error"
+                }
+              }
+            },
+            "description": "Declared client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.users.indexing.indexnow.sites.list.error"
+                }
+              }
+            },
+            "description": "Safe internal or contract error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.users.indexing.indexnow.sites.list.error"
+                }
+              }
+            },
+            "description": "Stable error envelope"
+          }
+        },
+        "security": [
+          {
+            "user_key": []
+          },
+          {
+            "partner_key": []
+          }
+        ],
+        "summary": "List IndexNow state for every Site",
+        "tags": [
+          "Indexing"
+        ],
+        "x-gscdump-errors": [
+          "invalid_request",
+          "unauthorized",
+          "forbidden",
+          "user_not_found",
+          "rate_limited",
+          "internal_error",
+          "contract_violation"
+        ],
+        "x-gscdump-examples": {
+          "request": {
+            "params": {
+              "userId": "u_01"
+            },
+            "query": {
+              "teamId": "t_01"
+            }
+          },
+          "response": {
+            "data": {
+              "sites": []
+            },
+            "meta": {
+              "requestId": "req_01",
+              "surface": "partner",
+              "version": "1.0"
+            }
+          }
+        },
+        "x-gscdump-lifecycle": {
+          "introduced": "7.26.0"
+        },
+        "x-gscdump-ownership": [
+          {
+            "credential": "user_key",
+            "rule": "self"
+          },
+          {
+            "credential": "partner_key",
+            "rule": "linked_user"
+          }
+        ],
+        "x-gscdump-resources": {
+          "changes": [],
+          "reads": [
+            {
+              "idFrom": "params.userId",
+              "type": "partner.user"
+            },
+            {
+              "idFrom": "params.userId",
+              "type": "user.sites"
+            }
+          ]
+        },
+        "x-gscdump-scopes": [
+          "indexing:read"
+        ],
+        "x-gscdump-semantics": {
+          "idempotent": true,
+          "kind": "query",
+          "readConsistency": "primary",
+          "retry": "idempotent",
+          "sideEffects": "none"
         },
         "x-gscdump-visibility": "public"
       }

@@ -110,6 +110,7 @@ import {
   HTTP_V1_ERROR_CODES,
 } from './http-core'
 import { indexNowAutomaticSendingUpdateV1Schema, indexNowConfigureV1Schema, indexNowConnectionV1Schemas, indexNowSubmissionReceiptV1Schemas, indexNowSubmitV1Schema } from './indexnow'
+import { indexNowSitesQueryV1Schema, indexNowSitesV1Schemas } from './indexnow-sites'
 import {
   createRealtimeV1Schemas,
   GSCDUMP_REALTIME_ACK_POLICY,
@@ -437,6 +438,7 @@ export function createGscdumpV1Protocol() {
   const googleSubmissionResponse = defineSuccessResponse(defineResponseObject({ submissionReceipt: googleSubmissionReceiptV1Schemas.producer }, { submissionReceipt: googleSubmissionReceiptV1Schemas.client }), partnerResponseMeta)
   const googleSubmissionReceiptsResponse = defineSuccessResponse(defineResponseObject({ submissionReceipts: z.array(googleSubmissionReceiptV1Schemas.producer), pagination: bingIndexingEvidencePagination.producer }, { submissionReceipts: z.array(googleSubmissionReceiptV1Schemas.client), pagination: bingIndexingEvidencePagination.client }), partnerResponseMeta)
   const bingSitesResponse = defineSuccessResponse(bingSitesV1Schemas, partnerResponseMeta)
+  const indexNowSitesResponse = defineSuccessResponse(indexNowSitesV1Schemas, partnerResponseMeta)
   const bingLinkResponse = defineSuccessResponse(bingLinkResultV1Schemas, partnerResponseMeta)
   const bingAuthorizationResponse = defineSuccessResponse(bingAuthorizationV1Schemas, partnerResponseMeta)
   const bingSitemapSubmitResponse = defineSuccessResponse(bingSitemapSubmitResultV1Schemas, partnerResponseMeta)
@@ -1992,6 +1994,48 @@ export function createGscdumpV1Protocol() {
                   state: { _tag: 'linkable', reason: 'not-linked' },
                 }],
               },
+              meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
+            },
+          },
+        },
+      }),
+      listUserIndexNowSites: defineHttpOperation({
+        ...gscdumpV1OperationRoute('partner.users.indexing.indexnow.sites.list'),
+        visibility: 'public',
+        semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
+        auth: {
+          credentials: ['user_key', 'partner_key'],
+          scopes: ['indexing:read'],
+          ownership: [
+            { credential: 'user_key', rule: 'self' },
+            { credential: 'partner_key', rule: 'linked_user' },
+          ],
+        },
+        request: {
+          params: z.strictObject({ userId: realtimeSchemas.publicUserId }),
+          query: indexNowSitesQueryV1Schema,
+          headers: requestHeaders,
+          body: null,
+        },
+        responses: { 200: indexNowSitesResponse },
+        errors: partnerUserErrors,
+        errorResponse: errorEnvelopeSchemas(partnerUserErrors, realtimeSchemas.publicRequestId),
+        resources: {
+          reads: [
+            { type: 'partner.user', idFrom: 'params.userId' },
+            { type: 'user.sites', idFrom: 'params.userId' },
+          ],
+          changes: [],
+        },
+        lifecycle: { introduced: '7.26.0' },
+        docs: {
+          summary: 'List IndexNow state for every Site',
+          description: 'Returns each visible Site\'s IndexNow connection, latest Submission Receipt summary, 30-day accepted URL count, and weekly buckets.',
+          tags: ['Indexing'],
+          examples: {
+            request: { params: { userId: 'u_01' }, query: { teamId: 't_01' } },
+            response: {
+              data: { sites: [] },
               meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
             },
           },

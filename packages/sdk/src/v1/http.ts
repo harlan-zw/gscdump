@@ -784,6 +784,7 @@ export function createGscdumpV1Client(options: CreateGscdumpV1ClientOptions): Gs
     createUser: (input, executeOptions) => execute('partner.users.create' satisfies MethodId<'createUser'>, input, executeOptions),
     updateUserTokens: (input, executeOptions) => execute('partner.users.tokens.update' satisfies MethodId<'updateUserTokens'>, input, executeOptions),
     listUserBingSites: (input, executeOptions) => execute('partner.users.indexing.bing.sites.list' satisfies MethodId<'listUserBingSites'>, input, executeOptions),
+    listUserIndexNowSites: (input, executeOptions) => execute('partner.users.indexing.indexnow.sites.list' satisfies MethodId<'listUserIndexNowSites'>, input, executeOptions),
     getSiteIndexing: (input, executeOptions) => execute('partner.sites.indexing.get' satisfies MethodId<'getSiteIndexing'>, input, executeOptions),
     getSiteAnalyticsCoverage: (input, executeOptions) => execute('partner.sites.analytics.coverage.get' satisfies MethodId<'getSiteAnalyticsCoverage'>, input, executeOptions),
     getChartAnnotations: (input, executeOptions) => execute('partner.sites.chart_annotations.list' satisfies MethodId<'getChartAnnotations'>, input, executeOptions),

@@ -48,6 +48,69 @@ describe('bing fleet v1', () => {
     expect(query.safeParse({ teamId: 't_1' }).success).toBe(true)
     expect(query.safeParse({ teamId: '12' }).success).toBe(false)
   })
+
+  it('accepts optional Bing health summary on collecting Sites', () => {
+    const response = operations.listUserBingSites.responses[200].producer
+    const withHealth = fleet([{
+      ...collecting,
+      state: {
+        ...collecting.state,
+        health: {
+          trafficSync: { state: 'ready', providerStartDate: '2026-08-01', providerEndDate: '2026-09-29', lastSuccessAt: '2026-09-30T00:00:00.000Z', lastAttemptAt: '2026-09-30T00:00:00.000Z', errorReason: null },
+          crawlSync: { state: 'missing', providerStartDate: null, providerEndDate: null, lastSuccessAt: null, lastAttemptAt: null, errorReason: null },
+          traffic: {
+            current28dClicks: 140,
+            prior28dClicks: 100,
+            current28dImpressions: 3200,
+            prior28dImpressions: 2400,
+            coveredDays: 56,
+            weekly: [{ weekStart: '2026-09-23', clicks: 40, impressions: 900, days: 7 }],
+          },
+          crawl: null,
+        },
+      },
+    }])
+    expect(response.parse(withHealth)).toEqual(withHealth)
+  })
+})
+
+describe('indexnow fleet v1', () => {
+  it('publishes connection, latest receipt summary, and weekly buckets per Site', () => {
+    const response = operations.listUserIndexNowSites.responses[200].producer
+    const payload = {
+      data: {
+        sites: [{
+          siteId: 's_1',
+          siteUrl: 'https://example.com/',
+          teamId: 't_1',
+          connection: {
+            _tag: 'connected',
+            host: 'example.com',
+            keyLocation: 'https://example.com/key.txt',
+            verifiedAt: '2026-09-30T00:00:00.000Z',
+            automaticSending: { _tag: 'on', since: '2026-09-30T00:00:00.000Z', lastCheck: null },
+          },
+          latestReceipt: {
+            _tag: 'accepted',
+            id: 'sub_1',
+            trigger: 'automatic',
+            urlCount: 4,
+            httpStatus: 200,
+            reason: null,
+            createdAt: '2026-09-30T00:00:00.000Z',
+            updatedAt: '2026-09-30T00:00:05.000Z',
+            retryAt: null,
+          },
+          acceptedUrls30d: 12,
+          weekly: [{ weekStart: '2026-09-23', acceptedUrls: 4, acceptedCount: 1, failedCount: 0, retryingCount: 0 }],
+        }],
+      },
+      meta,
+    }
+    expect(response.parse(payload)).toEqual(payload)
+    expect(operations.listUserIndexNowSites.request.query.safeParse({ teamId: 't_1' }).success).toBe(true)
+    expect(operations.listUserIndexNowSites.request.query.safeParse({ teamId: 'bad' }).success).toBe(false)
+  })
 })
 
 describe('bing link, authorization, and Sitemap submit v1', () => {

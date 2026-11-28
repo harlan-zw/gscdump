@@ -294,6 +294,7 @@
   bingDataTotalsV1Schemas: object
   bingDataV1Schemas: object
   bingGrantV1Schemas: object
+  bingHealthSummaryV1Schemas: object
   bingLinkResultV1Schemas: object
   bingSitemapSubmitRequestV1Schema: object
   bingSitemapSubmitResultV1Schemas: object
@@ -375,11 +376,16 @@
   indexNowConnectionV1Schema: object
   indexNowConnectionV1Schemas: object
   indexNowKeyV1Schema: object
+  indexNowLatestReceiptSummaryV1Schemas: object
   indexNowReceiptListQueryV1Schema: object
+  indexNowSitesQueryV1Schema: object
+  indexNowSitesV1Schemas: object
+  indexNowSiteV1Schemas: object
   indexNowSubmissionReceiptV1Schema: object
   indexNowSubmissionReceiptV1Schemas: object
   indexNowSubmissionTriggerV1Schema: object
   indexNowSubmitV1Schema: object
+  indexNowWeekSummaryV1Schemas: object
   isUnknownHttpV1OperationError: function
   listHttpOperations: function
   parseGoogleSubmissionRefusal: function
@@ -437,6 +443,7 @@
   bingDataTotalsV1Schemas: object
   bingDataV1Schemas: object
   bingGrantV1Schemas: object
+  bingHealthSummaryV1Schemas: object
   bingLinkResultV1Schemas: object
   bingSitemapSubmitRequestV1Schema: object
   bingSitemapSubmitResultV1Schemas: object
@@ -501,11 +508,16 @@
   indexNowConnectionV1Schema: object
   indexNowConnectionV1Schemas: object
   indexNowKeyV1Schema: object
+  indexNowLatestReceiptSummaryV1Schemas: object
   indexNowReceiptListQueryV1Schema: object
+  indexNowSitesQueryV1Schema: object
+  indexNowSitesV1Schemas: object
+  indexNowSiteV1Schemas: object
   indexNowSubmissionReceiptV1Schema: object
   indexNowSubmissionReceiptV1Schemas: object
   indexNowSubmissionTriggerV1Schema: object
   indexNowSubmitV1Schema: object
+  indexNowWeekSummaryV1Schemas: object
   isUnknownHttpV1OperationError: function
   listHttpOperations: function
   parseGoogleSubmissionRefusal: function
