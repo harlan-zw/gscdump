@@ -35,7 +35,7 @@ describe('decideRoute', () => {
     ['ignores a sync that runs for another Site', {}, { coverage: [empty], syncRun: otherSite }, { kind: 'live', reason: 'no-store-data' }],
     ['treats a stale sync as not running', {}, { coverage: [partial], syncRun: stale }, { kind: 'prompt', reason: { kind: 'partial', done: 2, total: 3, missing: partial.gaps, windows: [{ period: 'current', table: 'pages', window: WINDOW, missing: partial.gaps }] }, nextCommand: sync }],
     ['goes live when --live is passed, even with Store data', { forceLive: true }, { coverage: [covered] }, { kind: 'live', reason: 'forced' }],
-    ['asks to connect when --live is passed without auth', { forceLive: true }, { auth: 'none', coverage: [covered] }, { kind: 'prompt', reason: { kind: 'not-connected', tables: ['pages'] }, nextCommand: 'gscdump init' }],
+    ['asks to connect when --live is passed without auth', { forceLive: true }, { auth: 'none', coverage: [covered] }, { kind: 'prompt', reason: { kind: 'not-connected', tables: [] }, nextCommand: 'gscdump init' }],
     ['refuses --live for a Store-only read', { forceLive: true, liveCapable: false }, { coverage: [covered] }, { kind: 'prompt', reason: { kind: 'store-only' }, nextCommand: 'gscdump sync --site example.com' }],
     ['asks to sync a Store-only read with no data', { liveCapable: false }, { coverage: [empty] }, { kind: 'prompt', reason: { kind: 'no-data', tables: ['pages'] }, nextCommand: 'gscdump sync --site example.com --start 2026-08-01 --end 2026-08-03 --tables pages' }],
     ['spells out --live for a live-only read', { localCapable: false }, { coverage: [] }, { kind: 'prompt', reason: { kind: 'live-only' }, nextCommand: 'gscdump query --site example.com --live' }],
@@ -65,5 +65,15 @@ describe('routeMessage', () => {
     const text = message({ coverage: [{ ...empty, searchType: 'image' }] })
     expect(text).toContain('The Store has no image pages data for sc-domain:example.com')
     expect(text).not.toContain('no pages data')
+  })
+
+  it('does not claim the Store is empty when --live fails without Google auth', () => {
+    const liveReq = { ...request, forceLive: true }
+    const route = decideRoute(liveReq, { auth: 'none', coverage: [empty], syncRun: none })
+    if (route.kind !== 'prompt')
+      throw new Error(`expected a prompt route, got ${route.kind}`)
+    const text = routeMessage(route, liveReq, 'none')
+    expect(text).toContain('needs Search Console, and Google is not connected')
+    expect(text).not.toContain('The Store has no')
   })
 })

@@ -185,7 +185,9 @@ export function decideRoute(req: RouteRequest, state: RouteState): Route {
   if (req.forceLive) {
     if (!req.liveCapable)
       return { kind: 'prompt', reason: { kind: 'store-only' }, nextCommand: syncCommand }
-    return connected ? { kind: 'live', reason: 'forced' } : notConnected
+    return connected
+      ? { kind: 'live', reason: 'forced' }
+      : { ...notConnected, reason: { kind: 'not-connected', tables: [] } }
   }
 
   if (!req.localCapable) {

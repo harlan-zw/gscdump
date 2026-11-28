@@ -181,6 +181,8 @@ describe('query command', () => {
   it.each([
     [[], 'page,clicks,impressions,ctr,position'],
     [['--format', 'json'], '{'],
+    [['--json'], '{'],
+    [['--json', '--format', 'json'], '{'],
   ])('uses explicit flags before the saved format: %j', async (flags, prefix) => {
     mocks.loadConfig.mockResolvedValue({ defaultFormat: 'csv' })
     mocks.rawQuery.mockResolvedValueOnce({ rows: [{ keys: ['/a'], clicks: 1 }] }).mockResolvedValueOnce({ rows: [] })
@@ -218,6 +220,16 @@ describe('query command', () => {
     })).rejects.toMatchObject({ stopDetails: { code: 'USAGE', message: expect.stringContaining('--format') } })
 
     expect(createCommandContext).not.toHaveBeenCalled()
+  })
+
+  it('rejects conflicting --json and --format flags including empty --format=', async () => {
+    await expect(runCommand(queryCommand, {
+      rawArgs: ['--json', '--format', 'table', '--quiet'],
+    })).rejects.toMatchObject({ stopDetails: { code: 'USAGE', message: expect.stringContaining('--json') } })
+
+    await expect(runCommand(queryCommand, {
+      rawArgs: ['--json', '--format=', '--quiet'],
+    })).rejects.toMatchObject({ stopDetails: { code: 'USAGE', message: expect.stringContaining('--json') } })
   })
 
   it('--explain in --live mode prints request body and exits without calling API', async () => {
