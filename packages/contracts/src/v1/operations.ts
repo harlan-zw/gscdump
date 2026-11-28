@@ -130,6 +130,7 @@ import {
   GSCDUMP_REALTIME_TICKET_TTL_SECONDS,
   REALTIME_V1_EVENT_SEMANTICS,
 } from './realtime'
+import { recordExportFileV1Schema, recordExportManifestV1Schemas, recordExportParquetV1Response } from './record-export'
 import { runReportV1DataSchemas, runReportV1RequestSchema } from './report'
 import { gscdumpV1OperationRoute, gscdumpV1Surface } from './route-catalog'
 import { sitemapEvidenceV1Schemas, sitemapInspectQueryV1Schema } from './sitemap-evidence'
@@ -190,6 +191,7 @@ export function createGscdumpV1Protocol() {
     version: z.literal(GSCDUMP_HTTP_V1_VERSION),
   })
   const userIntegrationActivityResponse = defineSuccessResponse(userIntegrationActivityV1Schemas, partnerResponseMeta)
+  const recordExportManifestResponse = defineSuccessResponse(recordExportManifestV1Schemas, partnerResponseMeta)
   const runReportResponse = defineSuccessResponse(runReportV1DataSchemas, responseMeta)
   const fleetSummaryResponse = defineSuccessResponse(fleetSummaryV1DataSchemas, responseMeta)
   const realtimeResponseMeta = defineResponseObject({
@@ -943,6 +945,30 @@ export function createGscdumpV1Protocol() {
     'internal_error',
     'contract_violation',
   ] as const
+  const recordExportErrors = [...partnerSiteErrors, 'conflict', 'service_unavailable'] as const
+  const recordExportRead = {
+    visibility: 'public',
+    semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
+    auth: {
+      credentials: ['user_key', 'partner_key'],
+      scopes: ['analytics:read', 'indexing:read', 'sitemaps:read'],
+      ownership: [
+        { credential: 'user_key', rule: 'authorized_site' },
+        { credential: 'partner_key', rule: 'authorized_site' },
+      ],
+    },
+    errors: recordExportErrors,
+    errorResponse: errorEnvelopeSchemas(recordExportErrors, realtimeSchemas.publicRequestId),
+    resources: {
+      reads: [
+        { type: 'site.analytics', idFrom: 'params.siteId' },
+        { type: 'site.indexing', idFrom: 'params.siteId' },
+        { type: 'site.sitemaps', idFrom: 'params.siteId' },
+      ],
+      changes: [],
+    },
+    lifecycle: { introduced: '7.27.0' },
+  } as const
   const partnerSiteAnnotationCreateErrors = [...partnerSiteErrors, 'conflict'] as const
   const chartAnnotationsResponse = defineSuccessResponse(chartAnnotationsV1Schemas, partnerResponseMeta)
   const siteAnnotationListResponse = defineSuccessResponse(siteAnnotationListV1Schemas, partnerResponseMeta)
@@ -3404,6 +3430,36 @@ export function createGscdumpV1Protocol() {
               meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
             },
           },
+        },
+      }),
+      getSiteRecordExport: defineHttpOperation({
+        ...gscdumpV1OperationRoute('partner.sites.record_export.get'),
+        ...recordExportRead,
+        request: { params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }), query: null, headers: requestHeaders, body: null },
+        responses: { 200: recordExportManifestResponse },
+        docs: {
+          summary: 'Get a Site record export manifest',
+          description: 'Lists downloadable Parquet files for the Site, with coverage and column descriptions.',
+          tags: ['Record export'],
+          examples: {
+            request: { params: { siteId: 's_01' } },
+            response: {
+              data: { generatedAt: '2026-11-28T00:00:00Z', format: 'parquet', siteId: 's_01', siteUrl: 'https://example.com/', datasets: [] },
+              meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
+            },
+          },
+        },
+      }),
+      downloadSiteRecordExportFile: defineHttpOperation({
+        ...gscdumpV1OperationRoute('partner.sites.record_export.file.get'),
+        ...recordExportRead,
+        request: { params: z.strictObject({ siteId: realtimeSchemas.publicSiteId, file: recordExportFileV1Schema }), query: null, headers: requestHeaders, body: null },
+        responses: { 200: recordExportParquetV1Response },
+        docs: {
+          summary: 'Download a Site record export file',
+          description: 'Streams one Parquet file listed in the Site record export manifest.',
+          tags: ['Record export'],
+          examples: { request: { params: { siteId: 's_01', file: 'google_dates.parquet' } }, response: null },
         },
       }),
       getSitemapExport: defineHttpOperation({

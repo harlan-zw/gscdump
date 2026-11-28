@@ -532,3 +532,22 @@ describe('@gscdump/sdk/v1 HTTP executor', () => {
     }
   })
 })
+
+describe('site record export downloads', () => {
+  it('gives concurrent callers independent response bodies', async () => {
+    const fetch = vi.fn(async () => new Response('file bytes', { headers: { 'content-type': 'application/vnd.apache.parquet' } }))
+    const client = createGscdumpV1Client({ credential: 'user_secret', fetch })
+    const input = { params: { siteId: 's_01', file: 'google_dates.parquet' } }
+    const [first, second] = await Promise.all([client.downloadSiteRecordExportFile(input), client.downloadSiteRecordExportFile(input)])
+    await expect(first.text()).resolves.toBe('file bytes')
+    await expect(second.text()).resolves.toBe('file bytes')
+    expect(fetch).toHaveBeenCalledTimes(2)
+  })
+
+  it('rejects a successful response with the wrong media type', async () => {
+    const client = createGscdumpV1Client({ credential: 'user_secret', fetch: async () => Response.json({ data: 'unexpected' }) })
+    await expect(client.downloadSiteRecordExportFile({ params: { siteId: 's_01', file: 'google_dates.parquet' } }))
+      .rejects
+      .toMatchObject({ code: 'response_validation' })
+  })
+})

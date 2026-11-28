@@ -301,7 +301,7 @@ A routing stop also has `siteUrl`. `STORE_RANGE_NOT_COVERED` adds `missingDates`
 | `gscdump indexing inspect <url...> --yes` | Hosted: refresh up to 10 URLs through the platform, spending shared URL Inspections. Never retry automatically |
 | `gscdump indexing summary` | Hosted: the coverage ladder per day, with the time gscdump counted the verdicts |
 | `gscdump indexing watch` | Hosted: list, add, and remove Watched URLs and read their Watched URL inspections |
-| `gscdump dump` | Export Store tables, inspections, sitemaps, and Bing data as Parquet, CSV, JSON, NDJSON, SQLite, or DuckDB |
+| `gscdump dump` | Export the Store in Local mode. In Hosted mode, download Site records as Parquet with a manifest. |
 | `gscdump store` | Store stats, compaction, garbage collection, resets |
 | `gscdump entities` | Read saved inspections; snapshot Indexing API metadata; build or check opt-in `query_embeddings` (`entities embeddings build\|status`) |
 | `gscdump config` | Defaults such as `defaultSite`, `dataDir`, `defaultLimit` |

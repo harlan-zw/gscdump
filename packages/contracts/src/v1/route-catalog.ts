@@ -21,6 +21,8 @@ export const GSCDUMP_V1_ROUTE_CATALOG = {
     'partner.sites.registered_host.promote': { surface: 'partner', method: 'POST', template: '/sites/{siteId}/registered-host/promote' },
     'partner.sites.registered_host.abort': { surface: 'partner', method: 'POST', template: '/sites/{siteId}/registered-host/abort' },
     'partner.sites.registered_host.rollback': { surface: 'partner', method: 'POST', template: '/sites/{siteId}/registered-host/rollback' },
+    'partner.sites.record_export.get': { surface: 'partner', method: 'GET', template: '/sites/{siteId}/record-export' },
+    'partner.sites.record_export.file.get': { surface: 'partner', method: 'GET', template: '/sites/{siteId}/record-export/{file}' },
     'partner.sites.analytics.coverage.get': { surface: 'partner', method: 'GET', template: '/sites/{siteId}/analytics/coverage' },
     'partner.sites.chart_annotations.list': { surface: 'partner', method: 'GET', template: '/sites/{siteId}/chart-annotations' },
     'partner.sites.annotations.list': { surface: 'partner', method: 'GET', template: '/sites/{siteId}/annotations' },

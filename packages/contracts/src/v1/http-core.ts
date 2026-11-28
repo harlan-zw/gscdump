@@ -86,6 +86,8 @@ export interface CompatibleResponseSchema<
 > {
   producer: TProducer
   client: TClient
+  /** A streamed response. JSON envelopes use the default. */
+  mediaType?: string
 }
 
 export interface HttpV1RequestSchemas {
