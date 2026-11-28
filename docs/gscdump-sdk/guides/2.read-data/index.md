@@ -16,5 +16,6 @@ Pick the data source before choosing a method. Hosted rows and Reports answer di
 | Review saved URL observations | [Hosted indexing](/gscdump-sdk/guides/read-data/hosted-indexing) |
 | Check exact sitemap membership | [Hosted sitemaps](/gscdump-sdk/guides/read-data/hosted-sitemaps) |
 | Call Bing directly | [Direct Bing](/gscdump-sdk/guides/read-data/direct-bing) |
+| Read hosted Bing data and send IndexNow updates | [Hosted Bing and IndexNow](/gscdump-sdk/guides/read-data/hosted-bing-indexnow) |
 
 See [Choose access](/gscdump-sdk/guides/start/choose-access) to switch paths. The [hosted HTTP reference](/gscdump-sdk/api/hosted-http) lists operation contracts.
