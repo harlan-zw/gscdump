@@ -2030,22 +2030,12 @@ export function createGscdumpV1Protocol() {
         lifecycle: { introduced: '7.26.0' },
         docs: {
           summary: 'List IndexNow state for every Site',
-          description: 'Returns each visible Site\'s IndexNow connection, latest Submission Receipt summary, 30-day accepted URL count, and trailing weekly buckets in one read. A partner credential sees only its own Sites. Filter by `teamId` to read one Team.',
+          description: 'Returns each visible Site\'s IndexNow connection, latest Submission Receipt summary, 30-day accepted URL count, and weekly buckets.',
           tags: ['Indexing'],
           examples: {
             request: { params: { userId: 'u_01' }, query: { teamId: 't_01' } },
             response: {
-              data: {
-                sites: [{
-                  siteId: 's_01',
-                  siteUrl: 'https://example.com/',
-                  teamId: 't_01',
-                  connection: { _tag: 'disconnected', host: 'example.com' },
-                  latestReceipt: null,
-                  acceptedUrls30d: 0,
-                  weekly: [],
-                }],
-              },
+              data: { sites: [] },
               meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
             },
           },

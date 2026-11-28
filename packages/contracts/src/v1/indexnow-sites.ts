@@ -37,22 +37,23 @@ export const indexNowWeekSummaryV1Schemas = defineResponseObject({
   retryingCount: count,
 })
 
+const indexNowSiteBase = {
+  siteId: publicSiteId,
+  siteUrl: z.string().min(1),
+  teamId: publicTeamId.nullable(),
+  acceptedUrls30d: count,
+}
+
 /** One Site in the IndexNow fleet. */
 export const indexNowSiteV1Schemas = defineResponseObject({
-  siteId: publicSiteId,
-  siteUrl: z.string().min(1),
-  teamId: publicTeamId.nullable(),
+  ...indexNowSiteBase,
   connection: indexNowConnectionV1Schemas.producer,
   latestReceipt: indexNowLatestReceiptSummaryV1Schemas.producer.nullable(),
-  acceptedUrls30d: count,
   weekly: z.array(indexNowWeekSummaryV1Schemas.producer),
 }, {
-  siteId: publicSiteId,
-  siteUrl: z.string().min(1),
-  teamId: publicTeamId.nullable(),
+  ...indexNowSiteBase,
   connection: indexNowConnectionV1Schemas.client,
   latestReceipt: indexNowLatestReceiptSummaryV1Schemas.client.nullable(),
-  acceptedUrls30d: count,
   weekly: z.array(indexNowWeekSummaryV1Schemas.client),
 })
 

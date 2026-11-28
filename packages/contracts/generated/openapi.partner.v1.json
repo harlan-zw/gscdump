@@ -43510,7 +43510,7 @@
     },
     "/api/partner/v1/users/{userId}/indexing/indexnow/sites": {
       "get": {
-        "description": "Returns each visible Site's IndexNow connection, latest Submission Receipt summary, 30-day accepted URL count, and trailing weekly buckets in one read. A partner credential sees only its own Sites. Filter by `teamId` to read one Team.",
+        "description": "Returns each visible Site's IndexNow connection, latest Submission Receipt summary, 30-day accepted URL count, and weekly buckets.",
         "operationId": "partner.users.indexing.indexnow.sites.list",
         "parameters": [
           {
@@ -44025,9 +44025,9 @@
                               "siteId",
                               "siteUrl",
                               "teamId",
+                              "acceptedUrls30d",
                               "connection",
                               "latestReceipt",
-                              "acceptedUrls30d",
                               "weekly"
                             ],
                             "type": "object"
@@ -44137,20 +44137,7 @@
           },
           "response": {
             "data": {
-              "sites": [
-                {
-                  "acceptedUrls30d": 0,
-                  "connection": {
-                    "_tag": "disconnected",
-                    "host": "example.com"
-                  },
-                  "latestReceipt": null,
-                  "siteId": "s_01",
-                  "siteUrl": "https://example.com/",
-                  "teamId": "t_01",
-                  "weekly": []
-                }
-              ]
+              "sites": []
             },
             "meta": {
               "requestId": "req_01",

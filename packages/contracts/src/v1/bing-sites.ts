@@ -105,24 +105,23 @@ const bingTrafficWeekSummaryV1 = defineResponseObject({
   days: count,
 })
 
-const bingTrafficSummaryV1 = defineResponseObject({
+const bingTrafficTotalsShape = {
   current28dClicks: nonNegative,
   prior28dClicks: nonNegative,
   current28dImpressions: nonNegative,
   prior28dImpressions: nonNegative,
   coveredDays: count,
+}
+
+const bingTrafficSummaryV1 = defineResponseObject({
+  ...bingTrafficTotalsShape,
   weekly: z.array(bingTrafficWeekSummaryV1.producer),
 }, {
-  current28dClicks: nonNegative,
-  prior28dClicks: nonNegative,
-  current28dImpressions: nonNegative,
-  prior28dImpressions: nonNegative,
-  coveredDays: count,
+  ...bingTrafficTotalsShape,
   weekly: z.array(bingTrafficWeekSummaryV1.client),
 })
 
-const bingCrawlWeekSummaryV1 = defineResponseObject({
-  weekStart: calendarDate,
+const bingCrawlCountsShape = {
   crawledPages: count,
   inIndex: count,
   crawlErrors: count,
@@ -130,27 +129,20 @@ const bingCrawlWeekSummaryV1 = defineResponseObject({
   containsMalware: count,
   code4xx: count,
   code5xx: count,
+}
+
+const bingCrawlWeekSummaryV1 = defineResponseObject({
+  weekStart: calendarDate,
+  ...bingCrawlCountsShape,
 })
 
 const bingCrawlSummaryV1 = defineResponseObject({
   latestDate: calendarDate.nullable(),
-  crawledPages: count,
-  inIndex: count,
-  crawlErrors: count,
-  blockedByRobotsTxt: count,
-  containsMalware: count,
-  code4xx: count,
-  code5xx: count,
+  ...bingCrawlCountsShape,
   weekly: z.array(bingCrawlWeekSummaryV1.producer),
 }, {
   latestDate: calendarDate.nullable(),
-  crawledPages: count,
-  inIndex: count,
-  crawlErrors: count,
-  blockedByRobotsTxt: count,
-  containsMalware: count,
-  code4xx: count,
-  code5xx: count,
+  ...bingCrawlCountsShape,
   weekly: z.array(bingCrawlWeekSummaryV1.client),
 })
 
@@ -170,16 +162,13 @@ export const bingHealthSummaryV1Schemas = defineResponseObject({
   crawl: bingCrawlSummaryV1.client.nullable(),
 })
 
+const collectingBase = { _tag: z.literal('collecting'), remoteSiteUrl, lastEvidenceAt: isoDateTime.nullable() }
 const collectingState = defineResponseObject({
-  _tag: z.literal('collecting'),
-  remoteSiteUrl,
-  lastEvidenceAt: isoDateTime.nullable(),
+  ...collectingBase,
   sitemap: bingSitemapViewV1Schemas.producer,
   health: bingHealthSummaryV1Schemas.producer.optional(),
 }, {
-  _tag: z.literal('collecting'),
-  remoteSiteUrl,
-  lastEvidenceAt: isoDateTime.nullable(),
+  ...collectingBase,
   sitemap: bingSitemapViewV1Schemas.client,
   health: bingHealthSummaryV1Schemas.client.optional(),
 })
