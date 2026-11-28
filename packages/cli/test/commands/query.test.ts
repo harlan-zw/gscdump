@@ -220,6 +220,17 @@ describe('query command', () => {
     expect(createCommandContext).not.toHaveBeenCalled()
   })
 
+  it('accepts --json as shorthand for --format json and rejects conflicting --format', async () => {
+    await runCommand(queryCommand, {
+      rawArgs: ['--live', '--explain', '--json', '--dimensions', 'page', '--start', '2026-04-01', '--end', '2026-04-07', '--quiet'],
+    })
+    expect(consoleOutput.find(l => l.startsWith('{'))).toBeDefined()
+
+    await expect(runCommand(queryCommand, {
+      rawArgs: ['--json', '--format', 'table', '--quiet'],
+    })).rejects.toMatchObject({ stopDetails: { code: 'USAGE', message: expect.stringContaining('--json') } })
+  })
+
   it('--explain in --live mode prints request body and exits without calling API', async () => {
     await queryCommand.run!({
       args: {

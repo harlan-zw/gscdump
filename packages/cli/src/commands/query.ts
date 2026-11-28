@@ -124,6 +124,11 @@ export const queryCommand = defineCommand({
       alias: 'f',
       description: 'Output format: table, json, or csv (default: saved defaultFormat or json)',
     },
+    'json': {
+      type: 'boolean',
+      default: false,
+      description: 'Output as JSON (shorthand for --format json)',
+    },
     'sql': {
       type: 'string',
       description: 'DuckDB SQL over one view per Store table, with site and search_type columns. Example: SELECT search_type, SUM(clicks) AS clicks, gsc_position(sum_position, impressions) AS position FROM pages GROUP BY search_type. Run --schema to list views',
@@ -208,7 +213,9 @@ export const queryCommand = defineCommand({
   },
   async run({ args }) {
     const ctxConfig = await loadConfig()
-    const format = args.format ?? ctxConfig.defaultFormat ?? 'json'
+    if (args.json && args.format && args.format !== 'json')
+      throw commandLineError('Cannot combine --json with --format. Use --json or --format alone.')
+    const format = args.json ? 'json' : (args.format ?? ctxConfig.defaultFormat ?? 'json')
     if (format !== 'json' && format !== 'csv' && format !== 'table')
       throw commandLineError('Invalid --format. Use table, json, or csv.')
     setJsonOutput(format === 'json')
