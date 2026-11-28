@@ -134,14 +134,17 @@ export function compileLogicalQueryPlan(
     ...(plan.hasDate ? ['date'] : []),
   ]
   const groupBy = groupByCols.length > 0 ? `GROUP BY ${groupByCols.join(', ')}` : ''
-  const primaryOrder = plan.orderBy
-    ? `ORDER BY ${plan.orderBy.column} ${plan.orderBy.dir.toUpperCase()}`
-    : 'ORDER BY clicks DESC'
+  const orderCol = plan.orderBy?.column ?? 'clicks'
+  const orderDir = plan.orderBy ? plan.orderBy.dir.toUpperCase() : 'DESC'
+  const primaryOrder = `ORDER BY ${orderCol} ${orderDir}`
+  const impressionTie = orderCol === 'clicks' && orderDir === 'DESC' && plan.metrics.includes('impressions')
+    ? ', impressions DESC'
+    : ''
   const dimensionOrder = [...plan.groupByDimensions, ...(plan.hasDate ? ['date'] : [])]
     .filter(d => d !== plan.orderBy?.column)
     .map(d => `, ${d} ASC`)
     .join('')
-  const orderBy = `${primaryOrder}${dimensionOrder}`
+  const orderBy = `${primaryOrder}${impressionTie}${dimensionOrder}`
   const limit = `LIMIT ${plan.rowLimit ?? 1000}`
   const offset = plan.startRow ? `OFFSET ${plan.startRow}` : ''
 

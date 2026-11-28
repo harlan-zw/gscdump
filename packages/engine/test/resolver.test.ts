@@ -1,7 +1,13 @@
 import type { BuilderState } from 'gscdump/query'
+import { DuckDBInstance } from '@duckdb/node-api'
 import { describe, expect, it } from 'vitest'
 import { FILES_PLACEHOLDER, resolveParquetSQL, substituteNamedFiles } from '../src/planner'
-import { resolveToSQL as resolverResolveToSQL, resolveToSQLOptimized } from '../src/resolver/compile'
+import {
+  resolveComparisonSQL,
+  resolveComparisonSQLOptimized,
+  resolveToSQL as resolverResolveToSQL,
+  resolveToSQLOptimized,
+} from '../src/resolver/compile'
 import {
   createIcebergResolverAdapter,
   createParquetResolverAdapter,
@@ -406,5 +412,112 @@ describe('pgResolverAdapter ignores multi-tenant scopes', () => {
     expect(r.sql).not.toContain('search_type')
     expect(r.params).not.toContain(42)
     expect(r.params).not.toContain('web')
+  })
+})
+
+describe('clicks DESC impressions tie-breaker', () => {
+  it('breaks tied clicks DESC rows by impressions DESC then dimension ASC on DuckDB', async () => {
+    const instance = await DuckDBInstance.create(':memory:')
+    const connection = await instance.connect()
+    try {
+      await connection.run(`
+        CREATE TABLE queries (date VARCHAR, query VARCHAR, clicks INTEGER, impressions INTEGER, sum_position DOUBLE);
+        INSERT INTO queries VALUES
+          ('2026-03-05', 'alpha', 0, 5, 50),
+          ('2026-03-05', 'zeta', 0, 500, 5000),
+          ('2026-03-05', 'beta', 0, 500, 2500),
+          ('2026-03-05', 'winner', 3, 10, 20),
+          ('2026-02-05', 'alpha', 0, 100, 1000);
+      `)
+      const current = state({
+        dimensions: ['query'],
+        metrics: ['clicks', 'impressions', 'ctr', 'position'],
+        orderBy: { column: 'clicks', dir: 'desc' },
+        rowLimit: 10,
+      })
+      const previous = state({
+        dimensions: ['query'],
+        metrics: ['clicks', 'impressions', 'ctr', 'position'],
+        filter: {
+          _filters: [{
+            dimension: 'date',
+            operator: 'between',
+            expression: '2026-02-01',
+            expression2: '2026-02-28',
+          }],
+        } as any,
+        orderBy: { column: 'clicks', dir: 'desc' },
+        rowLimit: 10,
+      })
+
+      const compiled = [
+        resolverResolveToSQL(current, { adapter: pgResolverAdapter }),
+        resolveToSQLOptimized(current, { adapter: pgResolverAdapter }),
+        resolveComparisonSQL(current, previous, { adapter: pgResolverAdapter }),
+        resolveComparisonSQLOptimized(current, previous, { adapter: pgResolverAdapter }),
+      ]
+      for (const plan of compiled) {
+        const params = plan.params.map(v => typeof v === 'number' ? v : String(v))
+        const rows = (await connection.runAndReadAll(plan.sql, params)).getRowObjectsJS()
+        expect(rows.map(r => r.query)).toEqual(['winner', 'beta', 'zeta', 'alpha'])
+      }
+
+      // Default orderBy (omitted) also applies clicks DESC, impressions DESC.
+      const defaultOrder = resolveToSQLOptimized(state({
+        dimensions: ['query'],
+        metrics: ['clicks', 'impressions'],
+      }), { adapter: pgResolverAdapter })
+      const defaultRows = (await connection.runAndReadAll(
+        defaultOrder.sql,
+        defaultOrder.params.map(String),
+      )).getRowObjectsJS()
+      expect(defaultRows.map(r => r.query)).toEqual(['winner', 'beta', 'zeta', 'alpha'])
+
+      // clicks ASC does not add an impressions DESC tie-breaker.
+      const ascPlan = resolverResolveToSQL(state({
+        dimensions: ['query'],
+        metrics: ['clicks', 'impressions'],
+        orderBy: { column: 'clicks', dir: 'asc' },
+      }), { adapter: pgResolverAdapter })
+      expect(ascPlan.sql).toContain('ORDER BY clicks ASC, "query" ASC')
+      expect(ascPlan.sql).not.toContain('impressions DESC')
+
+      // Queries omitting impressions from metrics do not reference impressions in ORDER BY.
+      const clicksOnly = resolverResolveToSQL(state({
+        dimensions: ['query'],
+        metrics: ['clicks'],
+        orderBy: { column: 'clicks', dir: 'desc' },
+      }), { adapter: pgResolverAdapter })
+      expect(clicksOnly.sql).not.toContain('impressions DESC')
+      const clicksOnlyRows = (await connection.runAndReadAll(
+        clicksOnly.sql,
+        clicksOnly.params.map(String),
+      )).getRowObjectsJS()
+      expect(clicksOnlyRows.map(r => r.query)).toEqual(['winner', 'alpha', 'beta', 'zeta'])
+    }
+    finally {
+      connection.closeSync()
+      instance.closeSync()
+    }
+  })
+
+  it('adds impressions DESC tie-breaker to resolveParquetSQL only for clicks DESC with impressions selected', () => {
+    const defaultPlan = resolveParquetSQL(state({ dimensions: ['query'] }), 'queries')
+    expect(defaultPlan.sql).toContain('ORDER BY clicks DESC, impressions DESC, query ASC')
+
+    const ascPlan = resolveParquetSQL(state({
+      dimensions: ['query'],
+      orderBy: { column: 'clicks', dir: 'asc' },
+    }), 'queries')
+    expect(ascPlan.sql).toContain('ORDER BY clicks ASC, query ASC')
+    expect(ascPlan.sql).not.toContain('impressions DESC')
+
+    const clicksOnlyPlan = resolveParquetSQL(state({
+      dimensions: ['query'],
+      metrics: ['clicks'],
+      orderBy: { column: 'clicks', dir: 'desc' },
+    }), 'queries')
+    expect(clicksOnlyPlan.sql).toContain('ORDER BY clicks DESC, query ASC')
+    expect(clicksOnlyPlan.sql).not.toContain('impressions DESC')
   })
 })

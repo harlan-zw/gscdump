@@ -67,13 +67,22 @@ function withMinimumImpressions<TK extends string>(state: BuilderState, options:
 
 // ORDER BY is safe-stripped because `column` / `dir` come from `BuilderState`
 // (typed union) but we still guard against raw strings reaching SQL.
-function orderByClause(state: BuilderState, prefix: string = '', columnOverride?: string | SQL): SQL {
+function orderByClause(
+  state: BuilderState,
+  prefix: string = '',
+  columnOverride?: string | SQL,
+  tieBreakImpressions = false,
+): SQL {
+  const sortColumn = state.orderBy?.column ?? 'clicks'
+  const safeDir = state.orderBy?.dir.toUpperCase() === 'ASC' ? 'ASC' : 'DESC'
+  const impressionTie = tieBreakImpressions && sortColumn === 'clicks' && safeDir === 'DESC'
+    ? `, ${prefix}impressions DESC`
+    : ''
   const ties = dimensionOrder(state.dimensions, state.orderBy?.column, prefix)
   const column = typeof columnOverride === 'object'
     ? columnOverride
-    : sql.raw(`${prefix}${(columnOverride ?? state.orderBy?.column ?? 'clicks').replace(/\W/g, '')}`)
-  const safeDir = state.orderBy?.dir.toUpperCase() === 'ASC' ? 'ASC' : 'DESC'
-  return sql`ORDER BY ${column} ${sql.raw(`${safeDir}${ties}`)}`
+    : sql.raw(`${prefix}${(columnOverride ?? sortColumn).replace(/\W/g, '')}`)
+  return sql`ORDER BY ${column} ${sql.raw(`${safeDir}${impressionTie}${ties}`)}`
 }
 
 // Metric ties must keep the same row keys when LIMIT changes between pages.
@@ -355,7 +364,7 @@ export function resolveToSQLOptimized<TK extends string>(
   if (having.length > 0)
     cte = sql`${cte} HAVING ${joinAnd(having)}`
 
-  const query = sql`WITH aggregated AS (${cte}) SELECT ${joinComma(outerSelect)} FROM aggregated ${orderByClause(state, '', orderByColumnOverride)} ${limitOffsetClause(state)}`
+  const query = sql`WITH aggregated AS (${cte}) SELECT ${joinComma(outerSelect)} FROM aggregated ${orderByClause(state, '', orderByColumnOverride, metrics.includes('impressions'))} ${limitOffsetClause(state)}`
   return compileCollapsed(adapter, query)
 }
 
@@ -398,7 +407,7 @@ export function resolveToSQL<TK extends string>(
   const sortAggregate = adapter.isMetricDimension(sortColumn) && !metrics.includes(sortColumn)
     ? adapter.metricSql(sortColumn, tableKey)
     : undefined
-  const mainQuery = sql`${body} ${orderByClause(state, '', sortAggregate)} ${limitOffsetClause(state)}`
+  const mainQuery = sql`${body} ${orderByClause(state, '', sortAggregate, metrics.includes('impressions'))} ${limitOffsetClause(state)}`
 
   let countQuery: SQL
   if (groupByExprs.length > 0) {
@@ -641,7 +650,7 @@ function buildComparisonQueries<TK extends string>(
   // whose current clicks are low. It orders by its own output alias, the same
   // shape as the default `ORDER BY clicks`.
   const changeOrder = comparisonOrderBy ? changeOrderClause(comparisonOrderBy, groupByDims) : undefined
-  const orderSql = changeOrder?.orderBy ?? orderByClause(current, '')
+  const orderSql = changeOrder?.orderBy ?? orderByClause(current, '', undefined, metrics.includes('impressions'))
   const limitSql = limitOffsetClause(current)
 
   // Outer SELECT enumerates columns explicitly (not `c.*`) and casts the
@@ -750,7 +759,7 @@ export function buildExtrasQueries<TK extends string>(
     whereParts.push(sql`${canonKey} IN (${joinComma(keys)})`)
   }
   const whereExpr = whereParts.length > 0 ? sql`WHERE ${joinAnd(whereParts)}` : sql``
-  const q = sql`WITH per_variant AS (SELECT ${canonKey} as joinKey, ${t.query} as query, SUM(${t.clicks}) as clicks, SUM(${t.impressions}) as impressions, SUM(${t.sum_position}) as sum_pos, ROW_NUMBER() OVER (PARTITION BY ${canonKey} ORDER BY SUM(${t.clicks}) DESC) as rn, COUNT(*) OVER (PARTITION BY ${canonKey}) as variantCount FROM ${table} ${whereExpr} GROUP BY ${canonKey}, ${t.query}) SELECT joinKey, MAX(variantCount) as variantCount, MAX(CASE WHEN rn = 1 THEN ${outerQueryCol} END) as canonicalName, STRING_AGG(CASE WHEN rn <= 10 THEN ${outerQueryCol} || ':::' || clicks || ':::' || impressions || ':::' || CAST(ROUND(CAST(sum_pos AS REAL) / NULLIF(impressions, 0) + 1, 1) AS TEXT) END, '||') as variants FROM per_variant GROUP BY joinKey`
+  const q = sql`WITH per_variant AS (SELECT ${canonKey} as joinKey, ${t.query} as query, SUM(${t.clicks}) as clicks, SUM(${t.impressions}) as impressions, SUM(${t.sum_position}) as sum_pos, ROW_NUMBER() OVER (PARTITION BY ${canonKey} ORDER BY SUM(${t.clicks}) DESC, SUM(${t.impressions}) DESC, ${t.query} ASC) as rn, COUNT(*) OVER (PARTITION BY ${canonKey}) as variantCount FROM ${table} ${whereExpr} GROUP BY ${canonKey}, ${t.query}) SELECT joinKey, MAX(variantCount) as variantCount, MAX(CASE WHEN rn = 1 THEN ${outerQueryCol} END) as canonicalName, STRING_AGG(CASE WHEN rn <= 10 THEN ${outerQueryCol} || ':::' || clicks || ':::' || impressions || ':::' || CAST(ROUND(CAST(sum_pos AS REAL) / NULLIF(impressions, 0) + 1, 1) AS TEXT) END, '||') as variants FROM per_variant GROUP BY joinKey`
 
   const compiled = compileCollapsed(adapter, q)
   extras.push({ key: 'canonicalExtras', sql: compiled.sql, params: compiled.params })
