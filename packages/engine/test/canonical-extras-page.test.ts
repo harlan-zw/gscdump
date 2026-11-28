@@ -43,6 +43,34 @@ describe('canonical extras for selected rows', () => {
     }
   })
 
+  it('picks the highest-impression variant as canonicalName when clicks tie', () => {
+    const db = new DatabaseSync(':memory:')
+    try {
+      db.exec(`
+        CREATE TABLE queries (site_id INTEGER, search_type INTEGER, date TEXT, query TEXT, clicks INTEGER, impressions INTEGER, sum_position REAL);
+        CREATE TABLE query_dim (query TEXT, query_canonical TEXT);
+        INSERT INTO queries VALUES
+          (42, 1, '2026-06-05', 'alpha boot', 0, 5, 10),
+          (42, 1, '2026-06-05', 'zeta boot', 0, 200, 400),
+          (42, 1, '2026-06-05', 'beta boot', 0, 200, 400);
+        INSERT INTO query_dim VALUES
+          ('alpha boot', 'boots'),
+          ('zeta boot', 'boots'),
+          ('beta boot', 'boots');
+      `)
+      const options = { adapter: createIcebergResolverAdapter(), siteId: 42, searchType: 1 }
+      const [query] = buildExtrasQueries(state, options, ['boots'])
+      const bindings = Object.fromEntries(query!.params.map((value, index) => [`$${index + 1}`, value]))
+      const rows = db.prepare(query!.sql).all(bindings)
+
+      expect(rows).toHaveLength(1)
+      expect(rows[0]!.canonicalName).toBe('beta boot')
+    }
+    finally {
+      db.close()
+    }
+  })
+
   it('does not issue enrichment queries when the selected key list is empty', () => {
     expect(buildExtrasQueries(state, { adapter: createIcebergResolverAdapter() }, [])).toEqual([])
   })

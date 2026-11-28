@@ -155,7 +155,7 @@ export const topPages28dRollup: RollupDef = {
         FROM read_parquet({{FILES}}, union_by_name = true)
         WHERE date >= '${cutoff}'
         GROUP BY url
-        ORDER BY clicks DESC
+        ORDER BY clicks DESC, impressions DESC, url ASC
         LIMIT 1000
       `,
     })
@@ -201,7 +201,7 @@ export const topCountries28dRollup: RollupDef = {
         FROM read_parquet({{FILES}}, union_by_name = true)
         WHERE date >= '${cutoff}'
         GROUP BY country
-        ORDER BY clicks DESC
+        ORDER BY clicks DESC, impressions DESC, country ASC
         LIMIT 250
       `,
     })
@@ -242,7 +242,7 @@ export const topKeywords28dRollup: RollupDef = {
         FROM read_parquet({{FILES}}, union_by_name = true)
         WHERE date >= '${cutoff}'
         GROUP BY query
-        ORDER BY clicks DESC
+        ORDER BY clicks DESC, impressions DESC, query ASC
         LIMIT 1000
       `,
     })
@@ -300,7 +300,7 @@ export const topKeywords28dParquetRollup: RollupDef = {
         FROM read_parquet({{FILES}}, union_by_name = true)
         WHERE date >= '${cutoff}'
         GROUP BY query
-        ORDER BY clicks DESC
+        ORDER BY clicks DESC, impressions DESC, query ASC
         LIMIT 1000
       `,
     })

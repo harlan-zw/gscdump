@@ -1198,12 +1198,12 @@ describe('rollup output pagination (bounds each runSQL/IPC payload by GROUP card
     expect(terms[0]).toBe(`q0000000:::${total}:::100:::2.0`)
   })
 
-  it('ranks canonical variants by clicks then query before filtering zero-impression rows', async () => {
+  it('ranks canonical variants by clicks, impressions, then query before filtering zero-impression rows', async () => {
     const dataset: Row[] = Array.from({ length: 12 }, (_, i) => ({
       joinKey: 'canonical',
       query: `q${String(i).padStart(2, '0')}`,
-      clicks: 10,
-      impressions: i === 0 ? 0 : 100,
+      clicks: i === 0 ? 11 : 10,
+      impressions: i === 0 ? 0 : i === 11 ? 200 : 100,
       sum_pos: 100,
     }))
     const { engine } = makeKeysetEngine(dataset)
@@ -1217,6 +1217,7 @@ describe('rollup output pagination (bounds each runSQL/IPC payload by GROUP card
     expect(result?.variantCount).toBe(12n)
     expect(result?.canonicalName).toBe('q00')
     expect(result?.variants?.split('||').map(value => value.split(':::')[0])).toEqual([
+      'q11',
       'q01',
       'q02',
       'q03',
@@ -1225,7 +1226,6 @@ describe('rollup output pagination (bounds each runSQL/IPC payload by GROUP card
       'q06',
       'q07',
       'q08',
-      'q09',
     ])
   })
 })
