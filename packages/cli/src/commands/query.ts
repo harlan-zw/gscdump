@@ -213,7 +213,7 @@ export const queryCommand = defineCommand({
   },
   async run({ args }) {
     const ctxConfig = await loadConfig()
-    if (args.json && args.format && args.format !== 'json')
+    if (args.json && args.format !== undefined && args.format !== 'json')
       throw commandLineError('Cannot combine --json with --format. Use --json or --format alone.')
     const format = args.json ? 'json' : (args.format ?? ctxConfig.defaultFormat ?? 'json')
     if (format !== 'json' && format !== 'csv' && format !== 'table')
