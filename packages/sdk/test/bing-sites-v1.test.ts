@@ -25,6 +25,25 @@ describe('host-owned Bing and Sitemap client', () => {
     expect(result.data.sites).toEqual([linkable])
   })
 
+  it('reads one Team of the IndexNow fleet', async () => {
+    const site = {
+      siteId: 's_1',
+      siteUrl: 'https://example.com/',
+      teamId: 't_1',
+      connection: { _tag: 'disconnected', host: 'example.com' },
+      latestReceipt: null,
+      acceptedUrls30d: 0,
+      weekly: [],
+    }
+    const fetch = vi.fn<typeof globalThis.fetch>(async (request, init) => {
+      expect(request).toBe('/api/_gscdump/partner/v1/users/u_1/indexing/indexnow/sites?teamId=t_1')
+      expect(init?.method).toBe('GET')
+      return response({ sites: [site] })
+    })
+    const result = await clientWith(fetch).listUserIndexNowSites({ params: { userId: 'u_1' }, query: { teamId: 't_1' } })
+    expect(result.data.sites).toEqual([site])
+  })
+
   it('links a Site with no body and returns its new state', async () => {
     const fetch = vi.fn<typeof globalThis.fetch>(async (request, init) => {
       expect(request).toBe('/api/_gscdump/partner/v1/sites/s_1/indexing/bing/link')

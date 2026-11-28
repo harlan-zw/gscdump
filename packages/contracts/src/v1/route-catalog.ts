@@ -35,6 +35,7 @@ export const GSCDUMP_V1_ROUTE_CATALOG = {
     'partner.users.create': { surface: 'partner', method: 'POST', template: '/users' },
     'partner.users.tokens.update': { surface: 'partner', method: 'PATCH', template: '/users/{userId}/tokens' },
     'partner.users.indexing.bing.sites.list': { surface: 'partner', method: 'GET', template: '/users/{userId}/indexing/bing/sites' },
+    'partner.users.indexing.indexnow.sites.list': { surface: 'partner', method: 'GET', template: '/users/{userId}/indexing/indexnow/sites' },
     'partner.sites.indexing.get': { surface: 'partner', method: 'GET', template: '/sites/{siteId}/indexing' },
     'partner.sites.indexing.urls.list': { surface: 'partner', method: 'GET', template: '/sites/{siteId}/indexing/urls' },
     'partner.sites.bing.data.get': { surface: 'partner', method: 'GET', template: '/sites/{siteId}/bing/data' },

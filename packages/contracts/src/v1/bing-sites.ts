@@ -6,10 +6,12 @@ import { bingCnameVerificationV1Schema } from './bing'
 import { defineResponseObject } from './http-core'
 
 const isoDateTime = z.iso.datetime()
+const calendarDate = z.iso.date()
 const publicSiteId = z.string().regex(/^s_[\w-]+$/)
 const publicTeamId = z.string().regex(/^t_[\w-]+$/)
 const remoteSiteUrl = z.url()
 const count = z.number().int().nonnegative()
+const nonNegative = z.number().nonnegative()
 
 /** The query of `partner.users.indexing.bing.sites.list`. */
 export const bingSitesQueryV1Schema = z.strictObject({
@@ -87,16 +89,99 @@ export const bingSitemapViewV1Schemas = {
  *   accepting the Site owner's grant. Authorize Bing again.
  * - `unavailable`: gscdump does not offer Bing for this Site's owner yet.
  */
+const bingDatasetSyncSummaryV1 = defineResponseObject({
+  state: z.enum(['missing', 'ready', 'unavailable']),
+  providerStartDate: calendarDate.nullable(),
+  providerEndDate: calendarDate.nullable(),
+  lastSuccessAt: isoDateTime.nullable(),
+  lastAttemptAt: isoDateTime.nullable(),
+  errorReason: z.string().nullable(),
+})
+
+const bingTrafficWeekSummaryV1 = defineResponseObject({
+  weekStart: calendarDate,
+  clicks: nonNegative,
+  impressions: nonNegative,
+  days: count,
+})
+
+const bingTrafficSummaryV1 = defineResponseObject({
+  current28dClicks: nonNegative,
+  prior28dClicks: nonNegative,
+  current28dImpressions: nonNegative,
+  prior28dImpressions: nonNegative,
+  coveredDays: count,
+  weekly: z.array(bingTrafficWeekSummaryV1.producer),
+}, {
+  current28dClicks: nonNegative,
+  prior28dClicks: nonNegative,
+  current28dImpressions: nonNegative,
+  prior28dImpressions: nonNegative,
+  coveredDays: count,
+  weekly: z.array(bingTrafficWeekSummaryV1.client),
+})
+
+const bingCrawlWeekSummaryV1 = defineResponseObject({
+  weekStart: calendarDate,
+  crawledPages: count,
+  inIndex: count,
+  crawlErrors: count,
+  blockedByRobotsTxt: count,
+  containsMalware: count,
+  code4xx: count,
+  code5xx: count,
+})
+
+const bingCrawlSummaryV1 = defineResponseObject({
+  latestDate: calendarDate.nullable(),
+  crawledPages: count,
+  inIndex: count,
+  crawlErrors: count,
+  blockedByRobotsTxt: count,
+  containsMalware: count,
+  code4xx: count,
+  code5xx: count,
+  weekly: z.array(bingCrawlWeekSummaryV1.producer),
+}, {
+  latestDate: calendarDate.nullable(),
+  crawledPages: count,
+  inIndex: count,
+  crawlErrors: count,
+  blockedByRobotsTxt: count,
+  containsMalware: count,
+  code4xx: count,
+  code5xx: count,
+  weekly: z.array(bingCrawlWeekSummaryV1.client),
+})
+
+/**
+ * Compact D1-backed Bing traffic and crawl rollups for one collecting Site.
+ * Populated during `sync/bing-data` so fleet reads never touch R2 snapshots.
+ */
+export const bingHealthSummaryV1Schemas = defineResponseObject({
+  trafficSync: bingDatasetSyncSummaryV1.producer,
+  crawlSync: bingDatasetSyncSummaryV1.producer,
+  traffic: bingTrafficSummaryV1.producer.nullable(),
+  crawl: bingCrawlSummaryV1.producer.nullable(),
+}, {
+  trafficSync: bingDatasetSyncSummaryV1.client,
+  crawlSync: bingDatasetSyncSummaryV1.client,
+  traffic: bingTrafficSummaryV1.client.nullable(),
+  crawl: bingCrawlSummaryV1.client.nullable(),
+})
+
 const collectingState = defineResponseObject({
   _tag: z.literal('collecting'),
   remoteSiteUrl,
   lastEvidenceAt: isoDateTime.nullable(),
   sitemap: bingSitemapViewV1Schemas.producer,
+  health: bingHealthSummaryV1Schemas.producer.optional(),
 }, {
   _tag: z.literal('collecting'),
   remoteSiteUrl,
   lastEvidenceAt: isoDateTime.nullable(),
   sitemap: bingSitemapViewV1Schemas.client,
+  health: bingHealthSummaryV1Schemas.client.optional(),
 })
 const verificationRequiredState = defineResponseObject({
   _tag: z.literal('verification-required'),
@@ -242,6 +327,12 @@ export const bingSitemapSubmitResultV1Schemas = {
 }
 
 export type BingSitesQueryV1 = z.infer<typeof bingSitesQueryV1Schema>
+export type BingDatasetSyncSummaryV1 = z.infer<typeof bingDatasetSyncSummaryV1.producer>
+export type BingTrafficWeekSummaryV1 = z.infer<typeof bingTrafficWeekSummaryV1.producer>
+export type BingTrafficSummaryV1 = z.infer<typeof bingTrafficSummaryV1.producer>
+export type BingCrawlWeekSummaryV1 = z.infer<typeof bingCrawlWeekSummaryV1.producer>
+export type BingCrawlSummaryV1 = z.infer<typeof bingCrawlSummaryV1.producer>
+export type BingHealthSummaryV1 = z.infer<typeof bingHealthSummaryV1Schemas.producer>
 export type BingSitemapViewV1 = z.infer<typeof bingSitemapViewV1Schemas.producer>
 export type BingSiteStateV1 = z.infer<typeof bingSiteStateV1Schemas.producer>
 export type BingSiteV1 = z.infer<typeof bingSiteV1Schemas.producer>
