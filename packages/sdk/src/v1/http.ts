@@ -390,7 +390,8 @@ async function buildRequestHeaders(
         headers.set(key, String(value))
     }
     headers.delete('x-api-key')
-    headers.set('accept', 'application/json')
+    const responseMediaTypes = Object.values(operation.responses).flatMap(response => response.mediaType ?? [])
+    headers.set('accept', [...responseMediaTypes, 'application/json'].join(', '))
     headers.set('authorization', `Bearer ${credential}`)
     if (executeOptions.idempotencyKey)
       headers.set('idempotency-key', executeOptions.idempotencyKey)
@@ -620,9 +621,10 @@ export function createGscdumpV1Client(options: CreateGscdumpV1ClientOptions): Gs
     if (executeOptions.signal?.aborted)
       throw abortedRequestError(operation, executeOptions)
 
+    const streamed = Object.values((operation as HttpV1OperationDefinition).responses).some(response => response.mediaType !== undefined)
     // Resolve auth before sharing. A rotating credential or request header must
     // never reuse another principal's read. Abortable calls keep their own fetch.
-    const dedupeKey = options.dedupe !== false && !executeOptions.signal
+    const dedupeKey = !streamed && options.dedupe !== false && !executeOptions.signal
       && operation.semantics.kind === 'query'
       ? canonicalJson([operation.id, url, prepared.body, [...firstHeaders.entries()].sort(([a], [b]) => a.localeCompare(b))])
       : null
@@ -689,6 +691,17 @@ export function createGscdumpV1Client(options: CreateGscdumpV1ClientOptions): Gs
         }
 
         const requestId = requestIdFrom(response) ?? executeOptions.requestId
+        const responseContract = (operation.responses as HttpV1OperationDefinition['responses'])[response.status]
+        if (responseContract?.mediaType) {
+          try {
+            return responseContract.client.parse(response)
+          }
+          catch (cause) {
+            if (response.body)
+              await Promise.allSettled([response.body.cancel()])
+            throw responseValidationError(operation.id, response.status, requestId, cause)
+          }
+        }
         let payload: unknown
         try {
           payload = await readJson(response)
@@ -701,7 +714,6 @@ export function createGscdumpV1Client(options: CreateGscdumpV1ClientOptions): Gs
         if (executeOptions.signal?.aborted)
           throw abortedRequestError(operation, executeOptions)
 
-        const responseContract = (operation.responses as HttpV1OperationDefinition['responses'])[response.status]
         if (responseContract) {
           try {
             return responseContract.client.parse(payload)
@@ -823,6 +835,8 @@ export function createGscdumpV1Client(options: CreateGscdumpV1ClientOptions): Gs
     getSiteSitemapSubmission: (input, executeOptions) => execute('partner.sites.sitemaps.submission.get' satisfies MethodId<'getSiteSitemapSubmission'>, input, executeOptions),
     submitSiteSitemap: (input, executeOptions) => execute('partner.sites.sitemaps.submission.create' satisfies MethodId<'submitSiteSitemap'>, input, executeOptions),
     listSitemapUrls: (input, executeOptions) => execute('partner.sites.sitemaps.urls.get' satisfies MethodId<'listSitemapUrls'>, input, executeOptions),
+    getSiteRecordExport: (input, executeOptions) => execute('partner.sites.record_export.get' satisfies MethodId<'getSiteRecordExport'>, input, executeOptions),
+    downloadSiteRecordExportFile: (input, executeOptions) => execute('partner.sites.record_export.file.get' satisfies MethodId<'downloadSiteRecordExportFile'>, input, executeOptions),
     getSitemapExport: (input, executeOptions) => execute('partner.sites.sitemaps.export.get' satisfies MethodId<'getSitemapExport'>, input, executeOptions),
     getSiteAnalysis: (input, executeOptions) => execute('partner.sites.analysis.get' satisfies MethodId<'getSiteAnalysis'>, input, executeOptions),
     getSiteAnalysisBundle: (input, executeOptions) => execute('partner.sites.analysis.bundle.get' satisfies MethodId<'getSiteAnalysisBundle'>, input, executeOptions),

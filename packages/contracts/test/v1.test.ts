@@ -938,7 +938,10 @@ describe('@gscdump/contracts/v1 generated documents', () => {
         if (operation.request.body)
           operation.request.body.parse(request.body)
         const response = Object.values(operation.responses)[0]!
-        response.producer.parse(operation.docs.examples.response)
+        if ('mediaType' in response)
+          expect(operation.docs.examples.response).toBeNull()
+        else
+          response.producer.parse(operation.docs.examples.response)
       }
     }
   })

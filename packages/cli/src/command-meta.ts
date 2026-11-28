@@ -5,7 +5,7 @@ export const initCommandMeta = {
 
 export const dumpCommandMeta = {
   name: 'dump',
-  description: 'Export the local Store, inspections, sitemaps, and Bing data to a directory',
+  description: 'Export a Hosted Site record or the Local Store to a directory',
 }
 
 export const queryCommandMeta = {

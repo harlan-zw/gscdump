@@ -79,19 +79,10 @@ export function siteMatchStop(match: Exclude<HostedSiteMatch, { kind: 'found' }>
     : { code: 'SITE_REQUIRED', message: `Pass --site. ${available}`, nextCommand }
 }
 
-/**
- * Resolve hosted authentication and a `--site` value to a v1 client and a hosted Site.
- * A local-only user gets one line that names the hosted requirement and `localAlternative`.
- * Every failure is a stop, so a command with JSON output prints it on stdout.
- */
-export async function resolveHostedSite(
+export async function resolveHostedAuthentication(
   args: Record<string, unknown>,
   command: { name: string, localAlternative: string },
-): Promise<{ client: GscdumpV1Client, site: HostedSite, authentication: HostedAuthentication, siteManager: SiteManager }> {
-  // citty parks undeclared positional tokens in `args._`; without this guard a
-  // stale `sitemaps current s_01` invocation silently reads the default Site.
-  if ((args._ as string[] | undefined)?.length)
-    throw new Error(`\`gscdump ${command.name}\` does not accept a positional Site ID. Pass --site instead.`)
+): Promise<HostedAuthentication> {
   const environment = resolveCliEnvironment().values
   const authentication = args['api-key']
     ? parseAuthentication({ _tag: 'Hosted', apiKey: args['api-key'], apiRoot: String(args['api-root'] || environment.GSCDUMP_API_ROOT || 'https://gscdump.com/api') })
@@ -105,6 +96,24 @@ export async function resolveHostedSite(
   }
   if (args['api-root'] && String(args['api-root']).replace(/\/+$/, '') !== authentication.apiRoot)
     throw new Error('The API root changed. Pass --api-key for the new API root.')
+  return authentication
+}
+
+/**
+ * Resolve hosted authentication and a `--site` value to a v1 client and a hosted Site.
+ * A local-only user gets one line that names the hosted requirement and `localAlternative`.
+ * Every failure is a stop, so a command with JSON output prints it on stdout.
+ */
+export async function resolveHostedSite(
+  args: Record<string, unknown>,
+  command: { name: string, localAlternative: string },
+): Promise<{ client: GscdumpV1Client, site: HostedSite, authentication: HostedAuthentication, siteManager: SiteManager }> {
+  // citty parks undeclared positional tokens in `args._`; without this guard a
+  // stale `sitemaps current s_01` invocation silently reads the default Site.
+  if ((args._ as string[] | undefined)?.length)
+    throw new Error(`\`gscdump ${command.name}\` does not accept a positional Site ID. Pass --site instead.`)
+  const authentication = await resolveHostedAuthentication(args, command)
+  const environment = resolveCliEnvironment().values
   const target = args.site ? String(args.site) : (await loadConfig()).defaultSite
   const account = await getHostedAccount(authentication)
   const siteManager = siteManagerOf(authentication, account.issuer)

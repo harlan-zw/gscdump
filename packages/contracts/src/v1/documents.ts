@@ -134,8 +134,10 @@ function operationDocument(
       .map(([status, response]) => [status, {
         description: status.startsWith('2') ? 'Successful response' : 'Documented response',
         content: {
-          'application/json': {
-            schema: registerComponentSchema(response.producer, `${operation.id}.response.${status}`, components),
+          [response.mediaType ?? 'application/json']: {
+            schema: response.mediaType
+              ? { type: 'string', format: 'binary' }
+              : registerComponentSchema(response.producer, `${operation.id}.response.${status}`, components),
           },
         },
       }]),

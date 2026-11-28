@@ -9,11 +9,14 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import process from 'node:process'
 import { defineCommand } from 'citty'
+import { resolveAuthentication } from '../auth-state'
 import { dumpCommandMeta } from '../command-meta'
 import { createCommandContext } from '../context'
 import { nextCommand, readStoreCoverage, renderCoverage } from '../coverage'
 import { dumpBing } from '../dump-bing'
+import { dumpHostedRecord } from '../dump-hosted-record'
 import { DUMP_FORMATS, isDumpFormat, openDumpSink } from '../dump-writers'
+import { HOSTED_ARGS } from '../hosted-site'
 import { ENTITY_DATASETS, readEntityDatasets } from '../local-entities'
 import { allTables } from '../local-store'
 import { commandLineError } from '../stop'
@@ -28,11 +31,7 @@ const DEFAULT_OUT = './gscdump-export'
 export const dumpCommand = defineCommand({
   meta: dumpCommandMeta,
   args: {
-    'site': {
-      type: 'string',
-      alias: 's',
-      description: 'Site, for example example.com; ignored with --all-sites',
-    },
+    ...HOSTED_ARGS,
     'out': {
       type: 'string',
       alias: 'o',
@@ -48,12 +47,12 @@ export const dumpCommand = defineCommand({
     'tables': {
       type: 'string',
       alias: 't',
-      description: `Comma-separated tables and datasets (default: all). Known: ${[...allTables(), ...ENTITY_DATASETS, 'bing'].join(', ')}`,
+      description: `Comma-separated datasets. Hosted names come from the export manifest. Local: ${[...allTables(), ...ENTITY_DATASETS, 'bing'].join(', ')}`,
     },
     'all-sites': {
       type: 'boolean',
       default: false,
-      description: 'Iterate every site with local data',
+      description: 'Export every Site in the current Mode',
     },
     'compact': {
       type: 'boolean',
@@ -63,7 +62,7 @@ export const dumpCommand = defineCommand({
     'bing': {
       type: 'boolean',
       default: true,
-      description: 'Also export Bing data for matching sites when a Bing login exists',
+      description: 'Include Bing files. Local mode uses the saved Bing login.',
       negativeDescription: 'Skip Bing',
     },
     'search-type': {
@@ -77,13 +76,24 @@ export const dumpCommand = defineCommand({
     const format = String(args.format)
     if (!isDumpFormat(format))
       throw commandLineError(`Invalid --format: ${format}. Allowed: ${DUMP_FORMATS.join(', ')}`)
+    const outDir = path.resolve(String(args.out))
+    const authentication = args['api-key'] ? null : await resolveAuthentication()
+    if (authentication?._tag === 'Hosted' || args['api-key']) {
+      if (format !== 'parquet' || args.compact || args['search-type'])
+        throw commandLineError('Hosted dump supports Parquet. Omit --compact and --search-type.')
+      const result = await dumpHostedRecord(args, outDir)
+      if (json)
+        console.log(JSON.stringify(result, null, 2))
+      else
+        logger.success(`Exported ${result.files.length} Parquet files to ${displayPath(outDir)}`)
+      return
+    }
     const tablesFilter = args.tables
       ? new Set<string>(parseNameList(args.tables, [...allTables(), ...ENTITY_DATASETS, 'bing'], '--tables'))
       : null
     const searchType = parseSearchType(args['search-type'])
     const ctx = await createCommandContext({ needsStore: true })
     const store = ctx.store!
-    const outDir = path.resolve(String(args.out))
     const siteMap = await readSiteMap(store.dataDir, store.userId)
 
     let preloadedEntries = args['all-sites']
